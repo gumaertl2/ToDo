@@ -2,15 +2,15 @@
 import React from 'react';
 import {
   DndContext,
-  DragEndEvent,
   MouseSensor,
   TouchSensor,
   useSensor,
   useSensors,
   useDroppable,
 } from '@dnd-kit/core';
+import type { DragEndEvent } from '@dnd-kit/core';
 import { TaskCard } from './TaskCard';
-import { Task, TaskStatus } from '../../core/types/models';
+import type { Task, TaskStatus } from '../../core/types/models';
 import { useClubStore } from '../../store/useClubStore';
 
 interface KanbanColumnProps {

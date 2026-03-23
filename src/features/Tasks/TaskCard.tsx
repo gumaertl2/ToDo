@@ -2,7 +2,7 @@
 import React from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { Calendar, CheckSquare } from 'lucide-react';
-import { Task } from '../../core/types/models';
+import type { Task } from '../../core/types/models';
 
 interface TaskCardProps {
   task: Task;

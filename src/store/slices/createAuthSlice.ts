@@ -1,10 +1,10 @@
 // src/store/slices/createAuthSlice.ts
-import { StateCreator } from 'zustand';
-import { User } from '../../core/types/models';
+import type { StateCreator } from 'zustand';
+import type { User } from '../../core/types/models';
 import { auth } from '../../services/firebase';
 import { onAuthStateChanged, signOut, signInWithEmailAndPassword } from 'firebase/auth';
 import { DataProcessor } from '../../services/DataProcessor';
-import { Result } from '../../core/types/shared';
+import type { Result } from '../../core/types/shared';
 
 export interface AuthSlice {
   user: User | null;

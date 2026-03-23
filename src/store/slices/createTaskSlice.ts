@@ -1,8 +1,8 @@
 // src/store/slices/createTaskSlice.ts
-import { StateCreator } from 'zustand';
-import { Task } from '../../core/types/models';
+import type { StateCreator } from 'zustand';
+import type { Task } from '../../core/types/models';
 import { DataProcessor } from '../../services/DataProcessor';
-import { Result } from '../../core/types/shared';
+import type { Result } from '../../core/types/shared';
 import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 

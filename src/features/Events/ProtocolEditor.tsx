@@ -1,6 +1,6 @@
 // src/features/Events/ProtocolEditor.tsx
 import React, { useState } from 'react';
-import { ProtocolItemCategory, Event } from '../../core/types/models';
+import type { ProtocolItemCategory, Event } from '../../core/types/models';
 import { Clock, Users, CheckSquare, Save } from 'lucide-react';
 import { useClubStore } from '../../store/useClubStore';
 

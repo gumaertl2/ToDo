@@ -1,8 +1,8 @@
 // src/services/DataProcessor.ts
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
-import { Result, AsyncResult } from '../core/types/shared';
-import { BaseDocument } from '../core/types/models';
+import type { AsyncResult } from '../core/types/shared';
+import type { BaseDocument } from '../core/types/models';
 
 export class DataProcessor {
   private static readonly EXPECTED_SCHEMA_VERSION = '1.0';

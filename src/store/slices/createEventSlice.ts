@@ -1,8 +1,8 @@
 // src/store/slices/createEventSlice.ts
-import { StateCreator } from 'zustand';
-import { Event, Protocol } from '../../core/types/models';
+import type { StateCreator } from 'zustand';
+import type { Event, Protocol } from '../../core/types/models';
 import { DataProcessor } from '../../services/DataProcessor';
-import { Result } from '../../core/types/shared';
+import type { Result } from '../../core/types/shared';
 import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 
