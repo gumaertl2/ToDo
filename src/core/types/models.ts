@@ -25,6 +25,21 @@ export interface Helper extends BaseDocument {
   retentionExpiresAt: number;
 }
 
+export interface Template extends BaseDocument {
+  title: string;
+  category: ProtocolItemCategory;
+  defaultDurationMin: number;
+}
+
+export type LeadTimeUnit = 'HOURS' | 'DAYS';
+
+export interface Routine extends BaseDocument {
+  title: string;
+  mustBeDoneBeforeEvent: boolean;
+  leadTimeValue?: number;
+  leadTimeUnit?: LeadTimeUnit;
+}
+
 export type TaskStatus = 'OPEN' | 'IN_PROGRESS' | 'DONE';
 
 export interface TaskChecklistItem {
