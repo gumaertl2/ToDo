@@ -5,12 +5,12 @@ import { AuthGuard } from './features/Auth/AuthGuard';
 import { LoginView } from './features/Auth/LoginView';
 import { AppLayout } from './features/Layout/AppLayout';
 import { useClubStore } from './store/useClubStore';
-import { UsersView } from './features/Users/UsersView';
-import { DashboardView } from './features/Dashboard/DashboardView';
 
-const EventsPlaceholder = () => <div className="bg-white p-6 rounded-lg shadow"><h2 className="text-xl font-bold">Events & Sitzungen Modul</h2></div>;
-const TemplatesPlaceholder = () => <div className="bg-white p-6 rounded-lg shadow"><h2 className="text-xl font-bold">Vorlagen & Routinen Modul</h2></div>;
-const TodosPlaceholder = () => <div className="bg-white p-6 rounded-lg shadow"><h2 className="text-xl font-bold">Meine ToDos (Kanban) Modul</h2></div>;
+import { DashboardView } from './features/Dashboard/DashboardView';
+import { EventsView } from './features/Events/EventsView';
+import { TasksView } from './features/Tasks/TasksView';
+import { TemplatesView } from './features/Templates/TemplatesView';
+import { UsersView } from './features/Users/UsersView';
 
 export default function App() {
   const { initializeAuth } = useClubStore();
@@ -33,14 +33,14 @@ export default function App() {
           }
         >
           <Route index element={<DashboardView />} />
+          <Route path="events" element={<EventsView />} />
+          <Route path="tasks" element={<TasksView />} />
+          <Route path="templates" element={<TemplatesView />} />
           <Route path="users" element={<UsersView />} />
-          <Route path="events" element={<EventsPlaceholder />} />
-          <Route path="templates" element={<TemplatesPlaceholder />} />
-          <Route path="todos" element={<TodosPlaceholder />} />
         </Route>
       </Routes>
     </BrowserRouter>
   );
 }
 
-// Exakte Zeilenzahl: 45
+// Exakte Zeilenzahl: 42

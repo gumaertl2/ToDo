@@ -12,7 +12,7 @@ export const AppLayout: React.FC = () => {
     { to: '/users', icon: Users, label: 'User & Gruppen' },
     { to: '/events', icon: Calendar, label: 'Events & Sitzungen' },
     { to: '/templates', icon: ClipboardList, label: 'Vorlagen & Routinen' },
-    { to: '/todos', icon: CheckSquare, label: 'Meine ToDos' },
+    { to: '/tasks', icon: CheckSquare, label: 'Meine ToDos' },
   ];
 
   return (
