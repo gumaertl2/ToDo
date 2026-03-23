@@ -1,4 +1,4 @@
-# Projektbeschreibung: Vereins-Management-App (PWA)
+# Projektbeschreibung: PapaToDo (PWA)
 
 ## 1. Ausgangslage und Zielsetzung
 Ein kleiner Verein (ca. 100 Mitglieder) mit einem 5-köpfigen Vorstand benötigt ein zentrales, digitales Werkzeug zur effizienten Organisation der Vorstandsarbeit.
