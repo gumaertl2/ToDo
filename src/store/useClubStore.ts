@@ -6,13 +6,16 @@ import { createTaskSlice } from './slices/createTaskSlice';
 import type { TaskSlice } from './slices/createTaskSlice';
 import { createEventSlice } from './slices/createEventSlice';
 import type { EventSlice } from './slices/createEventSlice';
+import { createUserSlice } from './slices/createUserSlice';
+import type { UserSlice } from './slices/createUserSlice';
 
-export type StoreState = AuthSlice & TaskSlice & EventSlice;
+export type StoreState = AuthSlice & TaskSlice & EventSlice & UserSlice;
 
 export const useClubStore = create<StoreState>()((...a) => ({
   ...createAuthSlice(...a),
   ...createTaskSlice(...a),
   ...createEventSlice(...a),
+  ...createUserSlice(...a),
 }));
 
 // Exakte Zeilenzahl: 13

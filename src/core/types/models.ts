@@ -16,9 +16,13 @@ export interface User extends BaseDocument {
 }
 
 export interface Helper extends BaseDocument {
+  name: string;
   bezug: string;
   email: string;
   telefon: string;
+  consentConfirmed: boolean;
+  lastActivityAt: number;
+  retentionExpiresAt: number;
 }
 
 export type TaskStatus = 'OPEN' | 'IN_PROGRESS' | 'DONE';
