@@ -33,10 +33,10 @@ export default function App() {
           }
         >
           <Route index element={<DashboardView />} />
-          <Route path="events" element={<EventsView />} />
-          <Route path="tasks" element={<TasksView />} />
-          <Route path="templates" element={<TemplatesView />} />
           <Route path="users" element={<UsersView />} />
+          <Route path="events" element={<EventsView />} />
+          <Route path="templates" element={<TemplatesView />} />
+          <Route path="todos" element={<TasksView />} />
         </Route>
       </Routes>
     </BrowserRouter>
