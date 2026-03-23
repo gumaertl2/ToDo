@@ -6,6 +6,7 @@ import { LoginView } from './features/Auth/LoginView';
 import { AppLayout } from './features/Layout/AppLayout';
 import { useClubStore } from './store/useClubStore';
 import { UsersView } from './features/Users/UsersView';
+
 const EventsPlaceholder = () => <div className="bg-white p-6 rounded-lg shadow"><h2 className="text-xl font-bold">Events & Sitzungen Modul</h2></div>;
 const TemplatesPlaceholder = () => <div className="bg-white p-6 rounded-lg shadow"><h2 className="text-xl font-bold">Vorlagen & Routinen Modul</h2></div>;
 const TodosPlaceholder = () => <div className="bg-white p-6 rounded-lg shadow"><h2 className="text-xl font-bold">Meine ToDos (Kanban) Modul</h2></div>;
