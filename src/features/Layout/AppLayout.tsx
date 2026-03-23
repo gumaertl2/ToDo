@@ -1,13 +1,14 @@
 // src/features/Layout/AppLayout.tsx
 import React from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { Users, Calendar, ClipboardList, CheckSquare, LogOut } from 'lucide-react';
+import { Users, Calendar, ClipboardList, CheckSquare, LogOut, LayoutDashboard } from 'lucide-react';
 import { useClubStore } from '../../store/useClubStore';
 
 export const AppLayout: React.FC = () => {
   const { logout, user } = useClubStore();
 
   const navItems = [
+    { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/users', icon: Users, label: 'User & Gruppen' },
     { to: '/events', icon: Calendar, label: 'Events & Sitzungen' },
     { to: '/templates', icon: ClipboardList, label: 'Vorlagen & Routinen' },
