@@ -2,7 +2,16 @@
 import type { StateCreator } from 'zustand';
 import type { User } from '../../core/types/models';
 import { auth } from '../../services/firebase';
-import { onAuthStateChanged, signOut, signInWithEmailAndPassword } from 'firebase/auth';
+import { 
+  onAuthStateChanged, 
+  signOut, 
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence
+} from 'firebase/auth';
 import { DataProcessor } from '../../services/DataProcessor';
 import type { Result } from '../../core/types/shared';
 
@@ -11,7 +20,8 @@ export interface AuthSlice {
   isAuthenticated: boolean;
   isAuthLoading: boolean;
   initializeAuth: () => void;
-  login: (email: string, pass: string) => Promise<Result<User>>;
+  loginWithEmail: (email: string, pass: string, trustedDevice: boolean) => Promise<Result<User>>;
+  loginWithGoogle: (trustedDevice: boolean) => Promise<Result<User>>;
   logout: () => Promise<void>;
 }
 
@@ -33,9 +43,25 @@ export const createAuthSlice: StateCreator<AuthSlice, [], [], AuthSlice> = (set)
       }
     });
   },
-  login: async (email, pass) => {
+  loginWithEmail: async (email, pass, trustedDevice) => {
     try {
+      await setPersistence(auth, trustedDevice ? browserLocalPersistence : browserSessionPersistence);
       const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+      const result = await DataProcessor.getDocument<User>('users', userCredential.user.uid);
+      if (result.success) {
+        set({ user: result.data, isAuthenticated: true });
+        return { success: true, data: result.data };
+      }
+      return { success: false, error: result.error };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
+    }
+  },
+  loginWithGoogle: async (trustedDevice) => {
+    try {
+      await setPersistence(auth, trustedDevice ? browserLocalPersistence : browserSessionPersistence);
+      const provider = new GoogleAuthProvider();
+      const userCredential = await signInWithPopup(auth, provider);
       const result = await DataProcessor.getDocument<User>('users', userCredential.user.uid);
       if (result.success) {
         set({ user: result.data, isAuthenticated: true });
@@ -52,4 +78,4 @@ export const createAuthSlice: StateCreator<AuthSlice, [], [], AuthSlice> = (set)
   },
 });
 
-// Exakte Zeilenzahl: 55
+// Exakte Zeilenzahl: 72
