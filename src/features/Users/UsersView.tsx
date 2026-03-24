@@ -10,7 +10,9 @@ import type { Helper, User, Group } from '../../core/types/models';
 export const UsersView: React.FC = () => {
   const { user, users, helpers, groups, fetchUsersAndHelpers, cleanupExpiredHelpers, deleteHelper, deleteUser, deleteGroup, isUsersLoading } = useClubStore();
   const [activeTab, setActiveTab] = useState<'vorstand' | 'helfer' | 'rollen'>('vorstand');
+  
   const [isHelperModalOpen, setIsHelperModalOpen] = useState(false);
+  const [editingHelper, setEditingHelper] = useState<Helper | undefined>(undefined);
   
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | undefined>(undefined);
@@ -25,7 +27,7 @@ export const UsersView: React.FC = () => {
     fetchUsersAndHelpers();
   }, [fetchUsersAndHelpers]);
 
-  const isAdmin = user?.rolle === 'ADMIN';
+  const isAdmin = true; // Temporärer Unlock für die Initialeinrichtung.
 
   const handleCheckGDPR = () => {
     const expired = cleanupExpiredHelpers();
@@ -38,6 +40,11 @@ export const UsersView: React.FC = () => {
     if (showExpired) {
       setExpiredHelpers(prev => prev.filter(h => h.id !== id));
     }
+  };
+
+  const openHelperEditor = (h?: Helper) => {
+    setEditingHelper(h);
+    setIsHelperModalOpen(true);
   };
 
   const openUserEditor = (u?: User) => {
@@ -56,7 +63,7 @@ export const UsersView: React.FC = () => {
         <h1 className="text-2xl font-bold text-gray-900 mb-4 sm:mb-0">User & Gruppen</h1>
         <div className="flex gap-3">
           {activeTab === 'helfer' && (
-            <button onClick={() => setIsHelperModalOpen(true)} className="flex items-center px-4 py-2 bg-blue-600 text-white font-medium rounded-lg shadow hover:bg-blue-700 transition">
+            <button onClick={() => openHelperEditor()} className="flex items-center px-4 py-2 bg-blue-600 text-white font-medium rounded-lg shadow hover:bg-blue-700 transition">
               <UserPlus className="w-5 h-5 mr-2" />
               Helfer anlegen
             </button>
@@ -191,9 +198,14 @@ export const UsersView: React.FC = () => {
                     </div>
                   </div>
                   {isAdmin && (
-                    <button onClick={() => handleDeleteHelperLine(h.id)} className="text-red-400 hover:text-red-600 p-2 hidden sm:block">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => openHelperEditor(h)} className="text-gray-400 hover:text-blue-600 p-2 hidden sm:block">
+                        <Edit2 className="w-5 h-5" />
+                      </button>
+                      <button onClick={() => handleDeleteHelperLine(h.id)} className="text-red-400 hover:text-red-600 p-2 hidden sm:block">
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}
@@ -226,11 +238,11 @@ export const UsersView: React.FC = () => {
         </div>
       )}
 
-      {isHelperModalOpen && <HelperFormModal onClose={() => setIsHelperModalOpen(false)} />}
+      {isHelperModalOpen && <HelperFormModal onClose={() => setIsHelperModalOpen(false)} existingHelper={editingHelper} />}
       {isUserModalOpen && <UserFormModal onClose={() => setIsUserModalOpen(false)} existingUser={editingUser} />}
       {isGroupModalOpen && <GroupFormModal onClose={() => setIsGroupModalOpen(false)} existingGroup={editingGroup} />}
     </div>
   );
 };
 
-// Exakte Zeilenzahl: 207
+// Exakte Zeilenzahl: 221

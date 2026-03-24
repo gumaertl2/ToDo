@@ -13,6 +13,7 @@ export interface UserSlice {
   isUsersLoading: boolean;
   fetchUsersAndHelpers: () => Promise<void>;
   addHelper: (helper: Helper) => Promise<Result<void>>;
+  updateHelper: (helper: Helper) => Promise<Result<void>>;
   deleteHelper: (helperId: string) => Promise<Result<void>>;
   cleanupExpiredHelpers: () => Helper[];
   fetchGroups: () => Promise<void>;
@@ -51,6 +52,13 @@ export const createUserSlice: StateCreator<UserSlice, [], [], UserSlice> = (set,
     const result = await DataProcessor.saveDocument<Helper>('helpers', helper.id, helper);
     if (result.success) {
       set((state) => ({ helpers: [...state.helpers, helper] }));
+    }
+    return result;
+  },
+  updateHelper: async (helper) => {
+    const result = await DataProcessor.saveDocument<Helper>('helpers', helper.id, helper);
+    if (result.success) {
+      set((state) => ({ helpers: state.helpers.map(h => h.id === helper.id ? helper : h) }));
     }
     return result;
   },
@@ -122,4 +130,4 @@ export const createUserSlice: StateCreator<UserSlice, [], [], UserSlice> = (set,
   }
 });
 
-// Exakte Zeilenzahl: 99
+// Exakte Zeilenzahl: 107
