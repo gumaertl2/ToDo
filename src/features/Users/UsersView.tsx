@@ -2,9 +2,9 @@
 import React, { useEffect, useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import { Users, UserPlus, ShieldAlert, Trash2, Edit2, Tag } from 'lucide-react';
-import { HelperFormModal } from './HelperFormModal';
-import { UserFormModal } from './UserFormModal';
-import { GroupFormModal } from './GroupFormModal';
+import { HelperFormModal } from './HelperFormModal.tsx';
+import { UserFormModal } from './UserFormModal.tsx';
+import { GroupFormModal } from './GroupFormModal.tsx';
 import type { Helper, User, Group } from '../../core/types/models';
 
 export const UsersView: React.FC = () => {
