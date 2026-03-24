@@ -7,12 +7,27 @@ export interface BaseDocument {
 
 export type UserRole = 'ADMIN' | 'VORSTAND';
 
+export interface UserPermissions {
+  canCreateTasks: boolean;
+  canUpdateTaskStatus: boolean;
+  canManageComments: boolean;
+  canDeleteOwnTasks: boolean;
+  canDeleteAnyTask: boolean;
+}
+
 export interface User extends BaseDocument {
   name: string;
   amt: string;
   rolle: UserRole;
   email: string;
-  telefon: string;
+  telefon?: string;
+  groupIds: string[];
+  permissions: UserPermissions;
+}
+
+export interface Group extends BaseDocument {
+  name: string;
+  description?: string;
 }
 
 export interface Helper extends BaseDocument {
