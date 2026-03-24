@@ -10,20 +10,15 @@ interface Props {
 }
 
 export const UserFormModal: React.FC<Props> = ({ onClose, existingUser }) => {
-  const { updateUser, groups } = useClubStore();
+  const { updateUser, createUser, groups } = useClubStore();
   const [name, setName] = useState(existingUser?.name || '');
   const [email, setEmail] = useState(existingUser?.email || '');
   const [role, setRole] = useState<'ADMIN' | 'VORSTAND'>(existingUser?.rolle || 'VORSTAND');
   const [amt, setAmt] = useState(existingUser?.amt || '');
   
   const [groupIds, setGroupIds] = useState<string[]>(existingUser?.groupIds || []);
-  
   const [permissions, setPermissions] = useState<UserPermissions>(existingUser?.permissions || {
-    canCreateTasks: false,
-    canUpdateTaskStatus: false,
-    canManageComments: false,
-    canDeleteOwnTasks: false,
-    canDeleteAnyTask: false
+    canCreateTasks: false, canUpdateTaskStatus: false, canManageComments: false, canDeleteOwnTasks: false, canDeleteAnyTask: false
   });
 
   const [error, setError] = useState<string | null>(null);
@@ -34,46 +29,19 @@ export const UserFormModal: React.FC<Props> = ({ onClose, existingUser }) => {
   };
 
   const handleSave = async () => {
-    if (!name.trim() || !email.trim()) {
-      setError('Name und E-Mail sind Pflichtfelder.');
-      return;
-    }
-    if (!existingUser) {
-       setError('Sicheres Anlegen neuer Vorstände via Firebase Auth Dashboard ist in diesem Kontext nicht vorgesehen, nur Lese-/Schreibrechte (Bearbeiten).');
-       return; 
-    }
-    
-    setIsSaving(true);
-    setError(null);
-    
+    if (!name.trim() || !email.trim()) { setError('Name und E-Mail sind Pflichtfelder.'); return; }
+    setIsSaving(true); setError(null);
     const userData: User = {
-      ...existingUser,
-      name: name.trim(),
-      email: email.trim(),
-      rolle: role,
-      amt: amt.trim(),
-      groupIds: groupIds || [],
-      permissions: permissions || {
-        canCreateTasks: false,
-        canUpdateTaskStatus: false,
-        canManageComments: false,
-        canDeleteOwnTasks: false,
-        canDeleteAnyTask: false
-      }
+      id: existingUser?.id || `user-${Date.now()}`,
+      schemaVersion: '1.0',
+      name: name.trim(), email: email.trim(), rolle: role, amt: amt.trim(),
+      groupIds: groupIds || [], permissions
     };
-
     try {
-      const result = await updateUser(userData);
-      if (result.success) {
-        onClose();
-      } else {
-        setError(result.error?.message || 'Fehler beim Speichern des Users.');
-        setIsSaving(false);
-      }
-    } catch (err) {
-      setError('Ein unerwarteter Fehler ist aufgetreten.');
-      setIsSaving(false);
-    }
+      const result = existingUser ? await updateUser(userData) : await createUser(userData);
+      if (result.success) onClose();
+      else { setError(result.error?.message || 'Fehler beim Speichern.'); setIsSaving(false); }
+    } catch (err) { setError('Ein unerwarteter Fehler ist aufgetreten.'); setIsSaving(false); }
   };
 
   return (
@@ -133,23 +101,23 @@ export const UserFormModal: React.FC<Props> = ({ onClose, existingUser }) => {
             <h3 className="font-semibold text-gray-900 mb-3">Rechte-Matrix (Granular)</h3>
             <div className="space-y-3">
                <label className="flex items-center text-sm text-gray-700 font-medium">
-                 <input type="checkbox" checked={permissions?.canCreateTasks || false} onChange={e => setPermissions({...permissions, canCreateTasks: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
+                 <input type="checkbox" checked={permissions.canCreateTasks} onChange={e => setPermissions({...permissions, canCreateTasks: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
                  Aufgaben anlegen
                </label>
                <label className="flex items-center text-sm text-gray-700 font-medium">
-                 <input type="checkbox" checked={permissions?.canUpdateTaskStatus || false} onChange={e => setPermissions({...permissions, canUpdateTaskStatus: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
+                 <input type="checkbox" checked={permissions.canUpdateTaskStatus} onChange={e => setPermissions({...permissions, canUpdateTaskStatus: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
                  Status von Aufgaben ändern
                </label>
                <label className="flex items-center text-sm text-gray-700 font-medium">
-                 <input type="checkbox" checked={permissions?.canManageComments || false} onChange={e => setPermissions({...permissions, canManageComments: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
+                 <input type="checkbox" checked={permissions.canManageComments} onChange={e => setPermissions({...permissions, canManageComments: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
                  Kommentare verwalten
                </label>
                <label className="flex items-center text-sm text-gray-700 font-medium">
-                 <input type="checkbox" checked={permissions?.canDeleteOwnTasks || false} onChange={e => setPermissions({...permissions, canDeleteOwnTasks: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
+                 <input type="checkbox" checked={permissions.canDeleteOwnTasks} onChange={e => setPermissions({...permissions, canDeleteOwnTasks: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
                  Eigene Aufgaben löschen
                </label>
                <label className="flex items-center text-sm text-gray-700 font-medium">
-                 <input type="checkbox" checked={permissions?.canDeleteAnyTask || false} onChange={e => setPermissions({...permissions, canDeleteAnyTask: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
+                 <input type="checkbox" checked={permissions.canDeleteAnyTask} onChange={e => setPermissions({...permissions, canDeleteAnyTask: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
                  Alle Aufgaben löschen
                </label>
             </div>
@@ -167,5 +135,3 @@ export const UserFormModal: React.FC<Props> = ({ onClose, existingUser }) => {
     </div>
   );
 };
-
-// Exakte Zeilenzahl: 147

@@ -20,6 +20,7 @@ export interface UserSlice {
   createGroup: (group: Group) => Promise<Result<void>>;
   updateGroup: (group: Group) => Promise<Result<void>>;
   deleteGroup: (groupId: string) => Promise<Result<void>>;
+  createUser: (user: User) => Promise<Result<void>>;
   updateUser: (user: User) => Promise<Result<void>>;
   deleteUser: (userId: string) => Promise<Result<void>>;
 }
@@ -57,9 +58,7 @@ export const createUserSlice: StateCreator<UserSlice, [], [], UserSlice> = (set,
   },
   updateHelper: async (helper) => {
     const result = await DataProcessor.saveDocument<Helper>('helpers', helper.id, helper);
-    if (result.success) {
-      set((state) => ({ helpers: state.helpers.map(h => h.id === helper.id ? helper : h) }));
-    }
+    if (result.success) set((state) => ({ helpers: state.helpers.map(h => h.id === helper.id ? helper : h) }));
     return result;
   },
   deleteHelper: async (helperId) => {
@@ -112,6 +111,11 @@ export const createUserSlice: StateCreator<UserSlice, [], [], UserSlice> = (set,
       return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
     }
   },
+  createUser: async (user) => {
+    const result = await DataProcessor.saveDocument<User>('users', user.id, user);
+    if (result.success) set((state) => ({ users: [...state.users, user] }));
+    return result;
+  },
   updateUser: async (user) => {
     const result = await DataProcessor.saveDocument<User>('users', user.id, user);
     if (result.success) {
@@ -129,5 +133,3 @@ export const createUserSlice: StateCreator<UserSlice, [], [], UserSlice> = (set,
     }
   }
 });
-
-// Exakte Zeilenzahl: 107
