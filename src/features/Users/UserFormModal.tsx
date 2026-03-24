@@ -10,7 +10,7 @@ interface Props {
 }
 
 export const UserFormModal: React.FC<Props> = ({ onClose, existingUser }) => {
-  const { updateUser, createUser, groups } = useClubStore();
+  const { updateUser, createUser, groups, users } = useClubStore();
   const [name, setName] = useState(existingUser?.name || '');
   const [email, setEmail] = useState(existingUser?.email || '');
   const [role, setRole] = useState<UserRole>(existingUser?.rolle || 'VORSTAND');
@@ -51,6 +51,24 @@ export const UserFormModal: React.FC<Props> = ({ onClose, existingUser }) => {
 
   const handleSave = async () => {
     if (!name.trim() || !email.trim()) { setError('Name und E-Mail sind Pflichtfelder.'); return; }
+
+    const normalizedName = name.trim().toLowerCase();
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Prüfe auf E-Mail-Duplikate (ignoriere den aktuellen User bei Bearbeitung)
+    const isDuplicateEmail = users.some(u => u.id !== existingUser?.id && u.email.toLowerCase() === normalizedEmail);
+    if (isDuplicateEmail) {
+      setError(`Die E-Mail-Adresse "${email.trim()}" wird bereits von einem anderen Benutzer verwendet.`);
+      return;
+    }
+
+    // Prüfe auf Namens-Duplikate (ignoriere den aktuellen User bei Bearbeitung)
+    const isDuplicateName = users.some(u => u.id !== existingUser?.id && u.name.toLowerCase() === normalizedName);
+    if (isDuplicateName) {
+      setError(`Der Name "${name.trim()}" existiert bereits im System. Bitte nutze einen Zusatz (z.B. Initiale).`);
+      return;
+    }
+
     setIsSaving(true); setError(null);
     const userData: User = {
       id: existingUser?.id || `user-${Date.now()}`,
@@ -180,4 +198,3 @@ export const UserFormModal: React.FC<Props> = ({ onClose, existingUser }) => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 161
