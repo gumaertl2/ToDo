@@ -8,7 +8,7 @@ import { GroupFormModal } from './GroupFormModal';
 import type { Helper, User, Group } from '../../core/types/models';
 
 export const UsersView: React.FC = () => {
-  const { user, users, helpers, groups, fetchUsersAndHelpers, cleanupExpiredHelpers, deleteHelper, deleteUser, deleteGroup, isUsersLoading } = useClubStore();
+  const { users, helpers, groups, fetchUsersAndHelpers, cleanupExpiredHelpers, deleteHelper, deleteUser, deleteGroup, isUsersLoading } = useClubStore();
   const [activeTab, setActiveTab] = useState<'vorstand' | 'helfer' | 'rollen'>('vorstand');
   
   const [isHelperModalOpen, setIsHelperModalOpen] = useState(false);
