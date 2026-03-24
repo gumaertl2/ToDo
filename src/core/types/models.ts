@@ -75,11 +75,22 @@ export interface Protocol extends BaseDocument {
 export interface ClubEvent extends BaseDocument {
   title: string;
   description?: string;
-  date: number; // Timestamp
   location?: string;
   status: 'PLANUNG' | 'AKTIV' | 'ABGESCHLOSSEN';
   participantUserIds: string[];
   participantGroupIds: string[];
+  
+  // Zeiten
+  plannedStartTime?: number;
+  plannedEndTime?: number;
+  actualEndTime?: number;
+  
+  // Wiederkehrend
+  isRecurring?: boolean;
+  recurrencePattern?: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  startDate?: number;
+  endDate?: number;
+  occurrenceCount?: number;
 }
 
 export type Event = ClubEvent;
@@ -100,24 +111,31 @@ export interface AgendaItem extends BaseDocument {
   type: ItemType;
   title: string;
   description?: string;
-  eventId?: string;
+  eventId?: string; // Kopplung an eine Sitzung/Event
   
-  // Timeboxing
+  // Timeboxing & Einbringer
   durationEstimate?: number;
   durationActual?: number;
+  requestedBy?: string;
 
-  // Aufgaben-Spezifisch
+  // Aufgaben-Spezifisch (Task/Kanban)
   status: ItemStatus;
-  progress: number;
-  dueDate?: number;
-  assigneeUserIds: string[];
-  assigneeGroupIds: string[];
+  progress: number; // 0 bis 100 Prozent
+  dueDate?: number; // Timestamp für "Bis wann"
+  assigneeUserIds: string[];  // Zuweisung an Personen
+  assigneeGroupIds: string[]; // Zuweisung an Rollen/Ämter
   comments: ItemComment[];
   checkliste: { id: string; text: string; isDone: boolean }[];
 
-  // Protokoll-Spezifisch
-  requestedBy?: string;
-  
+  // Event-Bindung & Kaskaden (Reverse-Scheduling)
+  mustBeDoneBeforeEvent?: boolean;
+  leadTimeValue?: number;
+  leadTimeUnit?: 'hours' | 'days';
+
+  // Sonderfelder Aufgabe
+  postponedToDate?: number;
+  reportingEventId?: string;
+
   // Beschluss-Spezifisch
   approvedBy?: string[];
   rejectedBy?: string[];

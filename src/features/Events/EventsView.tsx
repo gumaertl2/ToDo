@@ -50,7 +50,7 @@ export const EventsView: React.FC = () => {
                     <div>
                       <h3 className="font-semibold text-gray-900">{event.title}</h3>
                       <p className="text-sm text-gray-500">
-                        {new Date(event.date).toLocaleDateString()} · {event.location}
+                        {event.startDate ? new Date(event.startDate).toLocaleDateString() : 'Kein Datum'} · {event.location}
                       </p>
                     </div>
                   </div>

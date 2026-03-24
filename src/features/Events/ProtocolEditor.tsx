@@ -75,7 +75,7 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ event, onClose }
       <div className="border-b border-gray-200 pb-4 mb-6 flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Live-Protokoll: {event.title}</h2>
-          <p className="text-sm text-gray-500">{new Date(event.date).toLocaleString()}</p>
+          <p className="text-sm text-gray-500">{event.startDate ? new Date(event.startDate).toLocaleString() : 'Kein Datum'}</p>
         </div>
         <button 
           onClick={handleSaveProtocol}

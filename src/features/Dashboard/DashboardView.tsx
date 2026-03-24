@@ -15,8 +15,8 @@ export const DashboardView: React.FC = () => {
   const upcomingEvents = useMemo(() => {
     const now = new Date();
     return events
-      .filter((e) => new Date(e.date) >= now)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .filter((e) => e.startDate ? new Date(e.startDate) >= now : false)
+      .sort((a, b) => (a.startDate || 0) - (b.startDate || 0))
       .slice(0, 3);
   }, [events]);
 
@@ -63,7 +63,7 @@ export const DashboardView: React.FC = () => {
                     </div>
                     <div>
                       <h3 className="font-semibold text-gray-900">{ev.title}</h3>
-                      <p className="text-sm text-gray-600">{new Date(ev.date).toLocaleString()}</p>
+                      <p className="text-sm text-gray-600">{ev.startDate ? new Date(ev.startDate).toLocaleString() : 'Kein Datum'}</p>
                       {ev.location && <p className="text-xs text-gray-500 mt-1">📍 {ev.location}</p>}
                     </div>
                   </div>
