@@ -166,7 +166,7 @@ export const UsersView: React.FC = () => {
                       <h3 className="font-semibold text-gray-900">{u.name}</h3>
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-xs font-medium text-gray-500">{u.amt} · {u.rolle}</span>
-                        {u.groupIds?.map(gid => {
+                        {(u.groupIds || []).map(gid => {
                           const gName = groups.find(g => g.id === gid)?.name;
                           return gName ? <span key={gid} className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded-full">{gName}</span> : null;
                         })}
