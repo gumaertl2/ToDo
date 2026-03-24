@@ -19,26 +19,30 @@ export const LoginView: React.FC = () => {
   const [isTrusted, setIsTrusted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [resetMessage, setResetMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const navigate = useNavigate();
-  const { login, resetPassword } = useClubStore();
+  const { login, register, resetPassword } = useClubStore();
 
   const handlePersistence = async () => {
     const persistence = isTrusted ? browserLocalPersistence : browserSessionPersistence;
     await setPersistence(auth, persistence);
   };
 
-  const handleEmailLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
     try {
       await handlePersistence();
-      const result = await login(email, password);
-      if (result.success) {
+      const result = isRegisterMode 
+        ? await register(email.trim(), password)
+        : await login(email.trim(), password);
+        
+      if (!result.success) {
+        setError(result.error?.message || 'Ein Fehler ist aufgetreten.');
+      } else if (!isRegisterMode) {
         navigate('/');
-      } else {
-        setError(result.error?.message || 'Login fehlgeschlagen.');
       }
     } catch (err) {
       setError(String(err));
@@ -93,7 +97,7 @@ export const LoginView: React.FC = () => {
           </div>
         )}
 
-        <form onSubmit={handleEmailLogin} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700">E-Mail</label>
             <input
@@ -132,11 +136,25 @@ export const LoginView: React.FC = () => {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition"
           >
-            {isLoading ? 'Lädt...' : 'Mit E-Mail Anmelden'}
+            {isLoading ? 'Lädt...' : (isRegisterMode ? 'Registrieren & Passwort setzen' : 'Mit E-Mail Anmelden')}
           </button>
         </form>
+
+        <div className="text-center mt-4 border-t border-gray-200 pt-4">
+          <p className="text-sm text-gray-600 mb-2">
+            {isRegisterMode ? 'Bereits registriert?' : 'Vom Admin neu angelegt?'}
+          </p>
+          <button 
+            type="button" 
+            onClick={() => { setIsRegisterMode(!isRegisterMode); setError(null); }} 
+            className="text-sm font-bold text-blue-600 hover:text-blue-800 hover:underline transition"
+            disabled={isLoading}
+          >
+            {isRegisterMode ? 'Hier ganz normal Einloggen' : 'Hier als neuer Vorstand registrieren'}
+          </button>
+        </div>
 
         <div className="text-center mt-4">
           <button 
