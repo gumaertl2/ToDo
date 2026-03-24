@@ -1,7 +1,7 @@
 // src/features/Users/UserFormModal.tsx
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import type { User, UserPermissions } from '../../core/types/models';
+import type { User, UserPermissions, UserRole } from '../../core/types/models';
 import { X, Save, AlertCircle } from 'lucide-react';
 
 interface Props {
@@ -13,7 +13,7 @@ export const UserFormModal: React.FC<Props> = ({ onClose, existingUser }) => {
   const { updateUser, createUser, groups } = useClubStore();
   const [name, setName] = useState(existingUser?.name || '');
   const [email, setEmail] = useState(existingUser?.email || '');
-  const [role, setRole] = useState<'ADMIN' | 'VORSTAND'>(existingUser?.rolle || 'VORSTAND');
+  const [role, setRole] = useState<UserRole>(existingUser?.rolle || 'VORSTAND');
   const [amt, setAmt] = useState(existingUser?.amt || '');
   
   const [groupIds, setGroupIds] = useState<string[]>(existingUser?.groupIds || []);
@@ -26,6 +26,17 @@ export const UserFormModal: React.FC<Props> = ({ onClose, existingUser }) => {
 
   const toggleGroup = (id: string) => {
     setGroupIds((prev) => (prev || []).includes(id) ? (prev || []).filter(g => g !== id) : [...(prev || []), id]);
+  };
+
+  const handleRoleChange = (newRole: UserRole) => {
+    setRole(newRole);
+    if (newRole === 'ADMIN') {
+      setPermissions({ canCreateTasks: true, canUpdateTaskStatus: true, canManageComments: true, canDeleteOwnTasks: true, canDeleteAnyTask: true });
+    } else if (newRole === 'VORSTAND') {
+      setPermissions({ canCreateTasks: true, canUpdateTaskStatus: true, canManageComments: true, canDeleteOwnTasks: true, canDeleteAnyTask: false });
+    } else if (newRole === 'BEREICHSLEITER') {
+      setPermissions({ canCreateTasks: false, canUpdateTaskStatus: true, canManageComments: true, canDeleteOwnTasks: false, canDeleteAnyTask: false });
+    }
   };
 
   const handleSave = async () => {
@@ -73,9 +84,10 @@ export const UserFormModal: React.FC<Props> = ({ onClose, existingUser }) => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">System-Rolle</label>
-              <select value={role} onChange={(e) => setRole(e.target.value as 'ADMIN'|'VORSTAND')} disabled={isSaving} className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500">
-                <option value="VORSTAND">Vorstand</option>
-                <option value="ADMIN">Admin</option>
+              <select value={role} onChange={(e) => handleRoleChange(e.target.value as UserRole)} disabled={isSaving} className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500">
+                <option value="ADMIN">Admin (Voller Zugriff)</option>
+                <option value="VORSTAND">Vorstand (Operative Leitung)</option>
+                <option value="BEREICHSLEITER">Bereichsleiter (Nur Aufgaben bearbeiten)</option>
               </select>
             </div>
             <div>

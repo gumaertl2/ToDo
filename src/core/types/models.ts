@@ -5,7 +5,7 @@ export interface BaseDocument {
   schemaVersion: string;
 }
 
-export type UserRole = 'ADMIN' | 'VORSTAND';
+export type UserRole = 'ADMIN' | 'VORSTAND' | 'BEREICHSLEITER';
 
 export interface UserPermissions {
   canCreateTasks: boolean;
