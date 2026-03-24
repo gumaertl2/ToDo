@@ -2,7 +2,7 @@
 import type { StateCreator } from 'zustand';
 import type { User } from '../../core/types/models';
 import { auth } from '../../services/firebase';
-import { onAuthStateChanged, signOut, signInWithEmailAndPassword } from 'firebase/auth';
+import { onAuthStateChanged, signOut, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { DataProcessor } from '../../services/DataProcessor';
 import type { Result } from '../../core/types/shared';
 
@@ -13,6 +13,7 @@ export interface AuthSlice {
   initializeAuth: () => void;
   login: (email: string, pass: string) => Promise<Result<User>>;
   logout: () => Promise<void>;
+  resetPassword: (email: string) => Promise<Result<void>>;
 }
 
 export const createAuthSlice: StateCreator<AuthSlice, [], [], AuthSlice> = (set) => ({
@@ -50,6 +51,12 @@ export const createAuthSlice: StateCreator<AuthSlice, [], [], AuthSlice> = (set)
     await signOut(auth);
     set({ user: null, isAuthenticated: false });
   },
+  resetPassword: async (email) => {
+    try {
+      await sendPasswordResetEmail(auth, email);
+      return { success: true, data: undefined };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
+    }
+  },
 });
-
-// Exakte Zeilenzahl: 54
