@@ -1,9 +1,9 @@
 // src/store/slices/createAuthSlice.ts
 import type { StateCreator } from 'zustand';
 import type { User } from '../../core/types/models';
-import { auth } from '../../services/firebase';
+import { auth, db } from '../../services/firebase';
 import { onAuthStateChanged, signOut, signInWithEmailAndPassword, sendPasswordResetEmail, createUserWithEmailAndPassword } from 'firebase/auth';
-import { DataProcessor } from '../../services/DataProcessor';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import type { Result } from '../../core/types/shared';
 
 export interface AuthSlice {
@@ -23,11 +23,38 @@ export const createAuthSlice: StateCreator<AuthSlice, [], [], AuthSlice> = (set)
   isAuthLoading: true,
   initializeAuth: () => {
     onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const result = await DataProcessor.getDocument<User>('users', firebaseUser.uid);
-        if (result.success) {
-          set({ user: result.data, isAuthenticated: true, isAuthLoading: false });
-        } else {
+      set({ isAuthLoading: true });
+      if (firebaseUser && firebaseUser.email) {
+        try {
+          const normalizedEmail = firebaseUser.email.toLowerCase().trim();
+          const q = query(collection(db, 'users'), where('email', '==', normalizedEmail));
+          const querySnapshot = await getDocs(q);
+
+          let userData: User | null = null;
+
+          if (!querySnapshot.empty) {
+            // Akte über E-Mail gefunden (vom Admin vorher angelegt)
+            userData = querySnapshot.docs[0].data() as User;
+          } else {
+            // Fallback: Versuch es über die UID (für den allerersten Admin-Account)
+            const docRef = doc(db, 'users', firebaseUser.uid);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+              userData = docSnap.data() as User;
+            } else {
+              console.error(`Kein Profil für die E-Mail ${normalizedEmail} gefunden.`);
+              set({ user: null, isAuthenticated: false, isAuthLoading: false });
+              return;
+            }
+          }
+          
+          if (userData) {
+            set({ user: userData, isAuthenticated: true, isAuthLoading: false });
+          } else {
+            set({ user: null, isAuthenticated: false, isAuthLoading: false });
+          }
+        } catch (e) {
+          console.error("Fehler beim Laden des User-Profils:", e);
           set({ user: null, isAuthenticated: false, isAuthLoading: false });
         }
       } else {
@@ -38,12 +65,29 @@ export const createAuthSlice: StateCreator<AuthSlice, [], [], AuthSlice> = (set)
   login: async (email, pass) => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, pass);
-      const result = await DataProcessor.getDocument<User>('users', userCredential.user.uid);
-      if (result.success) {
-        set({ user: result.data, isAuthenticated: true });
-        return { success: true, data: result.data };
+      
+      const normalizedEmail = userCredential.user.email?.toLowerCase().trim() || email.toLowerCase().trim();
+      const q = query(collection(db, 'users'), where('email', '==', normalizedEmail));
+      const querySnapshot = await getDocs(q);
+
+      let userData: User | null = null;
+
+      if (!querySnapshot.empty) {
+        // Akte über E-Mail gefunden (vom Admin vorher angelegt)
+        userData = querySnapshot.docs[0].data() as User;
+      } else {
+        // Fallback: Versuch es über die UID
+        const docRef = doc(db, 'users', userCredential.user.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          userData = docSnap.data() as User;
+        } else {
+          throw new Error(`Kein Profil für die E-Mail ${normalizedEmail} gefunden. Bitte den Admin, dich im System anzulegen.`);
+        }
       }
-      return { success: false, error: result.error };
+
+      set({ user: userData, isAuthenticated: true });
+      return { success: true, data: userData };
     } catch (e) {
       return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
     }
