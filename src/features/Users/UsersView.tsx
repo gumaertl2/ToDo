@@ -8,7 +8,7 @@ import { GroupFormModal } from './GroupFormModal';
 import type { Helper, User, Group } from '../../core/types/models';
 
 export const UsersView: React.FC = () => {
-  const { users, helpers, groups, fetchUsersAndHelpers, cleanupExpiredHelpers, deleteHelper, deleteUser, deleteGroup, isUsersLoading } = useClubStore();
+  const { user, users, helpers, groups, fetchUsersAndHelpers, cleanupExpiredHelpers, deleteHelper, deleteUser, deleteGroup, isUsersLoading } = useClubStore();
   const [activeTab, setActiveTab] = useState<'vorstand' | 'helfer' | 'rollen'>('vorstand');
   
   const [isHelperModalOpen, setIsHelperModalOpen] = useState(false);
@@ -39,6 +39,36 @@ export const UsersView: React.FC = () => {
     await deleteHelper(id);
     if (showExpired) {
       setExpiredHelpers(prev => prev.filter(h => h.id !== id));
+    }
+  };
+
+  const handleSafeDeleteUser = async (u: User) => {
+    // Schutz 1: Niemals sich selbst löschen
+    if (u.id === user?.id) {
+      alert('Sicherheits-Sperre: Du kannst dein eigenes Profil nicht löschen!');
+      return;
+    }
+    // Schutz 2: Niemals den letzten Admin löschen
+    const adminCount = users.filter(usr => usr.rolle === 'ADMIN').length;
+    if (u.rolle === 'ADMIN' && adminCount <= 1) {
+      alert('Sicherheits-Sperre: Der letzte Administrator des Systems darf nicht gelöscht werden!');
+      return;
+    }
+    // Normaler Lösch-Vorgang mit Bestätigung
+    if (window.confirm(`Möchtest du den Vorstand "${u.name}" wirklich löschen?`)) {
+      if (u.id) await deleteUser(u.id);
+    }
+  };
+
+  const handleSafeDeleteHelper = async (h: Helper) => {
+    if (window.confirm(`Möchtest du den Helfer "${h.name}" wirklich löschen?`)) {
+      if (h.id) await handleDeleteHelperLine(h.id);
+    }
+  };
+
+  const handleSafeDeleteGroup = async (g: Group) => {
+    if (window.confirm(`Möchtest du die Rolle "${g.name}" wirklich löschen?`)) {
+      if (g.id) await deleteGroup(g.id);
     }
   };
 
@@ -138,7 +168,7 @@ export const UsersView: React.FC = () => {
                     <div className="font-medium text-gray-900">{h.name}</div>
                     <div className="text-sm text-gray-500">Letzte Aktivität: {new Date(h.lastActivityAt || 0).toLocaleDateString()}</div>
                   </div>
-                  <button onClick={() => handleDeleteHelperLine(h.id)} className="p-2 text-red-600 hover:bg-red-50 rounded">
+                  <button onClick={() => handleSafeDeleteHelper(h)} className="p-2 text-red-600 hover:bg-red-50 rounded">
                     <Trash2 className="w-5 h-5" />
                   </button>
                 </div>
@@ -178,7 +208,7 @@ export const UsersView: React.FC = () => {
                       <button onClick={() => openUserEditor(u)} className="text-gray-400 hover:text-blue-600 p-2">
                         <Edit2 className="w-5 h-5" />
                       </button>
-                      <button onClick={() => deleteUser(u.id)} className="text-red-400 hover:text-red-600 p-2">
+                      <button onClick={() => handleSafeDeleteUser(u)} className="text-red-400 hover:text-red-600 p-2">
                         <Trash2 className="w-5 h-5" />
                       </button>
                     </div>
@@ -202,7 +232,7 @@ export const UsersView: React.FC = () => {
                       <button onClick={() => openHelperEditor(h)} className="text-gray-400 hover:text-blue-600 p-2 hidden sm:block">
                         <Edit2 className="w-5 h-5" />
                       </button>
-                      <button onClick={() => handleDeleteHelperLine(h.id)} className="text-red-400 hover:text-red-600 p-2 hidden sm:block">
+                      <button onClick={() => handleSafeDeleteHelper(h)} className="text-red-400 hover:text-red-600 p-2 hidden sm:block">
                         <Trash2 className="w-5 h-5" />
                       </button>
                     </div>
@@ -226,7 +256,7 @@ export const UsersView: React.FC = () => {
                       <button onClick={() => openGroupEditor(g)} className="text-gray-400 hover:text-blue-600 p-2">
                         <Edit2 className="w-5 h-5" />
                       </button>
-                      <button onClick={() => deleteGroup(g.id)} className="text-red-400 hover:text-red-600 p-2">
+                      <button onClick={() => handleSafeDeleteGroup(g)} className="text-red-400 hover:text-red-600 p-2">
                         <Trash2 className="w-5 h-5" />
                       </button>
                     </div>
@@ -245,4 +275,4 @@ export const UsersView: React.FC = () => {
   );
 };
 
-// Exakte Zeilenzahl: 221
+// Exakte Zeilenzahl: 247
