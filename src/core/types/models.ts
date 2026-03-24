@@ -13,6 +13,8 @@ export interface UserPermissions {
   canManageComments: boolean;
   canDeleteOwnTasks: boolean;
   canDeleteAnyTask: boolean;
+  canManageUsers: boolean;
+  canManageRoles: boolean;
 }
 
 export interface User extends BaseDocument {

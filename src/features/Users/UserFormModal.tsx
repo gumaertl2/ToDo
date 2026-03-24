@@ -18,7 +18,8 @@ export const UserFormModal: React.FC<Props> = ({ onClose, existingUser }) => {
   
   const [groupIds, setGroupIds] = useState<string[]>(existingUser?.groupIds || []);
   const [permissions, setPermissions] = useState<UserPermissions>(existingUser?.permissions || {
-    canCreateTasks: false, canUpdateTaskStatus: false, canManageComments: false, canDeleteOwnTasks: false, canDeleteAnyTask: false
+    canCreateTasks: false, canUpdateTaskStatus: false, canManageComments: false, canDeleteOwnTasks: false, canDeleteAnyTask: false,
+    canManageUsers: false, canManageRoles: false
   });
 
   const [error, setError] = useState<string | null>(null);
@@ -31,11 +32,20 @@ export const UserFormModal: React.FC<Props> = ({ onClose, existingUser }) => {
   const handleRoleChange = (newRole: UserRole) => {
     setRole(newRole);
     if (newRole === 'ADMIN') {
-      setPermissions({ canCreateTasks: true, canUpdateTaskStatus: true, canManageComments: true, canDeleteOwnTasks: true, canDeleteAnyTask: true });
+      setPermissions({ 
+        canCreateTasks: true, canUpdateTaskStatus: true, canManageComments: true, canDeleteOwnTasks: true, canDeleteAnyTask: true,
+        canManageUsers: true, canManageRoles: true
+      });
     } else if (newRole === 'VORSTAND') {
-      setPermissions({ canCreateTasks: true, canUpdateTaskStatus: true, canManageComments: true, canDeleteOwnTasks: true, canDeleteAnyTask: false });
+      setPermissions({ 
+        canCreateTasks: true, canUpdateTaskStatus: true, canManageComments: true, canDeleteOwnTasks: true, canDeleteAnyTask: false,
+        canManageUsers: false, canManageRoles: false
+      });
     } else if (newRole === 'BEREICHSLEITER') {
-      setPermissions({ canCreateTasks: false, canUpdateTaskStatus: true, canManageComments: true, canDeleteOwnTasks: false, canDeleteAnyTask: false });
+      setPermissions({ 
+        canCreateTasks: false, canUpdateTaskStatus: true, canManageComments: true, canDeleteOwnTasks: false, canDeleteAnyTask: false,
+        canManageUsers: false, canManageRoles: false
+      });
     }
   };
 
@@ -46,7 +56,11 @@ export const UserFormModal: React.FC<Props> = ({ onClose, existingUser }) => {
       id: existingUser?.id || `user-${Date.now()}`,
       schemaVersion: '1.0',
       name: name.trim(), email: email.trim(), rolle: role, amt: amt.trim(),
-      groupIds: groupIds || [], permissions
+      groupIds: groupIds || [], 
+      permissions: permissions || {
+        canCreateTasks: false, canUpdateTaskStatus: false, canManageComments: false, canDeleteOwnTasks: false, canDeleteAnyTask: false,
+        canManageUsers: false, canManageRoles: false
+      }
     };
     try {
       const result = existingUser ? await updateUser(userData) : await createUser(userData);
@@ -110,29 +124,48 @@ export const UserFormModal: React.FC<Props> = ({ onClose, existingUser }) => {
           </div>
 
           <div className="pt-4 border-t border-gray-200">
-            <h3 className="font-semibold text-gray-900 mb-3">Rechte-Matrix (Granular)</h3>
-            <div className="space-y-3">
-               <label className="flex items-center text-sm text-gray-700 font-medium">
-                 <input type="checkbox" checked={permissions.canCreateTasks} onChange={e => setPermissions({...permissions, canCreateTasks: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
-                 Aufgaben anlegen
-               </label>
-               <label className="flex items-center text-sm text-gray-700 font-medium">
-                 <input type="checkbox" checked={permissions.canUpdateTaskStatus} onChange={e => setPermissions({...permissions, canUpdateTaskStatus: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
-                 Status von Aufgaben ändern
-               </label>
-               <label className="flex items-center text-sm text-gray-700 font-medium">
-                 <input type="checkbox" checked={permissions.canManageComments} onChange={e => setPermissions({...permissions, canManageComments: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
-                 Kommentare verwalten
-               </label>
-               <label className="flex items-center text-sm text-gray-700 font-medium">
-                 <input type="checkbox" checked={permissions.canDeleteOwnTasks} onChange={e => setPermissions({...permissions, canDeleteOwnTasks: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
-                 Eigene Aufgaben löschen
-               </label>
-               <label className="flex items-center text-sm text-gray-700 font-medium">
-                 <input type="checkbox" checked={permissions.canDeleteAnyTask} onChange={e => setPermissions({...permissions, canDeleteAnyTask: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
-                 Alle Aufgaben löschen
-               </label>
+            <h3 className="font-semibold text-gray-900 mb-4">Rechte-Matrix (Granular)</h3>
+            
+            <div className="mb-6">
+              <h4 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-3">System-Rechte</h4>
+              <div className="space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-100">
+                <label className="flex items-center text-sm text-gray-700 font-medium cursor-pointer">
+                  <input type="checkbox" checked={permissions.canManageUsers} onChange={e => setPermissions({...permissions, canManageUsers: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
+                  Benutzer verwalten (Anlegen/Löschen)
+                </label>
+                <label className="flex items-center text-sm text-gray-700 font-medium cursor-pointer">
+                  <input type="checkbox" checked={permissions.canManageRoles} onChange={e => setPermissions({...permissions, canManageRoles: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
+                  Rollen & Ämter verwalten
+                </label>
+              </div>
             </div>
+
+            <div>
+              <h4 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-3">Aufgaben-Rechte</h4>
+              <div className="space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-100">
+                 <label className="flex items-center text-sm text-gray-700 font-medium cursor-pointer">
+                   <input type="checkbox" checked={permissions.canCreateTasks} onChange={e => setPermissions({...permissions, canCreateTasks: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
+                   Aufgaben anlegen
+                 </label>
+                 <label className="flex items-center text-sm text-gray-700 font-medium cursor-pointer">
+                   <input type="checkbox" checked={permissions.canUpdateTaskStatus} onChange={e => setPermissions({...permissions, canUpdateTaskStatus: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
+                   Status von Aufgaben ändern
+                 </label>
+                 <label className="flex items-center text-sm text-gray-700 font-medium cursor-pointer">
+                   <input type="checkbox" checked={permissions.canManageComments} onChange={e => setPermissions({...permissions, canManageComments: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
+                   Kommentare verwalten
+                 </label>
+                 <label className="flex items-center text-sm text-gray-700 font-medium cursor-pointer">
+                   <input type="checkbox" checked={permissions.canDeleteOwnTasks} onChange={e => setPermissions({...permissions, canDeleteOwnTasks: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
+                   Eigene Aufgaben löschen
+                 </label>
+                 <label className="flex items-center text-sm text-gray-700 font-medium cursor-pointer">
+                   <input type="checkbox" checked={permissions.canDeleteAnyTask} onChange={e => setPermissions({...permissions, canDeleteAnyTask: e.target.checked})} className="w-4 h-4 text-blue-600 mr-3 rounded" />
+                   Alle Aufgaben löschen
+                 </label>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -147,3 +180,4 @@ export const UserFormModal: React.FC<Props> = ({ onClose, existingUser }) => {
     </div>
   );
 };
+// Exakte Zeilenzahl: 161
