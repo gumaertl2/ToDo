@@ -83,9 +83,9 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks }) => {
   };
 
   const columns: { id: TaskStatus; title: string }[] = [
-    { id: 'OPEN', title: 'Offen' },
-    { id: 'IN_PROGRESS', title: 'In Bearbeitung' },
-    { id: 'DONE', title: 'Erledigt' },
+    { id: 'OFFEN', title: 'Offen' },
+    { id: 'IN_ARBEIT', title: 'In Bearbeitung' },
+    { id: 'ERLEDIGT', title: 'Erledigt' },
   ];
 
   return (

@@ -13,7 +13,7 @@ export const TasksView: React.FC = () => {
 
   const displayedTasks = tasks.filter((task) => {
     if (filter === 'my' && user) {
-      return task.assignee_ids.includes(user.id);
+      return task.assigneeUserIds && task.assigneeUserIds.includes(user.id);
     }
     return true;
   });

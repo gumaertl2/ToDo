@@ -18,11 +18,11 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
   } : undefined;
 
-  const totalChecks = task.checklist ? task.checklist.length : 0;
-  const doneChecks = task.checklist ? task.checklist.filter(c => c.done).length : 0;
+  const totalChecks = task.checkliste ? task.checkliste.length : 0;
+  const doneChecks = task.checkliste ? task.checkliste.filter(c => c.isDone).length : 0;
   const progress = totalChecks > 0 ? Math.round((doneChecks / totalChecks) * 100) : 0;
   
-  const dueDateStr = new Date(task.dueDate).toLocaleDateString();
+  const dueDateStr = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '';
 
   return (
     <div

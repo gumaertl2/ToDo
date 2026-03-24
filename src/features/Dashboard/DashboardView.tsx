@@ -15,15 +15,15 @@ export const DashboardView: React.FC = () => {
   const upcomingEvents = useMemo(() => {
     const now = new Date();
     return events
-      .filter((e) => new Date(e.startDate) >= now)
-      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
+      .filter((e) => new Date(e.date) >= now)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .slice(0, 3);
   }, [events]);
 
   const openTasks = useMemo(() => {
-    let filtered = tasks.filter((t) => t.status !== 'DONE');
+    let filtered = tasks.filter((t) => t.status !== 'ERLEDIGT');
     if (user) {
-      filtered = filtered.filter((t) => t.assignee_ids.includes(user.id));
+      filtered = filtered.filter((t) => t.assigneeUserIds && t.assigneeUserIds.includes(user.id));
     }
     return filtered.sort((a, b) => new Date(a.dueDate || 0).getTime() - new Date(b.dueDate || 0).getTime());
   }, [tasks, user]);
@@ -63,7 +63,7 @@ export const DashboardView: React.FC = () => {
                     </div>
                     <div>
                       <h3 className="font-semibold text-gray-900">{ev.title}</h3>
-                      <p className="text-sm text-gray-600">{new Date(ev.startDate).toLocaleString()}</p>
+                      <p className="text-sm text-gray-600">{new Date(ev.date).toLocaleString()}</p>
                       {ev.location && <p className="text-xs text-gray-500 mt-1">📍 {ev.location}</p>}
                     </div>
                   </div>
@@ -100,9 +100,9 @@ export const DashboardView: React.FC = () => {
                       )}
                     </div>
                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                      task.status === 'IN_PROGRESS' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'
+                      task.status === 'IN_ARBEIT' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'
                     }`}>
-                      {task.status === 'IN_PROGRESS' ? 'In Bearbeitung' : 'Offen'}
+                      {task.status === 'IN_ARBEIT' ? 'In Bearbeitung' : 'Offen'}
                     </span>
                   </div>
                 ))}
