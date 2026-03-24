@@ -2,8 +2,9 @@
 import React, { useEffect, useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import { FileText, Repeat, Plus, Trash2 } from 'lucide-react';
-import { RoutineEditorModal } from './RoutineEditorModal';
+import { RoutineEditorModal } from './RoutineEditor';
 import { ItemFormModal } from '../Shared/ItemFormModal';
+// Force TS cache refresh
 
 export const TemplatesView: React.FC = () => {
   const { templates, routines, fetchTemplatesAndRoutines, deleteTemplate, deleteRoutine, isTemplatesLoading, saveAgendaItem } = useClubStore();
