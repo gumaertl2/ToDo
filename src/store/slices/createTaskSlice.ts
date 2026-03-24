@@ -1,6 +1,6 @@
 // src/store/slices/createTaskSlice.ts
 import type { StateCreator } from 'zustand';
-import type { Task } from '../../core/types/models';
+import type { Task, AgendaItem } from '../../core/types/models';
 import { DataProcessor } from '../../services/DataProcessor';
 import type { Result } from '../../core/types/shared';
 import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
@@ -13,9 +13,10 @@ export interface TaskSlice {
   addTask: (task: Task) => Promise<Result<void>>;
   updateTask: (task: Task) => Promise<Result<void>>;
   deleteTask: (taskId: string) => Promise<Result<void>>;
+  saveAgendaItem: (itemData: Partial<AgendaItem>) => Promise<Result<void>>;
 }
 
-export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set) => ({
+export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set, get) => ({
   tasks: [],
   isTasksLoading: false,
   fetchTasks: async () => {
@@ -61,6 +62,17 @@ export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set)
       return { success: true, data: undefined };
     } catch (e) {
       return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
+    }
+  },
+  saveAgendaItem: async (itemData) => {
+    try {
+      const docId = itemData.id || doc(collection(db, 'agenda_items')).id;
+      const payload = { ...itemData, schemaVersion: '1.0' };
+      await DataProcessor.saveDocument('agenda_items', docId, payload as any);
+      get().fetchTasks(); 
+      return { success: true, data: undefined };
+    } catch (error: any) {
+      return { success: false, error: new Error(error.message) };
     }
   },
 });

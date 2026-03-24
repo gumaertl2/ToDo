@@ -3,18 +3,20 @@ import React, { useEffect, useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import { FileText, Repeat, Plus, Trash2 } from 'lucide-react';
 import { RoutineEditorModal } from './RoutineEditorModal';
+import { ItemFormModal } from '../Shared/ItemFormModal';
 
 export const TemplatesView: React.FC = () => {
-  const { templates, routines, fetchTemplatesAndRoutines, deleteTemplate, deleteRoutine, isTemplatesLoading } = useClubStore();
+  const { templates, routines, fetchTemplatesAndRoutines, deleteTemplate, deleteRoutine, isTemplatesLoading, saveAgendaItem } = useClubStore();
   const [activeTab, setActiveTab] = useState<'bausteine' | 'kaskaden'>('bausteine');
   const [isRoutineModalOpen, setIsRoutineModalOpen] = useState(false);
+  const [isItemModalOpen, setIsItemModalOpen] = useState(false);
 
   useEffect(() => {
     fetchTemplatesAndRoutines();
   }, [fetchTemplatesAndRoutines]);
 
   const handleCreateTemplate = () => {
-    alert('Agenda-Baustein anlegen (in Entwicklung)');
+    setIsItemModalOpen(true);
   };
 
   return (
@@ -97,6 +99,15 @@ export const TemplatesView: React.FC = () => {
       </div>
 
       {isRoutineModalOpen && <RoutineEditorModal onClose={() => setIsRoutineModalOpen(false)} />}
+      
+      <ItemFormModal 
+        isOpen={isItemModalOpen} 
+        onClose={() => setIsItemModalOpen(false)} 
+        onSave={async (data) => { 
+          await saveAgendaItem(data); 
+          setIsItemModalOpen(false); 
+        }} 
+      />
     </div>
   );
 };
