@@ -77,6 +77,11 @@ export interface ClubEvent extends BaseDocument {
   description?: string;
   location?: string;
   status: 'PLANUNG' | 'AKTIV' | 'ABGESCHLOSSEN';
+  
+  // Workflow-Status
+  isPublished: boolean; // true = Für alle sichtbar, false = Entwurf
+  seriesId?: string;    // Bündelt Einzelsitzungen zu einer logischen Serie/Projekt
+  
   participantUserIds: string[];
   participantGroupIds: string[];
   
