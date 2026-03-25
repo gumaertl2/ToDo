@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import type { AgendaItem, ItemType, ItemStatus } from '../../core/types/models';
-import { X, Save, AlertCircle } from 'lucide-react';
+import { X, Save } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -42,8 +42,8 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
   const [rejectedBy, setRejectedBy] = useState<string[]>(existingItem?.rejectedBy || []);
   const [abstainedBy, setAbstainedBy] = useState<string[]>(existingItem?.abstainedBy || []);
 
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -56,14 +56,14 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
   };
 
   const handleSave = async () => {
-    if (!title.trim()) {
-      setError('Titel ist ein Pflichtfeld.');
+    setError(null);
+    if (!title || title.trim() === '') {
+      setError('Bitte gib einen Titel ein. Dies ist ein Pflichtfeld.');
       return;
     }
-    setError('');
-    setIsSaving(true);
     
     try {
+      setIsSubmitting(true);
       const payload: Partial<AgendaItem> = {
         id: existingItem?.id,
         type,
@@ -98,9 +98,9 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
 
       await onSave(payload);
     } catch (err: any) {
-      setError(err.message || 'Fehler beim Speichern');
+      setError(err.message || 'Fehler beim Speichern.');
     } finally {
-      setIsSaving(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -109,18 +109,13 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
       <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
         <div className="p-6 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-xl font-bold text-gray-900">Agenda-Baustein (Chamäleon)</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" disabled={isSaving}>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" disabled={isSubmitting}>
             <X className="w-6 h-6" />
           </button>
         </div>
         
         <div className="p-6 space-y-6 overflow-y-auto flex-1">
-          {error && (
-             <div className="bg-red-50 text-red-700 p-3 rounded-lg flex items-center">
-               <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0" />
-               <span className="text-sm">{error}</span>
-             </div>
-          )}
+          {/* Validierung nach unten verlegt */}
 
           {/* Basis-Felder (Immer sichtbar) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 border border-gray-200 p-4 rounded-lg">
@@ -290,12 +285,19 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
 
         </div>
 
-        <div className="p-6 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
-          <button onClick={onClose} disabled={isSaving} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium">Abbrechen</button>
-          <button onClick={handleSave} disabled={isSaving} className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-bold transition shadow-sm">
-            <Save className="w-5 h-5 mr-2" />
-            {isSaving ? 'Speichert...' : 'Chamäleon Speichern'}
-          </button>
+        <div className="p-6 border-t border-gray-200 bg-gray-50 flex flex-col gap-3">
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md text-sm border border-red-200">
+              {error}
+            </div>
+          )}
+          <div className="flex justify-end gap-3">
+            <button onClick={onClose} disabled={isSubmitting} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium">Abbrechen</button>
+            <button onClick={handleSave} disabled={isSubmitting} className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-bold transition shadow-sm">
+              <Save className="w-5 h-5 mr-2" />
+              {isSubmitting ? 'Speichert...' : 'Chamäleon Speichern'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
