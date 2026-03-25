@@ -1,23 +1,20 @@
 // src/store/slices/createEventSlice.ts
 import type { StateCreator } from 'zustand';
-import type { Event, Protocol } from '../../core/types/models';
+import type { Event } from '../../core/types/models';
 import { DataProcessor } from '../../services/DataProcessor';
 import type { Result } from '../../core/types/shared';
-import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 
 export interface EventSlice {
   events: Event[];
-  protocols: Protocol[];
   isEventsLoading: boolean;
   fetchEvents: () => Promise<Result<Event[]>>;
   addEvent: (event: Event) => Promise<Result<void>>;
-  transformAgendaToProtocol: (eventId: string, initialProtocol: Protocol) => Promise<Result<void>>;
 }
 
 export const createEventSlice: StateCreator<EventSlice, [], [], EventSlice> = (set) => ({
   events: [],
-  protocols: [],
   isEventsLoading: false,
   fetchEvents: async () => {
     set({ isEventsLoading: true });
@@ -43,21 +40,7 @@ export const createEventSlice: StateCreator<EventSlice, [], [], EventSlice> = (s
       set((state) => ({ events: [...state.events, event] }));
     }
     return result;
-  },
-  transformAgendaToProtocol: async (eventId, initialProtocol) => {
-    try {
-      const eventRef = doc(db, 'events', eventId);
-      await setDoc(eventRef, { status: 'PROTOCOL_TRANSFORMED' }, { merge: true });
-      
-      const result = await DataProcessor.saveDocument<Protocol>('protocols', initialProtocol.id, initialProtocol);
-      if (result.success) {
-        set((state) => ({ protocols: [...state.protocols, initialProtocol] }));
-      }
-      return result;
-    } catch (e) {
-      return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
-    }
-  },
+  }
 });
 
 // Exakte Zeilenzahl: 56

@@ -2,21 +2,20 @@
 import React, { useEffect, useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import { FileText, Repeat, Plus, Trash2 } from 'lucide-react';
-import { RoutineEditorModal } from './RoutineEditor';
 import { ItemFormModal } from '../Shared/ItemFormModal';
-// Force TS cache refresh
 
 export const TemplatesView: React.FC = () => {
-  const { templates, routines, fetchTemplatesAndRoutines, deleteTemplate, deleteRoutine, isTemplatesLoading, saveAgendaItem } = useClubStore();
+  const { templates, routines, fetchTemplatesAndRoutines, deleteAgendaItem, isTemplatesLoading, saveAgendaItem } = useClubStore();
   const [activeTab, setActiveTab] = useState<'bausteine' | 'kaskaden'>('bausteine');
-  const [isRoutineModalOpen, setIsRoutineModalOpen] = useState(false);
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
+  const [prefillMustBeDone, setPrefillMustBeDone] = useState(false);
 
   useEffect(() => {
     fetchTemplatesAndRoutines();
   }, [fetchTemplatesAndRoutines]);
 
-  const handleCreateTemplate = () => {
+  const handleCreateTemplate = (isRoutine: boolean) => {
+    setPrefillMustBeDone(isRoutine);
     setIsItemModalOpen(true);
   };
 
@@ -25,7 +24,7 @@ export const TemplatesView: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900 mb-4 sm:mb-0">Vorlagen & Routinen</h1>
         <button
-          onClick={activeTab === 'kaskaden' ? () => setIsRoutineModalOpen(true) : handleCreateTemplate}
+          onClick={() => handleCreateTemplate(activeTab === 'kaskaden')}
           className="flex items-center px-4 py-2 bg-blue-600 text-white font-medium rounded-lg shadow hover:bg-blue-700 transition"
         >
           <Plus className="w-5 h-5 mr-2" />
@@ -68,10 +67,10 @@ export const TemplatesView: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900">{t.title}</h3>
-                    <p className="text-sm text-gray-500">{t.category} · {t.defaultDurationMin} Min.</p>
+                    <p className="text-sm text-gray-500">{t.type} · {t.durationEstimate || 0} Min.</p>
                   </div>
                 </div>
-                <button onClick={() => deleteTemplate(t.id)} className="text-red-400 hover:text-red-600 p-2">
+                <button onClick={() => deleteAgendaItem(t.id)} className="text-red-400 hover:text-red-600 p-2">
                   <Trash2 className="w-5 h-5" />
                 </button>
               </div>
@@ -90,7 +89,7 @@ export const TemplatesView: React.FC = () => {
                     </p>
                   </div>
                 </div>
-                <button onClick={() => deleteRoutine(r.id)} className="text-red-400 hover:text-red-600 p-2">
+                <button onClick={() => deleteAgendaItem(r.id)} className="text-red-400 hover:text-red-600 p-2">
                   <Trash2 className="w-5 h-5" />
                 </button>
               </div>
@@ -99,10 +98,9 @@ export const TemplatesView: React.FC = () => {
         )}
       </div>
 
-      {isRoutineModalOpen && <RoutineEditorModal onClose={() => setIsRoutineModalOpen(false)} />}
-      
       <ItemFormModal 
         isOpen={isItemModalOpen} 
+        existingItem={{ type: 'VORLAGE', mustBeDoneBeforeEvent: prefillMustBeDone }}
         onClose={() => setIsItemModalOpen(false)} 
         onSave={async (data) => { 
           await saveAgendaItem(data); 
@@ -112,5 +110,3 @@ export const TemplatesView: React.FC = () => {
     </div>
   );
 };
-
-// Exakte Zeilenzahl: 104

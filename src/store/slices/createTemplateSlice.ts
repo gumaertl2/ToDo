@@ -1,20 +1,17 @@
 // src/store/slices/createTemplateSlice.ts
 import type { StateCreator } from 'zustand';
-import type { Template, Routine } from '../../core/types/models';
-import { DataProcessor } from '../../services/DataProcessor';
+import type { AgendaItem } from '../../core/types/models';
+
 import type { Result } from '../../core/types/shared';
 import { collection, getDocs, doc, deleteDoc, query, where } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 
 export interface TemplateSlice {
-  templates: Template[];
-  routines: Routine[];
+  templates: AgendaItem[];
+  routines: AgendaItem[];
   isTemplatesLoading: boolean;
   fetchTemplatesAndRoutines: () => Promise<void>;
-  addTemplate: (template: Template) => Promise<Result<void>>;
-  deleteTemplate: (templateId: string) => Promise<Result<void>>;
-  addRoutine: (routine: Routine) => Promise<Result<void>>;
-  deleteRoutine: (routineId: string) => Promise<Result<void>>;
+  deleteAgendaItem: (id: string) => Promise<Result<void>>;
 }
 
 export const createTemplateSlice: StateCreator<TemplateSlice, [], [], TemplateSlice> = (set) => ({
@@ -24,46 +21,24 @@ export const createTemplateSlice: StateCreator<TemplateSlice, [], [], TemplateSl
   fetchTemplatesAndRoutines: async () => {
     set({ isTemplatesLoading: true });
     try {
-      const [tSnap, rSnap] = await Promise.all([
-        getDocs(query(collection(db, 'agenda_items'), where('type', '==', 'VORLAGE'))),
-        getDocs(collection(db, 'routines'))
-      ]);
-      const templates: Template[] = [];
-      tSnap.forEach((d) => templates.push(d.data() as Template));
-      const routines: Routine[] = [];
-      rSnap.forEach((d) => routines.push(d.data() as Routine));
+      const q = query(collection(db, 'agenda_items'), where('type', '==', 'VORLAGE'));
+      const querySnapshot = await getDocs(q);
+      const all: AgendaItem[] = [];
+      querySnapshot.forEach(d => all.push(d.data() as AgendaItem));
+      const templates = all.filter(i => !i.mustBeDoneBeforeEvent);
+      const routines = all.filter(i => i.mustBeDoneBeforeEvent);
       set({ templates, routines, isTemplatesLoading: false });
     } catch (e) {
       set({ isTemplatesLoading: false });
     }
   },
-  addTemplate: async (template) => {
-    const result = await DataProcessor.saveDocument<Template>('templates', template.id, template);
-    if (result.success) {
-      set((state) => ({ templates: [...state.templates, template] }));
-    }
-    return result;
-  },
-  deleteTemplate: async (templateId) => {
+  deleteAgendaItem: async (id) => {
     try {
-      await deleteDoc(doc(db, 'templates', templateId));
-      set((state) => ({ templates: state.templates.filter((t) => t.id !== templateId) }));
-      return { success: true, data: undefined };
-    } catch (e) {
-      return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
-    }
-  },
-  addRoutine: async (routine) => {
-    const result = await DataProcessor.saveDocument<Routine>('routines', routine.id, routine);
-    if (result.success) {
-      set((state) => ({ routines: [...state.routines, routine] }));
-    }
-    return result;
-  },
-  deleteRoutine: async (routineId) => {
-    try {
-      await deleteDoc(doc(db, 'routines', routineId));
-      set((state) => ({ routines: state.routines.filter((r) => r.id !== routineId) }));
+      await deleteDoc(doc(db, 'agenda_items', id));
+      set((state) => ({ 
+        templates: state.templates.filter((t) => t.id !== id),
+        routines: state.routines.filter((r) => r.id !== id)
+      }));
       return { success: true, data: undefined };
     } catch (e) {
       return { success: false, error: e instanceof Error ? e : new Error(String(e)) };

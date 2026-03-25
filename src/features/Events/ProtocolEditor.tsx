@@ -1,8 +1,9 @@
 // src/features/Events/ProtocolEditor.tsx
 import React, { useState } from 'react';
-import type { ProtocolItemCategory, Event } from '../../core/types/models';
+import type { Event } from '../../core/types/models';
 import { Clock, Users, CheckSquare, Save } from 'lucide-react';
-import { useClubStore } from '../../store/useClubStore';
+
+export type ProtocolItemCategory = 'INFO' | 'DECISION' | 'TASK';
 
 export interface EditorAgendaItem {
   id: string;
@@ -22,7 +23,7 @@ interface ProtocolEditorProps {
 }
 
 export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ event, onClose }) => {
-  const { transformAgendaToProtocol } = useClubStore();
+  // const { transformAgendaToProtocol } = useClubStore(); // Deprecated in 12g
   const [items, setItems] = useState<EditorAgendaItem[]>([
     {
       id: 'item-1',
@@ -53,20 +54,8 @@ export const ProtocolEditor: React.FC<ProtocolEditorProps> = ({ event, onClose }
   };
 
   const handleSaveProtocol = async () => {
-    const generatedProtocol = {
-      id: `proto-${event.id}`,
-      schemaVersion: '1.0',
-      date: new Date().toISOString(),
-      participants: [],
-      items: items.map(item => ({
-        id: item.id,
-        schemaVersion: '1.0',
-        category: item.category,
-        task_id: item.category === 'TASK' ? `task-${item.id}` : undefined
-      }))
-    };
-    
-    await transformAgendaToProtocol(event.id, generatedProtocol);
+    // Migration in Phase 13
+    alert('Speicherung deaktiviert (Transformation zu Chamäleon-Datenmodell läuft)');
     onClose();
   };
 

@@ -44,33 +44,7 @@ export interface Helper extends BaseDocument {
   retentionExpiresAt: number;
 }
 
-export interface Template extends BaseDocument {
-  title: string;
-  category: ProtocolItemCategory;
-  defaultDurationMin: number;
-}
 
-export type LeadTimeUnit = 'HOURS' | 'DAYS';
-
-export interface Routine extends BaseDocument {
-  title: string;
-  mustBeDoneBeforeEvent: boolean;
-  leadTimeValue?: number;
-  leadTimeUnit?: LeadTimeUnit;
-}
-
-export type ProtocolItemCategory = 'INFO' | 'DECISION' | 'TASK';
-
-export interface ProtocolItem extends BaseDocument {
-  category: ProtocolItemCategory;
-  task_id?: string;
-}
-
-export interface Protocol extends BaseDocument {
-  date: string;
-  participants: string[];
-  items: ProtocolItem[];
-}
 
 export interface ClubEvent extends BaseDocument {
   title: string;
