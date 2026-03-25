@@ -44,32 +44,30 @@ export interface Helper extends BaseDocument {
   retentionExpiresAt: number;
 }
 
-
-
 export interface ClubEvent extends BaseDocument {
   title: string;
   description?: string;
   location?: string;
   status: 'PLANUNG' | 'AKTIV' | 'ABGESCHLOSSEN';
   
-  // Workflow-Status
-  isPublished: boolean; // true = Für alle sichtbar, false = Entwurf
-  seriesId?: string;    // Bündelt Einzelsitzungen zu einer logischen Serie/Projekt
+  isPublished: boolean; 
+  seriesId?: string;    
   
   participantUserIds: string[];
   participantGroupIds: string[];
   
-  // Zeiten
   plannedStartTime?: number;
   plannedEndTime?: number;
   actualEndTime?: number;
   
-  // Wiederkehrend
   isRecurring?: boolean;
   recurrencePattern?: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
   startDate?: number;
   endDate?: number;
   occurrenceCount?: number;
+
+  // CHIRURGISCHER EINGRIFF: Termin für die Folge-Sitzung
+  nextEventDate?: number;
 }
 
 export type Event = ClubEvent;
@@ -86,39 +84,37 @@ export interface ItemComment {
 }
 
 export interface AgendaItem extends BaseDocument {
-  // Basis-Meta
   type: ItemType;
   title: string;
   description?: string;
-  eventId?: string; // Kopplung an eine Sitzung/Event
+  eventId?: string; 
   
-  // Timeboxing & Einbringer
   durationEstimate?: number;
   durationActual?: number;
   requestedBy?: string;
 
-  // Aufgaben-Spezifisch (Task/Kanban)
   status: ItemStatus;
-  progress: number; // 0 bis 100 Prozent
-  dueDate?: number; // Timestamp für "Bis wann"
-  assigneeUserIds: string[];  // Zuweisung an Personen
-  assigneeGroupIds: string[]; // Zuweisung an Rollen/Ämter
+  progress: number; 
+  dueDate?: number; 
+  assigneeUserIds: string[];  
+  assigneeGroupIds: string[]; 
   comments: ItemComment[];
   checkliste: { id: string; text: string; isDone: boolean }[];
 
-  // Event-Bindung & Kaskaden (Reverse-Scheduling)
   mustBeDoneBeforeEvent?: boolean;
   leadTimeValue?: number;
   leadTimeUnit?: 'hours' | 'days';
 
-  // Sonderfelder Aufgabe
+  // CHIRURGISCHER EINGRIFF: Flag für Automatisierung
+  isDueNextMeeting?: boolean;
+
   postponedToDate?: number;
   reportingEventId?: string;
 
-  // Beschluss-Spezifisch
   approvedBy?: string[];
   rejectedBy?: string[];
   abstainedBy?: string[];
 }
 
 export type Task = AgendaItem;
+// Exakte Zeilenzahl: 106

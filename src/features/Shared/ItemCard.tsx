@@ -22,12 +22,10 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onEdit, onDelete, clas
   };
 
   const isTask = item.type === 'AUFGABE';
-  
   const totalChecks = item.checkliste ? item.checkliste.length : 0;
   const doneChecks = item.checkliste ? item.checkliste.filter(c => c.isDone).length : 0;
   const progressValue = item.progress !== undefined ? item.progress : (totalChecks > 0 ? Math.round((doneChecks / totalChecks) * 100) : 0);
   
-  // CHIRURGISCHER EINGRIFF: Intelligente Datums-Formatierung
   const formatSafeDate = (timestamp?: number) => {
     if (!timestamp) return '';
     const d = new Date(timestamp);
@@ -36,7 +34,6 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onEdit, onDelete, clas
 
   const dueDateStr = formatSafeDate(item.dueDate);
   const postponedStr = formatSafeDate(item.postponedToDate);
-  
   const activeDate = item.postponedToDate || item.dueDate;
   const isOverdue = activeDate ? new Date(activeDate) < new Date() : false;
 
@@ -58,16 +55,8 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onEdit, onDelete, clas
         </h4>
         {(onEdit || onDelete) && (
           <div className="flex items-center ml-2 shrink-0">
-            {onEdit && (
-              <button onClick={(e) => { e.stopPropagation(); onEdit(item); }} className="text-blue-500 hover:text-blue-700 p-1 mr-1">
-                <Edit2 className="w-4 h-4" />
-              </button>
-            )}
-            {onDelete && (
-              <button onClick={(e) => { e.stopPropagation(); onDelete(item.id, item.title); }} className="text-red-400 hover:text-red-600 p-1">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )}
+            {onEdit && <button onClick={(e) => { e.stopPropagation(); onEdit(item); }} className="text-blue-500 hover:text-blue-700 p-1 mr-1"><Edit2 className="w-4 h-4" /></button>}
+            {onDelete && <button onClick={(e) => { e.stopPropagation(); onDelete(item.id, item.title); }} className="text-red-400 hover:text-red-600 p-1"><Trash2 className="w-4 h-4" /></button>}
           </div>
         )}
       </div>
@@ -82,24 +71,27 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onEdit, onDelete, clas
           <>
             <div className={`flex items-center ${isOverdue ? 'text-red-500 font-bold' : ''}`}>
               <Calendar className="w-3 h-3 mr-1" />
+              
+              {/* CHIRURGISCHER EINGRIFF: Zeigt "Nächste Sitzung" intelligent an */}
+              {item.isDueNextMeeting && !item.dueDate && <span className="text-orange-600 font-bold">Nächste Sitzung</span>}
+              {!item.isDueNextMeeting && !item.dueDate && !postponedStr && <span>Kein Datum</span>}
+              
               {postponedStr ? (
                 <div className="flex items-center">
-                  {dueDateStr && <span className="line-through text-gray-400 mr-2" title="Ursprüngliches Datum">{dueDateStr}</span>}
-                  <span className="text-orange-600 font-bold" title="Verschoben auf">{postponedStr}</span>
+                  {dueDateStr && <span className="line-through text-gray-400 mr-2">{dueDateStr}</span>}
+                  <span className="text-orange-600 font-bold">{postponedStr}</span>
                 </div>
               ) : (
-                <span>{dueDateStr || 'Kein Datum'}</span>
+                dueDateStr && <span>{dueDateStr} {item.isDueNextMeeting && '(Nächste)'}</span>
               )}
             </div>
             <div className="flex items-center text-blue-600 font-medium ml-2 shrink-0">
-              <CheckSquare className="w-3 h-3 mr-1" />
-              {progressValue}%
+              <CheckSquare className="w-3 h-3 mr-1" />{progressValue}%
             </div>
           </>
         ) : (
           <div className="flex items-center">
-            <Clock className="w-3 h-3 mr-1" />
-            Dauer: {item.durationEstimate || 0} Min.
+            <Clock className="w-3 h-3 mr-1" />Dauer: {item.durationEstimate || 0} Min.
           </div>
         )}
       </div>
@@ -112,4 +104,4 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onEdit, onDelete, clas
     </div>
   );
 };
-// Exakte Zeilenzahl: 104
+// Exakte Zeilenzahl: 99

@@ -6,7 +6,7 @@ import { ItemFormModal } from '../Shared/ItemFormModal';
 import type { Task } from '../../core/types/models';
 
 export const TasksView: React.FC = () => {
-  const { tasks, fetchTasks, isTasksLoading, user, saveAgendaItem } = useClubStore();
+  const { tasks, fetchTasks, isTasksLoading, user, saveAgendaItem, events, fetchEvents } = useClubStore();
   const [filter, setFilter] = useState<'all' | 'my'>('my');
   
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
@@ -14,9 +14,16 @@ export const TasksView: React.FC = () => {
 
   useEffect(() => {
     fetchTasks();
-  }, [fetchTasks]);
+    fetchEvents();
+  }, [fetchTasks, fetchEvents]);
 
   const displayedTasks = tasks.filter((task) => {
+    // CHIRURGISCHER EINGRIFF: Schrödinger-Filter
+    if (task.eventId) {
+      const ev = events.find(e => e.id === task.eventId);
+      if (ev && ev.status === 'PLANUNG') return false;
+    }
+
     if (filter === 'my' && user) {
       const isUserDirectlyAssigned = task.assigneeUserIds && task.assigneeUserIds.includes(user.id);
       const isUserGroupAssigned = task.assigneeGroupIds && user.groupIds && task.assigneeGroupIds.some(groupId => user.groupIds.includes(groupId));
@@ -85,4 +92,4 @@ export const TasksView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 86
+// Exakte Zeilenzahl: 95

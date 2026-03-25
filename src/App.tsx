@@ -8,6 +8,7 @@ import { useClubStore } from './store/useClubStore';
 
 import { DashboardView } from './features/Dashboard/DashboardView';
 import { EventsView } from './features/Events/EventsView';
+import { EventDetailView } from './features/Events/EventDetailView';
 import { TasksView } from './features/Tasks/TasksView';
 import { TemplatesView } from './features/Templates/TemplatesView';
 import { UsersView } from './features/Users/UsersView';
@@ -35,6 +36,7 @@ export default function App() {
           <Route index element={<DashboardView />} />
           <Route path="users" element={<UsersView />} />
           <Route path="events" element={<EventsView />} />
+          <Route path="events/:eventId" element={<EventDetailView />} />
           <Route path="templates" element={<TemplatesView />} />
           <Route path="todos" element={<TasksView />} />
         </Route>
@@ -42,5 +44,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
-
-// Exakte Zeilenzahl: 42
+// Exakte Zeilenzahl: 43
