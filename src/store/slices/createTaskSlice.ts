@@ -3,7 +3,7 @@ import type { StateCreator } from 'zustand';
 import type { Task, AgendaItem } from '../../core/types/models';
 import { DataProcessor } from '../../services/DataProcessor';
 import type { Result } from '../../core/types/shared';
-import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 
 export interface TaskSlice {
@@ -22,7 +22,8 @@ export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set,
   fetchTasks: async () => {
     set({ isTasksLoading: true });
     try {
-      const querySnapshot = await getDocs(collection(db, 'tasks'));
+      const q = query(collection(db, 'agenda_items'), where('type', '==', 'AUFGABE'));
+      const querySnapshot = await getDocs(q);
       const tasks: Task[] = [];
       querySnapshot.forEach((docSnap) => {
         const data = docSnap.data() as Task;

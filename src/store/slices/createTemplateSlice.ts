@@ -3,7 +3,7 @@ import type { StateCreator } from 'zustand';
 import type { Template, Routine } from '../../core/types/models';
 import { DataProcessor } from '../../services/DataProcessor';
 import type { Result } from '../../core/types/shared';
-import { collection, getDocs, doc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc, query, where } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 
 export interface TemplateSlice {
@@ -25,7 +25,7 @@ export const createTemplateSlice: StateCreator<TemplateSlice, [], [], TemplateSl
     set({ isTemplatesLoading: true });
     try {
       const [tSnap, rSnap] = await Promise.all([
-        getDocs(collection(db, 'templates')),
+        getDocs(query(collection(db, 'agenda_items'), where('type', '==', 'VORLAGE'))),
         getDocs(collection(db, 'routines'))
       ]);
       const templates: Template[] = [];
