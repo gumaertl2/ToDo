@@ -1,14 +1,15 @@
 // src/features/Dashboard/DashboardView.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import { Calendar, CheckSquare, Clock, ArrowRight, User } from 'lucide-react';
+import { Calendar, CheckSquare, Clock, ArrowRight } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { ItemCard } from '../Shared/ItemCard';
 import { ItemFormModal } from '../Shared/ItemFormModal';
 import type { Task } from '../../core/types/models';
 
 export const DashboardView: React.FC = () => {
-  const { events, tasks, user, users, groups, fetchEvents, fetchTasks, isEventsLoading, saveAgendaItem } = useClubStore();
+  // CHIRURGISCHER EINGRIFF: users und groups entfernt, da diese nun in der ItemCard direkt aufgelöst werden
+  const { events, tasks, user, fetchEvents, fetchTasks, isEventsLoading, saveAgendaItem } = useClubStore();
   
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Task | null>(null);
@@ -29,7 +30,6 @@ export const DashboardView: React.FC = () => {
   const openTasks = useMemo(() => {
     let filtered = tasks.filter((t) => t.status !== 'ERLEDIGT');
     
-    // CHIRURGISCHER EINGRIFF: Schrödinger-Filter (Aufgaben aus geplanten Sitzungen verstecken)
     filtered = filtered.filter((t) => {
       if (!t.eventId) return true;
       const ev = events.find(e => e.id === t.eventId);
@@ -50,13 +50,6 @@ export const DashboardView: React.FC = () => {
   const handleEditTask = (task: Task) => {
     setEditingItem(task);
     setIsItemModalOpen(true);
-  };
-
-  const getAssigneesText = (task: Task) => {
-    const uNames = (task.assigneeUserIds || []).map(id => users.find(u => u.id === id)?.name).filter(Boolean);
-    const gNames = (task.assigneeGroupIds || []).map(id => groups.find(g => g.id === id)?.name).filter(Boolean);
-    const all = [...uNames, ...gNames];
-    return all.length > 0 ? all.join(', ') : 'Nicht zugewiesen';
   };
 
   return (
@@ -147,4 +140,4 @@ export const DashboardView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 147
+// Exakte Zeilenzahl: 139

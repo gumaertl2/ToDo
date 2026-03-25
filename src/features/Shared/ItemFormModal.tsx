@@ -20,7 +20,9 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
   const [description, setDescription] = useState(existingItem?.description || '');
   const [requestedBy, setRequestedBy] = useState(existingItem?.requestedBy || '');
   const [durationEstimate, setDurationEstimate] = useState<number>(existingItem?.durationEstimate || 15);
-  const [durationActual, setDurationActual] = useState<number>(existingItem?.durationActual || 0);
+  
+  // CHIRURGISCHER EINGRIFF: Die Setter (set...) wurden entfernt, um den Linter zufriedenzustellen
+  const [durationActual] = useState<number>(existingItem?.durationActual || 0);
 
   const [mustBeDoneBeforeEvent, setMustBeDoneBeforeEvent] = useState(existingItem?.mustBeDoneBeforeEvent || false);
   const [leadTimeValue, setLeadTimeValue] = useState<number>(existingItem?.leadTimeValue || 1);
@@ -34,11 +36,12 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
   const [progress, setProgress] = useState<number>(existingItem?.progress || 0);
   const [dueDateStr, setDueDateStr] = useState(existingItem?.dueDate ? new Date(existingItem.dueDate).toISOString().substring(0,10) : '');
   const [postponedToDateStr, setPostponedToDateStr] = useState(existingItem?.postponedToDate ? new Date(existingItem.postponedToDate).toISOString().substring(0,10) : '');
-  const [reportingEventId, setReportingEventId] = useState(existingItem?.reportingEventId || '');
-
+  
+  // CHIRURGISCHER EINGRIFF: Linter-Fixes für ungenutzte Setter
+  const [reportingEventId] = useState(existingItem?.reportingEventId || '');
   const [approvedBy, setApprovedBy] = useState<string[]>(existingItem?.approvedBy || []);
-  const [rejectedBy, setRejectedBy] = useState<string[]>(existingItem?.rejectedBy || []);
-  const [abstainedBy, setAbstainedBy] = useState<string[]>(existingItem?.abstainedBy || []);
+  const [rejectedBy] = useState<string[]>(existingItem?.rejectedBy || []);
+  const [abstainedBy] = useState<string[]>(existingItem?.abstainedBy || []);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -156,7 +159,6 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
             </div>
           </div>
 
-          {/* CHIRURGISCHER EINGRIFF: Verantwortliche sind jetzt für ALLE Typen verfügbar! */}
           <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg space-y-4">
             <h3 className="text-md font-bold text-blue-800">Zuständige / Vortragende</h3>
             <div>
@@ -206,7 +208,6 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
                 </div>
               )}
 
-              {/* CHIRURGISCHER EINGRIFF: Checkbox "Bis zur nächsten Sitzung" */}
               <div className="flex items-center pt-2 border-t border-purple-200">
                 <input type="checkbox" checked={isDueNextMeeting} onChange={e => setIsDueNextMeeting(e.target.checked)} className="w-4 h-4 text-purple-600 rounded" />
                 <span className="ml-2 text-sm font-bold text-purple-900">Automatisch fällig zur NÄCHSTEN Sitzung</span>
