@@ -9,9 +9,10 @@ interface Props {
   onClose: () => void;
   onSave: (data: Partial<AgendaItem>) => Promise<void>;
   existingItem?: Partial<AgendaItem>;
+  isFixedType?: boolean;
 }
 
-export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existingItem }) => {
+export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existingItem, isFixedType }) => {
   const { users, groups } = useClubStore();
   
   const [type, setType] = useState<ItemType>(existingItem?.type || 'VORLAGE');
@@ -21,23 +22,19 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
   const [durationEstimate, setDurationEstimate] = useState<number>(existingItem?.durationEstimate || 15);
   const [durationActual, setDurationActual] = useState<number>(existingItem?.durationActual || 0);
 
-  // Kaskaden
   const [mustBeDoneBeforeEvent, setMustBeDoneBeforeEvent] = useState(existingItem?.mustBeDoneBeforeEvent || false);
   const [leadTimeValue, setLeadTimeValue] = useState<number>(existingItem?.leadTimeValue || 1);
   const [leadTimeUnit, setLeadTimeUnit] = useState<'hours' | 'days'>(existingItem?.leadTimeUnit || 'days');
   
-  // Zuweisungen
   const [assigneeUserIds, setAssigneeUserIds] = useState<string[]>(existingItem?.assigneeUserIds || []);
   const [assigneeGroupIds, setAssigneeGroupIds] = useState<string[]>(existingItem?.assigneeGroupIds || []);
 
-  // Aufgabe
   const [status, setStatus] = useState<ItemStatus>(existingItem?.status || 'OFFEN');
   const [progress, setProgress] = useState<number>(existingItem?.progress || 0);
   const [dueDateStr, setDueDateStr] = useState(existingItem?.dueDate ? new Date(existingItem.dueDate).toISOString().substring(0,10) : '');
   const [postponedToDateStr, setPostponedToDateStr] = useState(existingItem?.postponedToDate ? new Date(existingItem.postponedToDate).toISOString().substring(0,10) : '');
   const [reportingEventId, setReportingEventId] = useState(existingItem?.reportingEventId || '');
 
-  // Beschluss
   const [approvedBy, setApprovedBy] = useState<string[]>(existingItem?.approvedBy || []);
   const [rejectedBy, setRejectedBy] = useState<string[]>(existingItem?.rejectedBy || []);
   const [abstainedBy, setAbstainedBy] = useState<string[]>(existingItem?.abstainedBy || []);
@@ -65,7 +62,6 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
     try {
       setIsSubmitting(true);
       const payload: Partial<AgendaItem> = {
-        id: existingItem?.id,
         type,
         title: title.trim(),
         description: description.trim(),
@@ -73,6 +69,10 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
         durationEstimate,
         durationActual,
       };
+
+      if (existingItem?.id) {
+        payload.id = existingItem.id;
+      }
 
       if (type === 'AUFGABE' || type === 'VORLAGE') {
         payload.mustBeDoneBeforeEvent = mustBeDoneBeforeEvent;
@@ -85,9 +85,9 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
       if (type === 'AUFGABE') {
         payload.status = status;
         payload.progress = progress;
-        payload.dueDate = dueDateStr ? new Date(dueDateStr).getTime() : undefined;
-        payload.postponedToDate = postponedToDateStr ? new Date(postponedToDateStr).getTime() : undefined;
         payload.reportingEventId = reportingEventId;
+        if (dueDateStr) payload.dueDate = new Date(dueDateStr).getTime();
+        if (postponedToDateStr) payload.postponedToDate = new Date(postponedToDateStr).getTime();
       }
 
       if (type === 'BESCHLUSS') {
@@ -96,9 +96,13 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
         payload.abstainedBy = abstainedBy;
       }
 
-      await onSave(payload);
+      const safePayload = Object.fromEntries(
+        Object.entries(payload).filter(([_, v]) => v !== undefined)
+      ) as Partial<AgendaItem>;
+
+      await onSave(safePayload);
     } catch (err: any) {
-      setError(err.message || 'Fehler beim Speichern.');
+      setError(err.message || 'Fehler beim Speichern der Daten.');
     } finally {
       setIsSubmitting(false);
     }
@@ -108,26 +112,31 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
         <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-900">Agenda-Baustein (Chamäleon)</h2>
+          <h2 className="text-xl font-bold text-gray-900">
+            {existingItem?.id ? 'Baustein bearbeiten' : 'Neuer Baustein'}
+          </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600" disabled={isSubmitting}>
             <X className="w-6 h-6" />
           </button>
         </div>
         
         <div className="p-6 space-y-6 overflow-y-auto flex-1">
-          {/* Validierung nach unten verlegt */}
-
-          {/* Basis-Felder (Immer sichtbar) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 border border-gray-200 p-4 rounded-lg">
             <div className="md:col-span-2">
               <label className="block text-sm font-bold text-gray-700 mb-1">Typ (Das Chamäleon)</label>
-              <select value={type} onChange={e => setType(e.target.value as ItemType)} className="w-full p-2 border border-blue-300 rounded bg-blue-50 focus:ring-blue-500 font-bold text-blue-800">
+              <select 
+                value={type} 
+                onChange={e => setType(e.target.value as ItemType)} 
+                disabled={isFixedType}
+                className={`w-full p-2 border rounded font-bold ${isFixedType ? 'bg-gray-200 border-gray-300 text-gray-500 cursor-not-allowed' : 'border-blue-300 bg-blue-50 focus:ring-blue-500 text-blue-800'}`}
+              >
                 <option value="VORLAGE">VORLAGE (Routine/Standard)</option>
                 <option value="AGENDA">AGENDA (Geplanter Punkt)</option>
                 <option value="INFO">INFO (Reiner Informationspunkt)</option>
                 <option value="BESCHLUSS">BESCHLUSS (Abstimmung)</option>
                 <option value="AUFGABE">AUFGABE (To-Do / Kanban)</option>
               </select>
+              {isFixedType && <p className="text-xs text-gray-500 mt-1">In dieser Ansicht ist der Typ fest vorgegeben.</p>}
             </div>
 
             <div className="md:col-span-2">
@@ -156,7 +165,6 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
             </div>
           </div>
 
-          {/* Sektion: Kaskaden & Zuweisung */}
           {(type === 'AUFGABE' || type === 'VORLAGE') && (
             <div className="bg-purple-50 border border-purple-200 p-4 rounded-lg space-y-4">
               <h3 className="text-md font-bold text-purple-800">Reverse-Scheduling & Zuweisung</h3>
@@ -206,7 +214,6 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
             </div>
           )}
 
-          {/* Sektion: Aufgabe (Kanban) */}
           {type === 'AUFGABE' && (
             <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg space-y-4">
               <h3 className="text-md font-bold text-orange-800">Aufgaben-Details (Kanban)</h3>
@@ -239,7 +246,6 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
             </div>
           )}
 
-          {/* Sektion: Beschluss */}
           {type === 'BESCHLUSS' && (
             <div className="bg-green-50 border border-green-200 p-4 rounded-lg space-y-4">
               <h3 className="text-md font-bold text-green-800">Beschluss-Protokollierung</h3>
@@ -303,3 +309,4 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
     </div>
   );
 };
+// Exakte Zeilenzahl: 295

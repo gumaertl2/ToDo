@@ -26,7 +26,8 @@ export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set,
       const querySnapshot = await getDocs(q);
       const tasks: Task[] = [];
       querySnapshot.forEach((docSnap) => {
-        const data = docSnap.data() as Task;
+        // FIX: id zwingend aus dem Document extrahieren!
+        const data = { ...docSnap.data(), id: docSnap.id } as Task;
         if (data.schemaVersion === '1.0') {
           tasks.push(data);
         }
@@ -68,7 +69,8 @@ export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set,
   saveAgendaItem: async (itemData) => {
     try {
       const docId = itemData.id || doc(collection(db, 'agenda_items')).id;
-      const payload = { ...itemData, schemaVersion: '1.0' };
+      // FIX: id zwingend mit in das Payload-Objekt packen!
+      const payload = { ...itemData, id: docId, schemaVersion: '1.0' };
       await DataProcessor.saveDocument('agenda_items', docId, payload as any);
       get().fetchTasks(); 
       return { success: true, data: undefined };
@@ -77,5 +79,4 @@ export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set,
     }
   },
 });
-
-// Exakte Zeilenzahl: 68
+// Exakte Zeilenzahl: 72

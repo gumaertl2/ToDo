@@ -1,11 +1,18 @@
 // src/features/Layout/AppLayout.tsx
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
 import { Users, Calendar, ClipboardList, CheckSquare, LogOut, LayoutDashboard } from 'lucide-react';
 import { useClubStore } from '../../store/useClubStore';
 
 export const AppLayout: React.FC = () => {
-  const { logout, user } = useClubStore();
+  const { logout, user, fetchUsersAndHelpers, fetchGroups } = useClubStore();
+
+  // FIX: Lade die Vorstände und Gruppen einmal global beim App-Start, 
+  // damit alle Formulare ihre Dropdowns füllen können.
+  useEffect(() => {
+    fetchUsersAndHelpers();
+    fetchGroups();
+  }, [fetchUsersAndHelpers, fetchGroups]);
 
   const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -79,5 +86,3 @@ export const AppLayout: React.FC = () => {
     </div>
   );
 };
-
-// Exakte Zeilenzahl: 82

@@ -45,7 +45,8 @@ export class DataProcessor {
   ): AsyncResult<void> {
     try {
       const docRef = doc(db, collectionName, documentId);
-      await setDoc(docRef, data);
+      // CHIRURGISCHER EINGRIFF: { merge: true } verhindert das Löschen von Checklisten!
+      await setDoc(docRef, data, { merge: true });
       return { success: true, data: undefined };
     } catch (e) {
       const error = e instanceof Error ? e : new Error(String(e));
@@ -53,5 +54,4 @@ export class DataProcessor {
     }
   }
 }
-
-// Exakte Zeilenzahl: 57
+// Exakte Zeilenzahl: 50

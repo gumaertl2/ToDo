@@ -2,10 +2,15 @@
 import React, { useEffect, useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import { KanbanBoard } from './KanbanBoard';
+import { ItemFormModal } from '../Shared/ItemFormModal';
+import type { Task } from '../../core/types/models';
 
 export const TasksView: React.FC = () => {
-  const { tasks, fetchTasks, isTasksLoading, user } = useClubStore();
+  const { tasks, fetchTasks, isTasksLoading, user, saveAgendaItem } = useClubStore();
   const [filter, setFilter] = useState<'all' | 'my'>('my');
+  
+  const [isItemModalOpen, setIsItemModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<Task | null>(null);
 
   useEffect(() => {
     fetchTasks();
@@ -13,10 +18,17 @@ export const TasksView: React.FC = () => {
 
   const displayedTasks = tasks.filter((task) => {
     if (filter === 'my' && user) {
-      return task.assigneeUserIds && task.assigneeUserIds.includes(user.id);
+      const isUserDirectlyAssigned = task.assigneeUserIds && task.assigneeUserIds.includes(user.id);
+      const isUserGroupAssigned = task.assigneeGroupIds && user.groupIds && task.assigneeGroupIds.some(groupId => user.groupIds.includes(groupId));
+      return isUserDirectlyAssigned || isUserGroupAssigned;
     }
     return true;
   });
+
+  const handleEditTask = (task: Task) => {
+    setEditingItem(task);
+    setIsItemModalOpen(true);
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -49,11 +61,28 @@ export const TasksView: React.FC = () => {
         </div>
       ) : (
         <div className="flex-1 overflow-hidden">
-          <KanbanBoard tasks={displayedTasks} />
+          <KanbanBoard tasks={displayedTasks} onEditTask={handleEditTask} />
         </div>
+      )}
+
+      {editingItem && (
+        <ItemFormModal
+          key={editingItem.id}
+          isOpen={isItemModalOpen}
+          existingItem={editingItem}
+          isFixedType={true}
+          onClose={() => setIsItemModalOpen(false)}
+          onSave={async (data) => {
+            const result = await saveAgendaItem(data);
+            if (!result || (result && !result.success)) {
+              throw new Error(result?.error?.message || "Fehler beim Speichern in Firebase.");
+            }
+            await fetchTasks();
+            setIsItemModalOpen(false);
+          }}
+        />
       )}
     </div>
   );
 };
-
-// Exakte Zeilenzahl: 59
+// Exakte Zeilenzahl: 86

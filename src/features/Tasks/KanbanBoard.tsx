@@ -17,9 +17,10 @@ interface KanbanColumnProps {
   id: TaskStatus;
   title: string;
   tasks: Task[];
+  onEditTask?: (task: Task) => void;
 }
 
-const KanbanColumn: React.FC<KanbanColumnProps> = ({ id, title, tasks }) => {
+const KanbanColumn: React.FC<KanbanColumnProps> = ({ id, title, tasks, onEditTask }) => {
   const { setNodeRef, isOver } = useDroppable({
     id: id,
   });
@@ -39,7 +40,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({ id, title, tasks }) => {
         }`}
       >
         {tasks.map((task) => (
-          <TaskCard key={task.id} task={task} />
+          <TaskCard key={task.id} task={task} onEditTask={onEditTask} />
         ))}
       </div>
     </div>
@@ -48,9 +49,10 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({ id, title, tasks }) => {
 
 interface KanbanBoardProps {
   tasks: Task[];
+  onEditTask?: (task: Task) => void;
 }
 
-export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks }) => {
+export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onEditTask }) => {
   const { updateTask } = useClubStore();
 
   const mouseSensor = useSensor(MouseSensor, {
@@ -97,11 +99,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks }) => {
             id={col.id}
             title={col.title}
             tasks={tasks.filter((t) => t.status === col.id)}
+            onEditTask={onEditTask}
           />
         ))}
       </div>
     </DndContext>
   );
 };
-
-// Exakte Zeilenzahl: 107
+// Exakte Zeilenzahl: 110
