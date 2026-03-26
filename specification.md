@@ -8,7 +8,7 @@ Ziel ist es, wiederkehrende Aufgaben, Event-Planungen und Vorstandssitzungen zu 
 ## 2. Zielplattformen & Technologie-Stack
 Die Anwendung wird als **Progressive Web App (PWA)** konzipiert. Sie funktioniert plattformübergreifend auf Windows-PCs, Macs, iPhones, Android-Smartphones und Tablets.
 
-* **Architektur:** Serverless, Offline-First.
+* **Architektur:** Serverless, Offline-First, Optimistic UI (verzögerungsfreie Benutzeroberfläche).
 * **Backend & Datenbank:** Google Firebase (Firestore für NoSQL-Datenstruktur und Offline-Caching) im kostenlosen Spark-Tarif.
 * **Server-Standort:** Frankfurt (`europe-west3`) zur Unterstützung europäischer Datenschutzanforderungen.
 * **Authentifizierung:** Multi-Provider-Auth (E-Mail/Passwort, Google OAuth, Sign in with Apple).
@@ -24,11 +24,11 @@ Die Anwendung wird als **Progressive Web App (PWA)** konzipiert. Sie funktionier
 
 ### A. Der fließende Workflow (Sitzungen & Protokolle)
 Die Anwendung nutzt keine starren Tabellen für Protokolle und Aufgaben, sondern ein fließendes "Chamäleon"-Konzept.
-* **Event vs. Sitzung & Serien:** Ein "Event" in der Datenbank entspricht exakt einer konkreten Sitzung an einem bestimmten Datum. Wiederkehrende Projekte (z. B. "Sommerfest Orga") werden über eine gemeinsame Serien-ID gebündelt. Jede Sitzung behält so ihr eigenes, historisch sauberes Protokoll.
+* **Event vs. Sitzung & Serien:** Ein "Event" in der Datenbank entspricht exakt einer konkreten Sitzung an einem bestimmten Datum. Wiederkehrende Projekte (z. B. "Vorstandssitzung") werden über eine gemeinsame, unveränderliche `seriesId` gebündelt. Jede Sitzung behält so ihr eigenes, historisch sauberes Protokoll.
 * **Entwurfs-Modus (Publishing):** Eine neue Agenda startet im Entwurfs-Modus (Versteckt) und ist nur für den Ersteller sichtbar. Erst durch Klick auf "Veröffentlichen" sehen alle Teilnehmer die Agenda auf ihrem Dashboard und können vorab Kommentare eintragen.
 * **Der Chamäleon-Baustein:** Alles ist ein `AgendaItem`. Während der Sitzung ändert der Baustein fließend seinen Typ (`INFO`, `BESCHLUSS`, `AUFGABE`).
-* **Die Endlos-Kette (Sitzungs-Abschluss):** Beim Schließen eines Protokolls greift ein Zwangsworkflow: Der Nutzer muss zwingend den Termin für die nächste Sitzung der Serie festlegen (oder die Serie beenden). Das System generiert daraufhin die nächste Sitzung und vererbt alle nicht zu 100 % erledigten Bausteine dorthin (Pendenzen-Automatismus).
-* **Historie & Protokoll-Suche:** Durch das fließende Datenmodell und die Serien-Bündelung lassen sich vergangene Entscheidungen jederzeit trivial filtern (z.B. "Zeige alle fertigen Protokolle der Serie Sommerfest" oder "Zeige alle Beschlüsse aus 2023").
+* **Die Endlos-Kette (Sitzungs-Abschluss & Rollover):** Beim Schließen eines Protokolls greift ein Zwangsworkflow: Der Nutzer legt den Termin für die nächste Sitzung der Serie fest. Das System generiert die neue Sitzung, versiegelt das alte Protokoll revisionssicher (`isReadOnly`) und klont alle offenen Aufgaben sowie Routinen in das neue Event. Die Historie des alten Protokolls bleibt dabei unangetastet zu 100 % erhalten.
+* **Historie & Protokoll-Suche (Archiv-Navigator):** Ein intelligenter Navigator im aktuellen Protokoll filtert blitzschnell nach der `seriesId` und zeigt die komplette historische Kette exakt dieser Sitzungsreihe, völlig unabhängig von eventuellen Titel-Änderungen.
 
 ### B. Aufgabenverwaltung & Delegation (Task Management)
 * **Die Aufgabe als Zustand:** Eine "Aufgabe" ist schlichtweg ein AgendaItem vom Typ `AUFGABE`. 
@@ -62,8 +62,9 @@ Das Login-System ist strikt zweigeteilt, um maximale Datensicherheit zu gewährl
 2. **Firestore ("Die Vereins-Akte"):** Speichert die Profile, Rollen und Rechte (`User`-Dokument).
 **Der Matching-Prozess:** Das System verknüpft diese beiden Welten ausschließlich über die identische E-Mail-Adresse. Wird im Firestore ein neuer User (Vorstand/Bereichsleiter) angelegt, muss sich dieser initial über die In-App-Funktion "Registrieren" authentifizieren, um in Firebase Auth aufgenommen und automatisch mit seiner Akte verknüpft zu werden.
 
-### Offline & Caching
-* **Firestore-Cache:** Firestore verwendet im Web standardmäßig einen Memory-Cache. Ein persistenter lokaler IndexedDB-Cache wird nur nach expliziter Bestätigung im UI aktiviert.
+### Offline & Caching (Optimistic UI)
+* **Firestore-Cache:** Firestore verwendet im Web standardmäßig einen Memory-Cache für Offline-Funktionalität.
+* **Optimistic UI:** Um in schwachen Netzwerken Lags zu vermeiden, reagiert die UI beim Anlegen, Ändern und Löschen sofort (Optimistic UI). Die Synchronisation mit Firestore erfolgt lautlos im Hintergrund.
 
 ## 5. Datenmodell (Flache NoSQL-Struktur)
 Zur Minimierung unnötiger Lesezugriffe wird eine flache Struktur verwendet. Jedes persistierte Dokument enthält verpflichtend ein Feld `schemaVersion`.
@@ -71,7 +72,7 @@ Zur Minimierung unnötiger Lesezugriffe wird eine flache Struktur verwendet. Jed
 * **`users`:** ID, Name, Amt, Systemrolle (`ADMIN`, `VORSTAND`, `BEREICHSLEITER`), Kontaktdaten. **Zuordnung zu Gruppen:** Jeder User muss zu mindestens einer Gruppe gehören; Mehrfachzugehörigkeit zu mehreren Gruppen gleichzeitig ist zulässig (Array `groupIds: string[]`, Mindestelemente: 1).
 * **`helpers`:** ID, Name, Bezug, `consentConfirmed`, optionale Kontaktdaten, `lastActivityAt`, `retentionExpiresAt`.
 * **`events` (Die Sitzung / Der Container):** Titel, Ort, Typ (Einmalig/Wiederkehrend), Status (`PLANUNG`, `AKTIV`, `ABGESCHLOSSEN`). 
-  * *Workflow-Status:* `isPublished: boolean` (Entwurfs-Modus), `seriesId?: string` (Bündelung von Sitzungen zur Projekt-Serie).
+  * *Workflow-Status:* `isPublished: boolean` (Entwurfs-Modus), `seriesId?: string` (Die feste historische Klammer für alle Sitzungen dieser Reihe).
   * *Teilnehmer:* `participantUserIds: string[]` (einzelne User) und `participantGroupIds: string[]` (ganze Gruppen).
   * *Zeiten:* Geplanter Beginn (`plannedStartTime`), Geplantes Ende (`plannedEndTime`), Tatsächliches Ende (`actualEndTime`).
   * *Wiederkehrend:* `recurrencePattern` (täglich/wöchentlich/monatlich/quartalsweise/jährlich), `startDate`, `endDate`, `occurrenceCount` (entweder `endDate` oder `occurrenceCount`, nicht beide).

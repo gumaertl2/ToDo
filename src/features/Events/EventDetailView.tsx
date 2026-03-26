@@ -39,7 +39,12 @@ export const EventDetailView: React.FC = () => {
 
   const isReadOnly = currentEvent.status === 'ABGESCHLOSSEN';
 
-  const pastEvents = events.filter(e => e.status === 'ABGESCHLOSSEN').sort((a,b) => (b.plannedStartTime || 0) - (a.plannedStartTime || 0));
+  // CHIRURGISCHER EINGRIFF: Die Archiv-Suche ist jetzt auf die seriesId gelockt!
+  const targetSeriesId = currentEvent.seriesId || currentEvent.id;
+  const pastEvents = events
+    .filter(e => e.status === 'ABGESCHLOSSEN' && (e.seriesId || e.id) === targetSeriesId)
+    .sort((a,b) => (b.plannedStartTime || 0) - (a.plannedStartTime || 0));
+
   const pastOpenTasks = tasks.filter(t => t.type === 'AUFGABE' && t.eventId && t.eventId !== eventId && t.status !== 'ERLEDIGT');
   const pastCompletedTasks = tasks.filter(t => t.type === 'AUFGABE' && t.eventId && t.eventId !== eventId && t.status === 'ERLEDIGT');
 
@@ -84,7 +89,7 @@ export const EventDetailView: React.FC = () => {
 
   let currentRunningTime = currentEvent.plannedStartTime || new Date().setHours(19, 0, 0, 0);
 
-  // CHIRURGISCHER EINGRIFF: Wir erzeugen einen perfekten Klon ohne ID und ohne altes Datum
+  // CHIRURGISCHER EINGRIFF: Die seriesId wird an das Folge-Meeting vererbt
   const rolloverTemplateEvent: Partial<Event> | undefined = isEventModalOpen && currentEvent.status === 'AKTIV' ? {
     title: currentEvent.title,
     description: currentEvent.description,
@@ -92,6 +97,7 @@ export const EventDetailView: React.FC = () => {
     participantGroupIds: currentEvent.participantGroupIds,
     participantUserIds: currentEvent.participantUserIds,
     status: 'PLANUNG',
+    seriesId: targetSeriesId,
   } : undefined;
 
   return (
@@ -109,13 +115,13 @@ export const EventDetailView: React.FC = () => {
               </h1>
               
               <div className="relative group ml-2">
-                <button className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors" title="Archiv & Historie">
+                <button className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors" title="Historie dieser Sitzungsreihe">
                   <Clock className="w-5 h-5" />
                 </button>
                 <div className="absolute left-0 top-full mt-1 w-64 bg-white border border-gray-200 shadow-xl rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
-                   <div className="p-2 bg-gray-50 border-b border-gray-200 font-bold text-xs text-gray-500 uppercase tracking-wider">Vergangene Protokolle</div>
+                   <div className="p-2 bg-gray-50 border-b border-gray-200 font-bold text-xs text-gray-500 uppercase tracking-wider">Sitzungsreihe</div>
                    <div className="max-h-60 overflow-y-auto">
-                     {pastEvents.length === 0 && <div className="p-4 text-xs text-gray-400 text-center">Noch keine Historie.</div>}
+                     {pastEvents.length === 0 && <div className="p-4 text-xs text-gray-400 text-center">Keine früheren Sitzungen dieser Reihe.</div>}
                      {pastEvents.map(e => (
                         <button key={e.id} onClick={() => navigate(`/events/${e.id}`)} className={`w-full text-left px-4 py-2 text-sm hover:bg-blue-50 border-b border-gray-100 last:border-0 ${e.id === eventId ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-700'}`}>
                           {e.title} <br/><span className="text-xs text-gray-500">{new Date(e.plannedStartTime||0).toLocaleDateString()}</span>
@@ -268,39 +274,49 @@ export const EventDetailView: React.FC = () => {
 
       <ItemFormModal key={editingItem ? editingItem.id : 'new'} isOpen={isModalOpen} existingItem={editingItem || { eventId: eventId, type: 'AGENDA' }} onClose={() => setIsModalOpen(false)} onSave={async (data) => { await saveAgendaItem({ ...data, eventId, ...( !editingItem ? { createdAt: Date.now() } : {}) }); if (eventId) fetchEventAgenda(eventId); setIsModalOpen(false); }} />
 
-      {/* CHIRURGISCHER EINGRIFF: Wir übergeben das generierte rolloverTemplateEvent */}
-      <EventFormModal 
-        isOpen={isEventModalOpen} 
-        existingEvent={rolloverTemplateEvent as Event}
-        onClose={() => setIsEventModalOpen(false)} 
-        onSave={async (data) => {
-          const result = await addEvent(data);
-          if (!result?.success) throw new Error(result?.error?.message);
-          
-          if (currentEvent.status === 'AKTIV') {
-            await updateEvent({ ...currentEvent, status: 'ABGESCHLOSSEN', actualEndTime: Date.now() });
+      {isEventModalOpen && (
+        <EventFormModal 
+          isOpen={true} 
+          existingEvent={rolloverTemplateEvent as Event}
+          onClose={() => setIsEventModalOpen(false)} 
+          onSave={async (data) => {
+            const result = await addEvent(data);
+            if (!result?.success) throw new Error(result?.error?.message);
             
-            const promises = eventAgenda.map(item => {
-              if (item.type === 'AUFGABE' && item.status !== 'ERLEDIGT') {
-                return saveAgendaItem({ ...item, eventId: data.id, isDueNextMeeting: false, dueDate: item.isDueNextMeeting ? data.plannedStartTime : item.dueDate });
-              } else if (item.isRoutine) {
-                const { id, ...rest } = item;
-                return saveAgendaItem({ ...rest, eventId: data.id, status: 'OFFEN', progress: 0, createdAt: Date.now(), isDueNextMeeting: false, dueDate: item.isDueNextMeeting ? data.plannedStartTime : item.dueDate });
-              }
-              return Promise.resolve();
-            });
-            await Promise.all(promises);
-          } else {
-             const itemsToUpdate = eventAgenda.filter(i => i.isDueNextMeeting);
-             if (itemsToUpdate.length > 0 && data.plannedStartTime) {
-               await Promise.all(itemsToUpdate.map(item => saveAgendaItem({ ...item, isDueNextMeeting: false, dueDate: data.plannedStartTime })));
-             }
-          }
-          
-          setIsEventModalOpen(false);
-          if (window.confirm('Protokoll geschlossen und neues Event generiert! Zur neuen Agenda wechseln?')) navigate(`/events/${data.id}`); else if (eventId) fetchEventAgenda(eventId);
-        }} 
-      />
+            if (currentEvent.status === 'AKTIV') {
+              await updateEvent({ ...currentEvent, status: 'ABGESCHLOSSEN', actualEndTime: Date.now() });
+              
+              const promises = eventAgenda.map(item => {
+                const isUnfinishedTask = item.type === 'AUFGABE' && item.status !== 'ERLEDIGT';
+                
+                if (isUnfinishedTask || item.isRoutine) {
+                  const { id, ...rest } = item; 
+                  
+                  return saveAgendaItem({ 
+                    ...rest, 
+                    eventId: data.id, 
+                    status: item.isRoutine ? 'OFFEN' : item.status, 
+                    progress: item.isRoutine ? 0 : item.progress, 
+                    createdAt: Date.now(), 
+                    isDueNextMeeting: false, 
+                    dueDate: item.isDueNextMeeting ? data.plannedStartTime : item.dueDate 
+                  });
+                }
+                return Promise.resolve();
+              });
+              await Promise.all(promises);
+            } else {
+               const itemsToUpdate = eventAgenda.filter(i => i.isDueNextMeeting);
+               if (itemsToUpdate.length > 0 && data.plannedStartTime) {
+                 await Promise.all(itemsToUpdate.map(item => saveAgendaItem({ ...item, isDueNextMeeting: false, dueDate: data.plannedStartTime })));
+               }
+            }
+            
+            setIsEventModalOpen(false);
+            if (window.confirm('Protokoll geschlossen und neues Event generiert! Zur neuen Agenda wechseln?')) navigate(`/events/${data.id}`); else if (eventId) fetchEventAgenda(eventId);
+          }} 
+        />
+      )}
         
       {isAttendanceModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
@@ -331,4 +347,4 @@ export const EventDetailView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 301
+// Exakte Zeilenzahl: 323

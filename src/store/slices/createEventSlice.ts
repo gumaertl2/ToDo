@@ -77,7 +77,6 @@ export const createEventSlice: StateCreator<EventSlice, [], [], EventSlice> = (s
         createdAt: Date.now()
       };
 
-      // CHIRURGISCHER EINGRIFF: Optimistic UI - Sofort auf dem Bildschirm anzeigen!
       set((state) => ({ eventAgenda: [...state.eventAgenda, newItem] }));
 
       await DataProcessor.saveDocument('agenda_items', newId, newItem);
@@ -95,7 +94,6 @@ export const createEventSlice: StateCreator<EventSlice, [], [], EventSlice> = (s
     const [movedItem] = agenda.splice(oldIndex, 1);
     agenda.splice(newIndex, 0, movedItem);
 
-    // CHIRURGISCHER EINGRIFF: Optimistic UI - Sofort die neue Reihenfolge anzeigen!
     set({ eventAgenda: agenda });
 
     const baseTime = Date.now();
@@ -109,8 +107,11 @@ export const createEventSlice: StateCreator<EventSlice, [], [], EventSlice> = (s
   },
 
   addEvent: async (event) => {
-    const result = await DataProcessor.saveDocument<Event>('events', event.id, event);
-    if (result.success) set((state) => ({ events: [...state.events, event] }));
+    // CHIRURGISCHER EINGRIFF: Wir erzeugen die Geburtsstunde der Sitzungsreihe (seriesId)
+    const finalEvent = { ...event, seriesId: event.seriesId || event.id };
+    
+    const result = await DataProcessor.saveDocument<Event>('events', finalEvent.id, finalEvent);
+    if (result.success) set((state) => ({ events: [...state.events, finalEvent] }));
     return result;
   },
   
@@ -135,4 +136,4 @@ export const createEventSlice: StateCreator<EventSlice, [], [], EventSlice> = (s
     }
   }
 });
-// Exakte Zeilenzahl: 119
+// Exakte Zeilenzahl: 122
