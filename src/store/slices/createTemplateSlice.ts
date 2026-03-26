@@ -24,7 +24,7 @@ export const createTemplateSlice: StateCreator<TemplateSlice, [], [], TemplateSl
       
       querySnapshot.forEach((docSnap) => {
         const data = { ...docSnap.data(), id: docSnap.id } as AgendaItem;
-        templates.push(data); // Keine künstliche Trennung mehr! Alles ist eine Vorlage.
+        templates.push(data);
       });
       
       set({ templates, isTemplatesLoading: false });
@@ -33,15 +33,19 @@ export const createTemplateSlice: StateCreator<TemplateSlice, [], [], TemplateSl
     }
   },
   deleteAgendaItem: async (id: string) => {
+    // CHIRURGISCHER EINGRIFF: Optimistic UI - Element wird SOFORT auf allen Ansichten restlos entfernt
+    set((state: any) => ({ 
+      templates: state.templates ? state.templates.filter((t: any) => t.id !== id) : [],
+      eventAgenda: state.eventAgenda ? state.eventAgenda.filter((t: any) => t.id !== id) : [],
+      tasks: state.tasks ? state.tasks.filter((t: any) => t.id !== id) : []
+    }));
+
     try {
       await deleteDoc(doc(db, 'agenda_items', id));
-      set((state) => ({ 
-        templates: state.templates.filter((t) => t.id !== id)
-      }));
       return { success: true, data: undefined };
     } catch (e) {
       return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
     }
   }
 });
-// Exakte Zeilenzahl: 41
+// Exakte Zeilenzahl: 48

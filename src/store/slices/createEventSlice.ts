@@ -77,36 +77,34 @@ export const createEventSlice: StateCreator<EventSlice, [], [], EventSlice> = (s
         createdAt: Date.now()
       };
 
+      // CHIRURGISCHER EINGRIFF: Optimistic UI - Sofort auf dem Bildschirm anzeigen!
+      set((state) => ({ eventAgenda: [...state.eventAgenda, newItem] }));
+
       await DataProcessor.saveDocument('agenda_items', newId, newItem);
-      await get().fetchEventAgenda(eventId);
       return { success: true, data: undefined };
     } catch (error: any) {
       return { success: false, error: new Error(error.message) };
     }
   },
 
-  // CHIRURGISCHER EINGRIFF: Zielgenaues Verschieben über Index-Nummer
   moveAgendaItem: async (itemId, newIndex) => {
     const agenda = [...get().eventAgenda];
     const oldIndex = agenda.findIndex(i => i.id === itemId);
     if (oldIndex < 0 || oldIndex === newIndex) return { success: true, data: undefined };
 
-    // Element im Array an die neue Position setzen
     const [movedItem] = agenda.splice(oldIndex, 1);
     agenda.splice(newIndex, 0, movedItem);
 
-    // Alle Zeitstempel neu schreiben, um die exakte Reihenfolge in der Datenbank zu erzwingen
+    // CHIRURGISCHER EINGRIFF: Optimistic UI - Sofort die neue Reihenfolge anzeigen!
+    set({ eventAgenda: agenda });
+
     const baseTime = Date.now();
     const updatePromises = agenda.map((item, index) => {
-      item.createdAt = baseTime + (index * 1000); // 1 Sekunde Abstand erzwingt Reihenfolge
+      item.createdAt = baseTime + (index * 1000); 
       return DataProcessor.saveDocument('agenda_items', item.id, item);
     });
 
     await Promise.all(updatePromises);
-    
-    if (movedItem.eventId) {
-      await get().fetchEventAgenda(movedItem.eventId);
-    }
     return { success: true, data: undefined };
   },
 

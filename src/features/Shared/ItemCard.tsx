@@ -11,6 +11,24 @@ interface ItemCardProps {
   className?: string;
 }
 
+// CHIRURGISCHER EINGRIFF: Die smarte Ampel-Logik
+const getDueDateColor = (item: AgendaItem) => {
+  if (item.type !== 'AUFGABE') return 'text-gray-600';
+  if (item.status === 'ERLEDIGT' || item.progress === 100) return 'text-green-600 font-bold';
+  if (item.isDueNextMeeting) return 'text-purple-600 font-bold';
+  if (!item.dueDate) return 'text-gray-500';
+
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const due = new Date(item.dueDate);
+  due.setHours(0, 0, 0, 0);
+  const diffDays = Math.ceil((due.getTime() - now.getTime()) / (1000 * 3600 * 24));
+
+  if (diffDays < 0) return 'text-red-600 font-bold';
+  if (diffDays <= 14) return 'text-orange-500 font-bold';
+  return 'text-gray-600 font-medium';
+};
+
 export const ItemCard: React.FC<ItemCardProps> = ({ item, onEdit, onDelete, className = '' }) => {
   const { users, groups } = useClubStore();
 
@@ -33,9 +51,7 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onEdit, onDelete, clas
   };
 
   const dueDateStr = formatSafeDate(item.dueDate);
-  const postponedStr = formatSafeDate(item.postponedToDate);
-  const activeDate = item.postponedToDate || item.dueDate;
-  const isOverdue = activeDate ? new Date(activeDate) < new Date() : false;
+  const dateColor = getDueDateColor(item);
 
   return (
     <div 
@@ -44,7 +60,7 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onEdit, onDelete, clas
     >
       <div className="flex justify-between items-start mb-2">
         <h4 className="font-semibold text-gray-800 flex items-center gap-2">
-          {isTask ? <CheckSquare className="w-4 h-4 text-green-600" /> : <FileText className="w-4 h-4 text-blue-600" />}
+          {isTask ? <CheckSquare className={`w-4 h-4 ${progressValue === 100 ? 'text-green-600' : 'text-blue-600'}`} /> : <FileText className="w-4 h-4 text-blue-600" />}
           {item.title}
           {item.mustBeDoneBeforeEvent && (
             <span className="flex items-center text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium shrink-0">
@@ -66,31 +82,26 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onEdit, onDelete, clas
         <span className="truncate max-w-[200px]">{getAssigneesText()}</span>
       </div>
 
-      <div className="flex items-center justify-between text-xs text-gray-500 mt-auto">
+      <div className="flex items-center justify-between text-xs mt-auto">
         {isTask ? (
           <>
-            <div className={`flex items-center ${isOverdue ? 'text-red-500 font-bold' : ''}`}>
+            {/* CHIRURGISCHER EINGRIFF: Aufgeräumte Datumsanzeige mit Ampel */}
+            <div className={`flex items-center ${dateColor}`}>
               <Calendar className="w-3 h-3 mr-1" />
-              
-              {/* CHIRURGISCHER EINGRIFF: Zeigt "Nächste Sitzung" intelligent an */}
-              {item.isDueNextMeeting && !item.dueDate && <span className="text-orange-600 font-bold">Nächste Sitzung</span>}
-              {!item.isDueNextMeeting && !item.dueDate && !postponedStr && <span>Kein Datum</span>}
-              
-              {postponedStr ? (
-                <div className="flex items-center">
-                  {dueDateStr && <span className="line-through text-gray-400 mr-2">{dueDateStr}</span>}
-                  <span className="text-orange-600 font-bold">{postponedStr}</span>
-                </div>
+              {item.isDueNextMeeting ? (
+                <span>Nächste Sitzung</span>
+              ) : item.dueDate ? (
+                <span>{dueDateStr}</span>
               ) : (
-                dueDateStr && <span>{dueDateStr} {item.isDueNextMeeting && '(Nächste)'}</span>
+                <span>Kein Datum</span>
               )}
             </div>
-            <div className="flex items-center text-blue-600 font-medium ml-2 shrink-0">
+            <div className={`flex items-center font-medium ml-2 shrink-0 ${progressValue === 100 ? 'text-green-600' : 'text-blue-600'}`}>
               <CheckSquare className="w-3 h-3 mr-1" />{progressValue}%
             </div>
           </>
         ) : (
-          <div className="flex items-center">
+          <div className="flex items-center text-gray-500">
             <Clock className="w-3 h-3 mr-1" />Dauer: {item.durationEstimate || 0} Min.
           </div>
         )}
@@ -98,10 +109,10 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onEdit, onDelete, clas
       
       {isTask && (
         <div className="w-full bg-gray-100 rounded-full h-1.5 mt-2 overflow-hidden shrink-0">
-          <div className="bg-blue-500 h-1.5 rounded-full transition-all duration-300" style={{ width: `${progressValue}%` }}></div>
+          <div className={`h-1.5 rounded-full transition-all duration-300 ${progressValue === 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${progressValue}%` }}></div>
         </div>
       )}
     </div>
   );
 };
-// Exakte Zeilenzahl: 99
+// Exakte Zeilenzahl: 95

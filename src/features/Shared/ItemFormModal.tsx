@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import type { AgendaItem, ItemType, ItemStatus } from '../../core/types/models';
-import { X, Save, ChevronDown, ChevronRight } from 'lucide-react';
+import { X, Save, ChevronDown, ChevronRight, Copy } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -13,7 +13,7 @@ interface Props {
 }
 
 export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existingItem, isFixedType }) => {
-  const { users, groups, events } = useClubStore();
+  const { users, groups, events, saveAgendaItem } = useClubStore();
   
   const parentEvent = existingItem?.eventId ? events.find(e => e.id === existingItem.eventId) : null;
   const isProtocolMode = parentEvent?.status === 'AKTIV' || parentEvent?.status === 'ABGESCHLOSSEN';
@@ -51,17 +51,38 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // UX-Akkordeon States für weniger Scrollen
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showRoutine, setShowRoutine] = useState(existingItem?.isRoutine || false);
 
-  const todayStr = new Date().toISOString().substring(0, 10); // Für Datums-Sperre
+  const todayStr = new Date().toISOString().substring(0, 10);
 
   if (!isOpen) return null;
 
   const toggleArray = (arr: string[], setArr: (val: string[]) => void, id: string) => {
     if (arr.includes(id)) setArr(arr.filter(x => x !== id));
     else setArr([...arr, id]);
+  };
+
+  const handleSaveAsTemplate = async () => {
+    if (!title.trim()) { setError('Bitte gib einen Titel ein.'); return; }
+    try {
+      setIsSubmitting(true);
+      const payload: Partial<AgendaItem> = {
+        type: 'VORLAGE', title: title.trim(), description: description.trim(),
+        requestedBy: requestedBy.trim(), durationEstimate,
+        assigneeUserIds, assigneeGroupIds,
+        mustBeDoneBeforeEvent, leadTimeValue, leadTimeUnit,
+        isRoutine, routinePattern, routineEndDate: routineEndDateStr ? new Date(routineEndDateStr).getTime() : undefined,
+        createdAt: Date.now()
+      };
+      const safePayload = Object.fromEntries(Object.entries(payload).filter(([_, v]) => v !== undefined)) as Partial<AgendaItem>;
+      await saveAgendaItem(safePayload);
+      alert('Erfolgreich als neue Vorlage gespeichert!');
+    } catch (err: any) {
+      setError(err.message || 'Fehler beim Speichern der Vorlage.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSave = async () => {
@@ -120,13 +141,12 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
         </div>
         
         <div className="p-4 space-y-4 overflow-y-auto flex-1">
-          {/* Kompakter Kopfbereich */}
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2">
               <label className="block text-xs font-bold text-gray-700 mb-1">Titel *</label>
               <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full p-2 text-sm border border-gray-300 rounded focus:ring-blue-500 font-medium" autoFocus required />
             </div>
-            <div>
+            <div className="flex flex-col">
               <label className="block text-xs font-bold text-gray-700 mb-1">Typ</label>
               <select value={type} onChange={e => setType(e.target.value as ItemType)} disabled={isFixedType} className="w-full p-2 text-sm border border-blue-300 bg-blue-50 rounded font-bold text-blue-800">
                 {(!isProtocolMode || (!isNewItem && type === 'VORLAGE')) && <option value="VORLAGE">VORLAGE</option>}
@@ -135,6 +155,12 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
                 <option value="BESCHLUSS">BESCHLUSS</option>
                 <option value="AUFGABE">AUFGABE</option>
               </select>
+              {/* CHIRURGISCHER EINGRIFF: Als Vorlage speichern */}
+              {type !== 'VORLAGE' && (
+                <button onClick={handleSaveAsTemplate} disabled={isSubmitting} className="mt-1 flex items-center justify-center text-[10px] text-blue-600 font-bold hover:bg-blue-50 p-1 rounded border border-transparent hover:border-blue-200 transition-colors">
+                  <Copy className="w-3 h-3 mr-1" /> Als Vorlage speichern
+                </button>
+              )}
             </div>
           </div>
 
@@ -143,7 +169,6 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
             <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full p-2 text-sm border border-gray-300 rounded" rows={2}></textarea>
           </div>
 
-          {/* Kompakte Badges für Verantwortliche */}
           <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100">
             <label className="block text-xs font-bold text-blue-800 mb-2">Verantwortliche (Klicken zum Zuweisen)</label>
             <div className="flex flex-wrap gap-1.5">
@@ -160,7 +185,19 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
             </div>
           </div>
 
-          {/* Kompaktes Grid für Aufgaben */}
+          {type === 'BESCHLUSS' && (
+            <div className="bg-green-50/50 p-3 rounded-lg border border-green-100 mt-2">
+              <label className="block text-xs font-bold text-green-800 mb-2">Zugestimmt (Beschluss-Protokollierung)</label>
+              <div className="flex flex-wrap gap-1.5">
+                {users.map(u => (
+                  <button key={u.id} onClick={() => toggleArray(approvedBy, setApprovedBy, u.id)} className={`px-2 py-1 text-xs font-medium rounded-full border ${approvedBy.includes(u.id) ? 'bg-green-500 text-white border-green-500' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}>
+                    {u.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {type === 'AUFGABE' && (
             <div className="grid grid-cols-2 gap-4 bg-orange-50/50 p-3 rounded-lg border border-orange-100">
               <div>
@@ -180,14 +217,12 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
               {!isDueNextMeeting && (
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">Fällig am</label>
-                  {/* CHIRURGISCHER EINGRIFF: Datums-Sperre mit min={todayStr} */}
                   <input type="date" min={todayStr} value={dueDateStr} onChange={e => setDueDateStr(e.target.value)} className="w-full p-1.5 text-sm border border-gray-300 rounded" />
                 </div>
               )}
             </div>
           )}
 
-          {/* Akkordeon: Reverse-Scheduling */}
           {(type === 'AUFGABE' || type === 'VORLAGE') && (
             <div className="border border-purple-100 rounded-lg overflow-hidden">
               <button onClick={() => setShowAdvanced(!showAdvanced)} className="w-full p-2 bg-purple-50 text-purple-800 text-xs font-bold flex justify-between items-center hover:bg-purple-100">
@@ -210,7 +245,22 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
                     <input type="checkbox" checked={mustBeDoneBeforeEvent} onChange={e => { setMustBeDoneBeforeEvent(e.target.checked); if (e.target.checked) setIsDueNextMeeting(false); }} className="w-4 h-4 mr-2" />
                     Muss VOR dem Event erledigt sein
                   </label>
-                  <label className="flex items-center text-sm font-bold text-purple-900">
+                  {mustBeDoneBeforeEvent && (
+                    <div className="flex gap-3 mt-2 pl-6">
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Vorlauf</label>
+                        <input type="number" value={leadTimeValue} onChange={e => setLeadTimeValue(Number(e.target.value))} className="w-full p-1.5 text-sm border border-gray-300 rounded" />
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Einheit</label>
+                        <select value={leadTimeUnit} onChange={e => setLeadTimeUnit(e.target.value as 'hours'|'days')} className="w-full p-1.5 text-sm border border-gray-300 rounded">
+                          <option value="days">Tage</option>
+                          <option value="hours">Stunden</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                  <label className="flex items-center text-sm font-bold text-purple-900 mt-2">
                     <input type="checkbox" checked={isDueNextMeeting} onChange={e => setIsDueNextMeeting(e.target.checked)} className="w-4 h-4 mr-2" />
                     Automatisch fällig zur NÄCHSTEN Sitzung
                   </label>
@@ -219,7 +269,6 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
             </div>
           )}
 
-          {/* Akkordeon: Routinen */}
           {type === 'AUFGABE' && (
             <div className="border border-indigo-100 rounded-lg overflow-hidden">
               <button onClick={() => setShowRoutine(!showRoutine)} className="w-full p-2 bg-indigo-50 text-indigo-800 text-xs font-bold flex justify-between items-center hover:bg-indigo-100">
@@ -241,7 +290,8 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
                         </select>
                       </div>
                       <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Endet am (Optional)</label>
+                        {/* CHIRURGISCHER EINGRIFF: Neues Label Ohne Ende */}
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Endet am (Leer = Ohne Ende)</label>
                         <input type="date" min={todayStr} value={routineEndDateStr} onChange={e => setRoutineEndDateStr(e.target.value)} className="w-full p-1.5 text-sm border border-gray-300 rounded" />
                       </div>
                     </div>
@@ -263,4 +313,4 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
     </div>
   );
 };
-// Exakte Zeilenzahl: 202
+// Exakte Zeilenzahl: 282
