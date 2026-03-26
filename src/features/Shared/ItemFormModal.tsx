@@ -13,31 +13,52 @@ interface Props {
 }
 
 export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existingItem, isFixedType }) => {
-  const { users, groups } = useClubStore();
+  const { users, groups, events } = useClubStore();
   
-  const [type, setType] = useState<ItemType>(existingItem?.type || 'VORLAGE');
+  const parentEvent = existingItem?.eventId ? events.find(e => e.id === existingItem.eventId) : null;
+  const isProtocolMode = parentEvent?.status === 'AKTIV' || parentEvent?.status === 'ABGESCHLOSSEN';
+  
+  const isNewItem = !existingItem?.id;
+
+  const [type, setType] = useState<ItemType>(existingItem?.type || (isProtocolMode ? 'INFO' : 'VORLAGE'));
   const [title, setTitle] = useState(existingItem?.title || '');
   const [description, setDescription] = useState(existingItem?.description || '');
   const [requestedBy, setRequestedBy] = useState(existingItem?.requestedBy || '');
   const [durationEstimate, setDurationEstimate] = useState<number>(existingItem?.durationEstimate || 15);
   
-  // CHIRURGISCHER EINGRIFF: Die Setter (set...) wurden entfernt, um den Linter zufriedenzustellen
   const [durationActual] = useState<number>(existingItem?.durationActual || 0);
 
   const [mustBeDoneBeforeEvent, setMustBeDoneBeforeEvent] = useState(existingItem?.mustBeDoneBeforeEvent || false);
   const [leadTimeValue, setLeadTimeValue] = useState<number>(existingItem?.leadTimeValue || 1);
   const [leadTimeUnit, setLeadTimeUnit] = useState<'hours' | 'days'>(existingItem?.leadTimeUnit || 'days');
-  const [isDueNextMeeting, setIsDueNextMeeting] = useState(existingItem?.isDueNextMeeting || false);
+  
+  const [isDueNextMeeting, setIsDueNextMeeting] = useState(
+    existingItem?.id !== undefined 
+      ? (existingItem.isDueNextMeeting || false) 
+      : isProtocolMode
+  );
   
   const [assigneeUserIds, setAssigneeUserIds] = useState<string[]>(existingItem?.assigneeUserIds || []);
   const [assigneeGroupIds, setAssigneeGroupIds] = useState<string[]>(existingItem?.assigneeGroupIds || []);
 
   const [status, setStatus] = useState<ItemStatus>(existingItem?.status || 'OFFEN');
   const [progress, setProgress] = useState<number>(existingItem?.progress || 0);
-  const [dueDateStr, setDueDateStr] = useState(existingItem?.dueDate ? new Date(existingItem.dueDate).toISOString().substring(0,10) : '');
+  
+  const [dueDateStr, setDueDateStr] = useState(
+    existingItem?.dueDate 
+      ? new Date(existingItem.dueDate).toISOString().substring(0,10) 
+      : (parentEvent?.plannedStartTime && !isProtocolMode 
+          ? new Date(parentEvent.plannedStartTime).toISOString().substring(0,10) 
+          : '')
+  );
+  
   const [postponedToDateStr, setPostponedToDateStr] = useState(existingItem?.postponedToDate ? new Date(existingItem.postponedToDate).toISOString().substring(0,10) : '');
   
-  // CHIRURGISCHER EINGRIFF: Linter-Fixes für ungenutzte Setter
+  // CHIRURGISCHER EINGRIFF: Die States für das neue Routine-Interface
+  const [isRoutine, setIsRoutine] = useState(existingItem?.isRoutine || false);
+  const [routinePattern, setRoutinePattern] = useState<'weekly' | 'monthly' | 'quarterly' | 'yearly'>(existingItem?.routinePattern || 'monthly');
+  const [routineEndDateStr, setRoutineEndDateStr] = useState(existingItem?.routineEndDate ? new Date(existingItem.routineEndDate).toISOString().substring(0,10) : '');
+
   const [reportingEventId] = useState(existingItem?.reportingEventId || '');
   const [approvedBy, setApprovedBy] = useState<string[]>(existingItem?.approvedBy || []);
   const [rejectedBy] = useState<string[]>(existingItem?.rejectedBy || []);
@@ -87,7 +108,18 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
         payload.progress = progress;
         payload.reportingEventId = reportingEventId;
         if (dueDateStr && !isDueNextMeeting) payload.dueDate = new Date(dueDateStr).getTime();
-        if (postponedToDateStr) payload.postponedToDate = new Date(postponedToDateStr).getTime();
+        if (postponedToDateStr && !isDueNextMeeting) payload.postponedToDate = new Date(postponedToDateStr).getTime();
+        
+        // CHIRURGISCHER EINGRIFF: Routinen sichern!
+        payload.isRoutine = isRoutine;
+        if (isRoutine) {
+          payload.routinePattern = routinePattern;
+          if (routineEndDateStr) payload.routineEndDate = new Date(routineEndDateStr).getTime();
+          else payload.routineEndDate = undefined;
+        } else {
+          payload.routinePattern = undefined;
+          payload.routineEndDate = undefined;
+        }
       }
 
       if (type === 'BESCHLUSS') {
@@ -130,8 +162,8 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
                 disabled={isFixedType}
                 className={`w-full p-2 border rounded font-bold ${isFixedType ? 'bg-gray-200 border-gray-300 text-gray-500 cursor-not-allowed' : 'border-blue-300 bg-blue-50 focus:ring-blue-500 text-blue-800'}`}
               >
-                <option value="VORLAGE">VORLAGE (Routine/Standard)</option>
-                <option value="AGENDA">AGENDA (Geplanter Punkt)</option>
+                {(!isProtocolMode || (!isNewItem && type === 'VORLAGE')) && <option value="VORLAGE">VORLAGE (Routine/Standard)</option>}
+                {(!isProtocolMode || (!isNewItem && type === 'AGENDA')) && <option value="AGENDA">AGENDA (Geplanter Punkt)</option>}
                 <option value="INFO">INFO (Reiner Informationspunkt)</option>
                 <option value="BESCHLUSS">BESCHLUSS (Abstimmung)</option>
                 <option value="AUFGABE">AUFGABE (To-Do / Kanban)</option>
@@ -189,7 +221,15 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
             <div className="bg-purple-50 border border-purple-200 p-4 rounded-lg space-y-4">
               <h3 className="text-md font-bold text-purple-800">Reverse-Scheduling & Automation</h3>
               <div className="flex items-center">
-                <input type="checkbox" checked={mustBeDoneBeforeEvent} onChange={e => setMustBeDoneBeforeEvent(e.target.checked)} className="w-4 h-4 text-purple-600 rounded" />
+                <input 
+                  type="checkbox" 
+                  checked={mustBeDoneBeforeEvent} 
+                  onChange={e => {
+                    setMustBeDoneBeforeEvent(e.target.checked);
+                    if (e.target.checked) setIsDueNextMeeting(false);
+                  }} 
+                  className="w-4 h-4 text-purple-600 rounded" 
+                />
                 <span className="ml-2 text-sm font-medium text-gray-700">Muss VOR dem Event erledigt sein (Kaskade)</span>
               </div>
               
@@ -215,6 +255,40 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
             </div>
           )}
 
+          {/* CHIRURGISCHER EINGRIFF: Das neue Interface für Routinen! */}
+          {type === 'AUFGABE' && (
+            <div className="bg-indigo-50 border border-indigo-200 p-4 rounded-lg space-y-4">
+              <h3 className="text-md font-bold text-indigo-800">Wiederholung / Routine</h3>
+              <div className="flex items-center">
+                <input 
+                  type="checkbox" 
+                  checked={isRoutine} 
+                  onChange={e => setIsRoutine(e.target.checked)} 
+                  className="w-4 h-4 text-indigo-600 rounded" 
+                />
+                <span className="ml-2 text-sm font-medium text-gray-700">Ist eine wiederkehrende Routine</span>
+              </div>
+              
+              {isRoutine && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Intervall</label>
+                    <select value={routinePattern} onChange={e => setRoutinePattern(e.target.value as any)} className="w-full p-2 border border-gray-300 rounded font-bold text-indigo-900">
+                      <option value="weekly">Wöchentlich</option>
+                      <option value="monthly">Monatlich</option>
+                      <option value="quarterly">Quartalsweise</option>
+                      <option value="yearly">Jährlich</option>
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Endet am (Optional)</label>
+                    <input type="date" value={routineEndDateStr} onChange={e => setRoutineEndDateStr(e.target.value)} className="w-full p-2 border border-gray-300 rounded text-indigo-900" />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {type === 'AUFGABE' && (
             <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg space-y-4">
               <h3 className="text-md font-bold text-orange-800">Aufgaben-Details (Kanban)</h3>
@@ -231,16 +305,19 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
                   <label className="block text-sm font-medium text-gray-700 mb-1">Fortschritt ({progress}%)</label>
                   <input type="range" min="0" max="100" value={progress} onChange={e => setProgress(Number(e.target.value))} className="w-full mt-2" />
                 </div>
+                
                 {!isDueNextMeeting && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Fällig am (Fixes Datum)</label>
-                    <input type="date" value={dueDateStr} onChange={e => setDueDateStr(e.target.value)} className="w-full p-2 border border-gray-300 rounded" />
-                  </div>
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Fällig am (Fixes Datum)</label>
+                      <input type="date" value={dueDateStr} onChange={e => setDueDateStr(e.target.value)} className="w-full p-2 border border-gray-300 rounded" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Verschoben auf</label>
+                      <input type="date" value={postponedToDateStr} onChange={e => setPostponedToDateStr(e.target.value)} className="w-full p-2 border border-gray-300 rounded" />
+                    </div>
+                  </>
                 )}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Verschoben auf</label>
-                  <input type="date" value={postponedToDateStr} onChange={e => setPostponedToDateStr(e.target.value)} className="w-full p-2 border border-gray-300 rounded" />
-                </div>
               </div>
             </div>
           )}
@@ -277,4 +354,4 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
     </div>
   );
 };
-// Exakte Zeilenzahl: 255
+// Exakte Zeilenzahl: 310

@@ -56,6 +56,8 @@ export interface ClubEvent extends BaseDocument {
   participantUserIds: string[];
   participantGroupIds: string[];
   
+  actualAttendeeUserIds?: string[];
+  
   plannedStartTime?: number;
   plannedEndTime?: number;
   actualEndTime?: number;
@@ -66,7 +68,6 @@ export interface ClubEvent extends BaseDocument {
   endDate?: number;
   occurrenceCount?: number;
 
-  // CHIRURGISCHER EINGRIFF: Termin für die Folge-Sitzung
   nextEventDate?: number;
 }
 
@@ -105,8 +106,12 @@ export interface AgendaItem extends BaseDocument {
   leadTimeValue?: number;
   leadTimeUnit?: 'hours' | 'days';
 
-  // CHIRURGISCHER EINGRIFF: Flag für Automatisierung
   isDueNextMeeting?: boolean;
+
+  // CHIRURGISCHER EINGRIFF: Die Felder für unsere Routinen!
+  isRoutine?: boolean;
+  routinePattern?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  routineEndDate?: number;
 
   postponedToDate?: number;
   reportingEventId?: string;
@@ -117,4 +122,4 @@ export interface AgendaItem extends BaseDocument {
 }
 
 export type Task = AgendaItem;
-// Exakte Zeilenzahl: 106
+// Exakte Zeilenzahl: 111

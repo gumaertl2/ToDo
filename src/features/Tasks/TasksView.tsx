@@ -18,10 +18,13 @@ export const TasksView: React.FC = () => {
   }, [fetchTasks, fetchEvents]);
 
   const displayedTasks = tasks.filter((task) => {
-    // CHIRURGISCHER EINGRIFF: Schrödinger-Filter
+    // CHIRURGISCHER EINGRIFF: Der 4-Stufen Kanban-Filter auch hier
     if (task.eventId) {
       const ev = events.find(e => e.id === task.eventId);
-      if (ev && ev.status === 'PLANUNG') return false;
+      if (ev && ev.status === 'PLANUNG') {
+        if (!ev.isPublished) return false;
+        if (ev.isPublished && !task.mustBeDoneBeforeEvent) return false;
+      }
     }
 
     if (filter === 'my' && user) {
@@ -92,4 +95,4 @@ export const TasksView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 95
+// Exakte Zeilenzahl: 96

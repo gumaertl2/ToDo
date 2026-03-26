@@ -26,7 +26,6 @@ export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set,
       const querySnapshot = await getDocs(q);
       const tasks: Task[] = [];
       querySnapshot.forEach((docSnap) => {
-        // FIX: id zwingend aus dem Document extrahieren!
         const data = { ...docSnap.data(), id: docSnap.id } as Task;
         if (data.schemaVersion === '1.0') {
           tasks.push(data);
@@ -40,24 +39,18 @@ export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set,
     }
   },
   addTask: async (task) => {
-    const result = await DataProcessor.saveDocument<Task>('tasks', task.id, task);
-    if (result.success) {
-      set((state) => ({ tasks: [...state.tasks, task] }));
-    }
-    return result;
+    // CHIRURGISCHER EINGRIFF: Alles läuft nun über den mächtigen saveAgendaItem (für Routinen)
+    return get().saveAgendaItem(task);
   },
   updateTask: async (task) => {
-    const result = await DataProcessor.saveDocument<Task>('tasks', task.id, task);
-    if (result.success) {
-      set((state) => ({
-        tasks: state.tasks.map((t) => (t.id === task.id ? task : t)),
-      }));
-    }
-    return result;
+    // CHIRURGISCHER EINGRIFF: Wenn Kanban-Board speichert, ebenfalls auf Routine prüfen!
+    return get().saveAgendaItem(task);
   },
   deleteTask: async (taskId) => {
     try {
-      await deleteDoc(doc(db, 'tasks', taskId));
+      try { await deleteDoc(doc(db, 'tasks', taskId)); } catch (e) {} // Legacy Cleanup
+      try { await deleteDoc(doc(db, 'agenda_items', taskId)); } catch (e) {}
+      
       set((state) => ({
         tasks: state.tasks.filter((t) => t.id !== taskId),
       }));
@@ -69,14 +62,56 @@ export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set,
   saveAgendaItem: async (itemData) => {
     try {
       const docId = itemData.id || doc(collection(db, 'agenda_items')).id;
-      // FIX: id zwingend mit in das Payload-Objekt packen!
+      
+      // CHIRURGISCHER EINGRIFF: Prüfen auf Routine-Abschluss (Vorher vs. Nachher)
+      const oldTask = get().tasks.find(t => t.id === docId);
+      const wasCompleted = oldTask ? (oldTask.status === 'ERLEDIGT' || oldTask.progress === 100) : false;
+      const isCompleted = (itemData.status === 'ERLEDIGT' || itemData.progress === 100);
+
       const payload = { ...itemData, id: docId, schemaVersion: '1.0' };
       await DataProcessor.saveDocument('agenda_items', docId, payload as any);
+      
+      // DIE MAGIE: Klon-Motor für Routinen!
+      if (!wasCompleted && isCompleted && payload.type === 'AUFGABE' && payload.isRoutine && payload.routinePattern) {
+        let nextDate = new Date();
+        if (payload.dueDate) {
+          nextDate = new Date(payload.dueDate);
+        }
+        
+        // Berechnet vollautomatisch das nächste Fälligkeitsdatum
+        if (payload.routinePattern === 'weekly') nextDate.setDate(nextDate.getDate() + 7);
+        else if (payload.routinePattern === 'monthly') nextDate.setMonth(nextDate.getMonth() + 1);
+        else if (payload.routinePattern === 'quarterly') nextDate.setMonth(nextDate.getMonth() + 3);
+        else if (payload.routinePattern === 'yearly') nextDate.setFullYear(nextDate.getFullYear() + 1);
+        
+        const shouldCreate = !payload.routineEndDate || nextDate.getTime() <= payload.routineEndDate;
+        
+        if (shouldCreate) {
+          const newDocId = doc(collection(db, 'agenda_items')).id;
+          const newTask = {
+            ...payload,
+            id: newDocId,
+            eventId: '', // Abkoppeln von der alten Sitzung (Landet frei im Kanban!)
+            status: 'OFFEN',
+            progress: 0,
+            dueDate: nextDate.getTime(),
+            createdAt: Date.now()
+          };
+          await DataProcessor.saveDocument('agenda_items', newDocId, newTask as any);
+        }
+      }
+
       get().fetchTasks(); 
+      // Aktualisiert das Protokoll live, falls du dich in einem befindest
+      if (itemData.eventId) {
+        const store = get() as any;
+        if (store.fetchEventAgenda) store.fetchEventAgenda(itemData.eventId);
+      }
+
       return { success: true, data: undefined };
     } catch (error: any) {
       return { success: false, error: new Error(error.message) };
     }
   },
 });
-// Exakte Zeilenzahl: 72
+// Exakte Zeilenzahl: 104

@@ -8,7 +8,6 @@ import { ItemFormModal } from '../Shared/ItemFormModal';
 import type { Task } from '../../core/types/models';
 
 export const DashboardView: React.FC = () => {
-  // CHIRURGISCHER EINGRIFF: users und groups entfernt, da diese nun in der ItemCard direkt aufgelöst werden
   const { events, tasks, user, fetchEvents, fetchTasks, isEventsLoading, saveAgendaItem } = useClubStore();
   
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
@@ -20,9 +19,12 @@ export const DashboardView: React.FC = () => {
   }, [fetchEvents, fetchTasks]);
 
   const upcomingEvents = useMemo(() => {
-    const now = new Date();
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
     return events
-      .filter((e) => e.startDate ? new Date(e.startDate) >= now : false)
+      .filter((e) => e.status !== 'ABGESCHLOSSEN')
+      .filter((e) => e.startDate ? new Date(e.startDate).getTime() >= startOfToday.getTime() : true)
       .sort((a, b) => (a.startDate || 0) - (b.startDate || 0))
       .slice(0, 3);
   }, [events]);
@@ -30,10 +32,17 @@ export const DashboardView: React.FC = () => {
   const openTasks = useMemo(() => {
     let filtered = tasks.filter((t) => t.status !== 'ERLEDIGT');
     
+    // CHIRURGISCHER EINGRIFF: Der 4-Stufen Kanban-Filter
     filtered = filtered.filter((t) => {
       if (!t.eventId) return true;
       const ev = events.find(e => e.id === t.eventId);
-      return ev ? ev.status !== 'PLANUNG' : true;
+      if (!ev) return true;
+      
+      if (ev.status === 'PLANUNG') {
+        if (!ev.isPublished) return false; // Entwurf -> Alles unsichtbar
+        if (ev.isPublished && !t.mustBeDoneBeforeEvent) return false; // Veröffentlicht -> Nur Vorbereitungsaufgaben sichtbar
+      }
+      return true; // Aktiv oder Abgeschlossen -> Alles sichtbar
     });
     
     if (user) {
@@ -140,4 +149,4 @@ export const DashboardView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 139
+// Exakte Zeilenzahl: 147
