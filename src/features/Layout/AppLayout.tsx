@@ -1,14 +1,12 @@
 // src/features/Layout/AppLayout.tsx
 import React, { useEffect } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { Users, Calendar, ClipboardList, CheckSquare, LogOut, LayoutDashboard } from 'lucide-react';
+import { Users, Calendar, ClipboardList, CheckSquare, LogOut, LayoutDashboard, BookOpen } from 'lucide-react';
 import { useClubStore } from '../../store/useClubStore';
 
 export const AppLayout: React.FC = () => {
   const { logout, user, fetchUsersAndHelpers, fetchGroups } = useClubStore();
 
-  // FIX: Lade die Vorstände und Gruppen einmal global beim App-Start, 
-  // damit alle Formulare ihre Dropdowns füllen können.
   useEffect(() => {
     fetchUsersAndHelpers();
     fetchGroups();
@@ -20,6 +18,7 @@ export const AppLayout: React.FC = () => {
     { to: '/events', icon: Calendar, label: 'Events & Sitzungen' },
     { to: '/templates', icon: ClipboardList, label: 'Vorlagen & Routinen' },
     { to: '/todos', icon: CheckSquare, label: 'Meine ToDos' },
+    { to: '/help', icon: BookOpen, label: 'Handbuch & Hilfe' },
   ];
 
   return (
@@ -72,7 +71,7 @@ export const AppLayout: React.FC = () => {
             }
           >
             <item.icon className="w-6 h-6 mb-1" />
-            <span className="text-xs font-medium">{item.label}</span>
+            <span className="text-xs font-medium" style={{ fontSize: '0.65rem' }}>{item.label.split(' ')[0]}</span>
           </NavLink>
         ))}
         <button
@@ -80,9 +79,10 @@ export const AppLayout: React.FC = () => {
           className="flex flex-col items-center p-2 text-red-500 hover:bg-red-50 rounded-lg"
         >
           <LogOut className="w-6 h-6 mb-1" />
-          <span className="text-xs font-medium">Exit</span>
+          <span className="text-xs font-medium" style={{ fontSize: '0.65rem' }}>Exit</span>
         </button>
       </nav>
     </div>
   );
 };
+// Exakte Zeilenzahl: 85
