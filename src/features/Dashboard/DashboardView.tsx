@@ -2,13 +2,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import { Calendar, CheckSquare, Clock, ArrowRight } from 'lucide-react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { ItemCard } from '../Shared/ItemCard';
 import { ItemFormModal } from '../Shared/ItemFormModal';
 import type { Task } from '../../core/types/models';
 
 export const DashboardView: React.FC = () => {
   const { events, tasks, user, fetchEvents, fetchTasks, isEventsLoading, saveAgendaItem } = useClubStore();
+  const navigate = useNavigate();
   
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Task | null>(null);
@@ -89,7 +90,8 @@ export const DashboardView: React.FC = () => {
             ) : (
               <div className="space-y-4">
                 {upcomingEvents.map((ev) => (
-                  <div key={ev.id} className="flex items-start p-3 bg-blue-50/50 border border-blue-100 rounded-lg">
+                  <div key={ev.id} onClick={() => navigate(`/events/${ev.id}`)}
+                    className="flex items-start p-3 bg-blue-50/50 border border-blue-100 rounded-lg cursor-pointer hover:bg-blue-100 hover:shadow-md transition-all">
                     <div className="bg-blue-100 p-2 rounded-md text-blue-700 mr-3 mt-0.5">
                       <Clock className="w-5 h-5" />
                     </div>
@@ -149,4 +151,4 @@ export const DashboardView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 147
+// Exakte Zeilenzahl: 154

@@ -55,7 +55,8 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onEdit, onDelete, clas
 
   return (
     <div 
-      className={`bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-3 hover:shadow-md transition-shadow flex flex-col ${className}`}
+      onClick={() => onEdit && onEdit(item)}
+      className={`bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-3 transition-shadow flex flex-col ${onEdit ? 'cursor-pointer hover:border-blue-300 hover:shadow-md' : ''} ${className}`}
       title={item.description ? item.description : 'Keine zusätzliche Beschreibung'}
     >
       <div className="flex justify-between items-start mb-2">
@@ -85,7 +86,6 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onEdit, onDelete, clas
       <div className="flex items-center justify-between text-xs mt-auto">
         {isTask ? (
           <>
-            {/* CHIRURGISCHER EINGRIFF: Aufgeräumte Datumsanzeige mit Ampel */}
             <div className={`flex items-center ${dateColor}`}>
               <Calendar className="w-3 h-3 mr-1" />
               {item.isDueNextMeeting ? (
@@ -115,4 +115,4 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onEdit, onDelete, clas
     </div>
   );
 };
-// Exakte Zeilenzahl: 95
+// Exakte Zeilenzahl: 119
