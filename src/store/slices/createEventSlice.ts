@@ -128,6 +128,12 @@ export const createEventSlice: StateCreator<EventSlice, [], [], EventSlice> = (s
 
   deleteEvent: async (eventId) => {
     try {
+      // CHIRURGISCHER EINGRIFF: Lösch-Kaskade für zugehörige Agenda-Punkte
+      const q = query(collection(db, 'agenda_items'), where('eventId', '==', eventId));
+      const snap = await getDocs(q);
+      const deletePromises = snap.docs.map(d => deleteDoc(doc(db, 'agenda_items', d.id)));
+      await Promise.all(deletePromises);
+
       await deleteDoc(doc(db, 'events', eventId));
       set((state) => ({ events: state.events.filter((e) => e.id !== eventId) }));
       return { success: true, data: undefined };
@@ -136,4 +142,4 @@ export const createEventSlice: StateCreator<EventSlice, [], [], EventSlice> = (s
     }
   }
 });
-// Exakte Zeilenzahl: 122
+// Exakte Zeilenzahl: 144

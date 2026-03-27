@@ -10,6 +10,7 @@ export const EventsView: React.FC = () => {
   const { events, fetchEvents, addEvent, updateEvent, deleteEvent, isEventsLoading } = useClubStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
+  const [expandedSeries, setExpandedSeries] = useState<Set<string>>(new Set());
   
   const navigate = useNavigate();
 
@@ -57,6 +58,15 @@ export const EventsView: React.FC = () => {
     }
   };
 
+  const toggleSeries = (seriesId: string) => {
+    setExpandedSeries(prev => {
+      const next = new Set(prev);
+      if (next.has(seriesId)) next.delete(seriesId);
+      else next.add(seriesId);
+      return next;
+    });
+  };
+
   // CHIRURGISCHER EINGRIFF: Intelligente Bündelung nach seriesId
   const getGroupedEvents = () => {
     const seriesMap = new Map<string, Event[]>();
@@ -80,9 +90,10 @@ export const EventsView: React.FC = () => {
       const headEvent = activeOrPlanned || seriesEvents[0];
       
       // Zählen, wie viele Historien-Protokolle es in dieser Serie gibt
-      const totalCompleted = seriesEvents.filter(e => e.status === 'ABGESCHLOSSEN' && e.id !== headEvent.id).length;
+      const historyEvents = seriesEvents.filter(e => e.status === 'ABGESCHLOSSEN' && e.id !== headEvent.id);
+      const totalCompleted = historyEvents.length;
       
-      return { headEvent, totalCompleted };
+      return { headEvent, totalCompleted, historyEvents };
     });
 
     // 3. Die finalen Kacheln sortieren (die demnächst anstehenden zuerst)
@@ -112,7 +123,7 @@ export const EventsView: React.FC = () => {
             {groupedEvents.length === 0 && <div className="p-8 text-center text-gray-500">Noch keine Sitzungen vorhanden.</div>}
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {groupedEvents.map(({ headEvent: ev, totalCompleted }) => (
+              {groupedEvents.map(({ headEvent: ev, totalCompleted, historyEvents }) => (
                 <div key={ev.id} className="bg-white p-5 rounded-lg shadow-sm border border-gray-200 flex flex-col hover:shadow-md transition-shadow relative">
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex flex-col gap-1 items-start">
@@ -132,12 +143,15 @@ export const EventsView: React.FC = () => {
                   
                   <h3 className="text-lg font-bold text-gray-900 mb-1 leading-tight">{ev.title}</h3>
                   
-                  {/* CHIRURGISCHER EINGRIFF: Das kleine Historien-Badge */}
+                  {/* CHIRURGISCHER EINGRIFF: Das kleine Historien-Badge klickbar machen */}
                   {totalCompleted > 0 && (
-                    <div className="flex items-center text-[11px] text-gray-500 font-medium mb-3 bg-gray-50 self-start px-2 py-0.5 rounded border border-gray-100">
+                    <button 
+                      onClick={() => toggleSeries(ev.seriesId || ev.id)}
+                      className="flex items-center text-[11px] text-gray-500 font-medium mb-3 bg-gray-50 self-start px-2 py-0.5 rounded border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer"
+                    >
                       <Clock className="w-3 h-3 mr-1" />
                       {totalCompleted} {totalCompleted === 1 ? 'altes Protokoll' : 'alte Protokolle'}
-                    </div>
+                    </button>
                   )}
                   
                   <div className="space-y-2 mb-4 flex-1 mt-2">
@@ -159,11 +173,35 @@ export const EventsView: React.FC = () => {
 
                   <button 
                     onClick={() => navigate(`/events/${ev.id}`)}
-                    className="w-full flex items-center justify-center px-4 py-2 bg-gray-100 text-blue-700 font-medium rounded-lg hover:bg-blue-50 transition-colors"
+                    className="w-full flex items-center justify-center px-4 py-2 bg-gray-100 text-blue-700 font-medium rounded-lg hover:bg-blue-50 transition-colors mb-2"
                   >
                     Zur Agenda / Protokoll
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </button>
+                  
+                  {/* CHIRURGISCHER EINGRIFF: Das Archiv-Dropdown */}
+                  {expandedSeries.has(ev.seriesId || ev.id) && historyEvents.length > 0 && (
+                    <div className="mt-2 pt-3 border-t border-gray-100 flex flex-col gap-2">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Archiv ({totalCompleted})</span>
+                      {historyEvents.map(hist => (
+                        <div key={hist.id} className="flex items-center justify-between bg-gray-50 p-2 rounded border border-gray-100">
+                          <div className="flex flex-col overflow-hidden mr-2">
+                            <span className="text-xs font-medium text-gray-700 truncate">{hist.title}</span>
+                            <span className="text-[10px] text-gray-500">
+                              {hist.plannedStartTime ? new Date(hist.plannedStartTime).toLocaleDateString() : 'Kein Datum'}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => navigate(`/events/${hist.id}`)}
+                            className="text-blue-500 hover:text-blue-700 p-1 shrink-0 bg-white rounded shadow-sm border border-gray-100"
+                            title="Zum Protokoll"
+                          >
+                            <ArrowRight className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -181,4 +219,4 @@ export const EventsView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 161
+// Exakte Zeilenzahl: 221
