@@ -18,10 +18,15 @@ export const TasksView: React.FC = () => {
   }, [fetchTasks, fetchEvents]);
 
   const displayedTasks = tasks.filter((task) => {
-    // CHIRURGISCHER EINGRIFF: Der 4-Stufen Kanban-Filter auch hier
+    // CHIRURGISCHER EINGRIFF: Der Kanban-Staubsauger
     if (task.eventId) {
       const ev = events.find(e => e.id === task.eventId);
-      if (ev && ev.status === 'PLANUNG') {
+      if (!ev) return false; // Event existiert nicht mehr
+      
+      // Ist das Event abgeschlossen oder im Archiv? Dann weg mit den Aufgaben von hier!
+      if (ev.status === 'ABGESCHLOSSEN' || ev.isArchived) return false;
+      
+      if (ev.status === 'PLANUNG') {
         if (!ev.isPublished) return false;
         if (ev.isPublished && !task.mustBeDoneBeforeEvent) return false;
       }
@@ -95,4 +100,4 @@ export const TasksView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 96
+// Exakte Zeilenzahl: 100

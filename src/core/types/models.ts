@@ -52,6 +52,7 @@ export interface ClubEvent extends BaseDocument {
   
   isPublished: boolean; 
   seriesId?: string;    
+  isArchived?: boolean; // CHIRURGISCHER EINGRIFF: Die Archiv-Funktion
   
   participantUserIds: string[];
   participantGroupIds: string[];
@@ -108,7 +109,6 @@ export interface AgendaItem extends BaseDocument {
 
   isDueNextMeeting?: boolean;
 
-  // CHIRURGISCHER EINGRIFF: Die Felder für unsere Routinen!
   isRoutine?: boolean;
   routinePattern?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
   routineEndDate?: number;
@@ -122,4 +122,4 @@ export interface AgendaItem extends BaseDocument {
 }
 
 export type Task = AgendaItem;
-// Exakte Zeilenzahl: 111
+// Exakte Zeilenzahl: 112

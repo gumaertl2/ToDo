@@ -9,7 +9,7 @@ import type { Task } from '../../core/types/models';
 
 export const DashboardView: React.FC = () => {
   const { events, tasks, user, fetchEvents, fetchTasks, isEventsLoading, saveAgendaItem } = useClubStore();
-  const navigate = useNavigate();
+  const navigate = useNavigate(); // CHIRURGISCHER EINGRIFF: Für die klickbaren Kacheln
   
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Task | null>(null);
@@ -24,7 +24,7 @@ export const DashboardView: React.FC = () => {
     startOfToday.setHours(0, 0, 0, 0);
 
     return events
-      .filter((e) => e.status !== 'ABGESCHLOSSEN')
+      .filter((e) => e.status !== 'ABGESCHLOSSEN' && !e.isArchived)
       .filter((e) => e.startDate ? new Date(e.startDate).getTime() >= startOfToday.getTime() : true)
       .sort((a, b) => (a.startDate || 0) - (b.startDate || 0))
       .slice(0, 3);
@@ -33,17 +33,20 @@ export const DashboardView: React.FC = () => {
   const openTasks = useMemo(() => {
     let filtered = tasks.filter((t) => t.status !== 'ERLEDIGT');
     
-    // CHIRURGISCHER EINGRIFF: Der 4-Stufen Kanban-Filter
+    // CHIRURGISCHER EINGRIFF: Der Kanban-Staubsauger
     filtered = filtered.filter((t) => {
-      if (!t.eventId) return true;
+      if (!t.eventId) return true; // Globale Aufgabe ohne Event bleibt sichtbar
       const ev = events.find(e => e.id === t.eventId);
-      if (!ev) return true;
+      if (!ev) return false; 
+      
+      // Ist das Event abgeschlossen oder archiviert? Dann weg hier!
+      if (ev.status === 'ABGESCHLOSSEN' || ev.isArchived) return false;
       
       if (ev.status === 'PLANUNG') {
         if (!ev.isPublished) return false; // Entwurf -> Alles unsichtbar
         if (ev.isPublished && !t.mustBeDoneBeforeEvent) return false; // Veröffentlicht -> Nur Vorbereitungsaufgaben sichtbar
       }
-      return true; // Aktiv oder Abgeschlossen -> Alles sichtbar
+      return true; 
     });
     
     if (user) {
@@ -90,8 +93,11 @@ export const DashboardView: React.FC = () => {
             ) : (
               <div className="space-y-4">
                 {upcomingEvents.map((ev) => (
-                  <div key={ev.id} onClick={() => navigate(`/events/${ev.id}`)}
-                    className="flex items-start p-3 bg-blue-50/50 border border-blue-100 rounded-lg cursor-pointer hover:bg-blue-100 hover:shadow-md transition-all">
+                  <div 
+                    key={ev.id} 
+                    onClick={() => navigate(`/events/${ev.id}`)}
+                    className="flex items-start p-3 bg-blue-50/50 border border-blue-100 rounded-lg cursor-pointer hover:bg-blue-100 hover:shadow-md transition-all"
+                  >
                     <div className="bg-blue-100 p-2 rounded-md text-blue-700 mr-3 mt-0.5">
                       <Clock className="w-5 h-5" />
                     </div>
@@ -151,4 +157,4 @@ export const DashboardView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 154
+// Exakte Zeilenzahl: 157
