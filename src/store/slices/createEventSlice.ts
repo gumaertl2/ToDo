@@ -19,6 +19,7 @@ export interface EventSlice {
   addEvent: (event: Event) => Promise<Result<void>>;
   updateEvent: (event: Event) => Promise<Result<void>>;
   deleteEvent: (eventId: string) => Promise<Result<void>>;
+  toggleArchiveEvent: (eventId: string, isArchived: boolean) => Promise<Result<void>>;
 }
 
 export const createEventSlice: StateCreator<EventSlice, [], [], EventSlice> = (set, get) => ({
@@ -107,11 +108,8 @@ export const createEventSlice: StateCreator<EventSlice, [], [], EventSlice> = (s
   },
 
   addEvent: async (event) => {
-    // CHIRURGISCHER EINGRIFF: Wir erzeugen die Geburtsstunde der Sitzungsreihe (seriesId)
-    const finalEvent = { ...event, seriesId: event.seriesId || event.id };
-    
-    const result = await DataProcessor.saveDocument<Event>('events', finalEvent.id, finalEvent);
-    if (result.success) set((state) => ({ events: [...state.events, finalEvent] }));
+    const result = await DataProcessor.saveDocument<Event>('events', event.id, event);
+    if (result.success) set((state) => ({ events: [...state.events, event] }));
     return result;
   },
   
@@ -126,9 +124,25 @@ export const createEventSlice: StateCreator<EventSlice, [], [], EventSlice> = (s
     return result;
   },
 
+  toggleArchiveEvent: async (eventId, isArchived) => {
+    const targetEvent = get().events.find(e => e.id === eventId);
+    if (!targetEvent) return { success: false, error: new Error('Event not found') };
+    
+    const updatedEvent = { ...targetEvent, isArchived };
+    const result = await DataProcessor.saveDocument<Event>('events', eventId, updatedEvent);
+    
+    if (result.success) {
+      set((state) => ({
+        events: state.events.map(e => e.id === eventId ? updatedEvent : e),
+        currentEvent: state.currentEvent?.id === eventId ? updatedEvent : state.currentEvent
+      }));
+    }
+    return result;
+  },
+
   deleteEvent: async (eventId) => {
     try {
-      // CHIRURGISCHER EINGRIFF: Lösch-Kaskade für zugehörige Agenda-Punkte
+      // CHIRURGISCHER EINGRIFF: Radikale Lösch-Kaskade für alle zugehörigen Todos, Protokolle & Agendapunkte
       const q = query(collection(db, 'agenda_items'), where('eventId', '==', eventId));
       const snap = await getDocs(q);
       const deletePromises = snap.docs.map(d => deleteDoc(doc(db, 'agenda_items', d.id)));
@@ -142,4 +156,4 @@ export const createEventSlice: StateCreator<EventSlice, [], [], EventSlice> = (s
     }
   }
 });
-// Exakte Zeilenzahl: 144
+// Exakte Zeilenzahl: 154
