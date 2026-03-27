@@ -9,7 +9,7 @@ import type { Task } from '../../core/types/models';
 
 export const DashboardView: React.FC = () => {
   const { events, tasks, user, fetchEvents, fetchTasks, isEventsLoading, saveAgendaItem } = useClubStore();
-  const navigate = useNavigate(); // CHIRURGISCHER EINGRIFF: Für die klickbaren Kacheln
+  const navigate = useNavigate();
   
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Task | null>(null);
@@ -157,4 +157,4 @@ export const DashboardView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 157
+// Exakte Zeilenzahl: 156

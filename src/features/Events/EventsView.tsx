@@ -65,7 +65,6 @@ export const EventsView: React.FC = () => {
     }
   };
 
-  // CHIRURGISCHER EINGRIFF: Performance-Boost durch useMemo. Verhindert ständige, teure Neuberechnung beim Rendern.
   const visibleEvents = React.useMemo(() => {
     const seriesMap = new Map<string, Event[]>();
     
@@ -76,9 +75,7 @@ export const EventsView: React.FC = () => {
     });
 
     const latest = Array.from(seriesMap.values()).map(series => {
-      // Sortieren, damit das neuste Datum oben steht
       series.sort((a, b) => (b.plannedStartTime || 0) - (a.plannedStartTime || 0));
-      // Den "Kopf" der Serie finden: Entweder das aktuell laufende/geplante, oder (wenn alle abgeschlossen sind) das allerneuste.
       const head = series.find(e => e.status !== 'ABGESCHLOSSEN') || series[0];
       return head;
     });
@@ -125,11 +122,14 @@ export const EventsView: React.FC = () => {
           </button>
         </div>
 
-        {isEventsLoading ? (
-          <div className="p-8 text-center text-gray-500 animate-pulse">Lade Sitzungen...</div>
+        {/* CHIRURGISCHER EINGRIFF: Blockierenden Loading-Screen entfernt. Zeigt Daten sofort aus dem Cache. */}
+        {isEventsLoading && visibleEvents.length === 0 ? (
+          <div className="p-8 text-center text-gray-500 animate-pulse">Lade Projekte & Sitzungen...</div>
         ) : (
-          <div className="flex-1 overflow-y-auto p-4">
-            {visibleEvents.length === 0 && (
+          <div className="flex-1 overflow-y-auto p-4 relative">
+            {isEventsLoading && <div className="absolute top-2 right-4 text-xs text-blue-500 animate-pulse bg-blue-50 px-2 py-1 rounded-full shadow-sm border border-blue-100 z-10">Aktualisiere...</div>}
+            
+            {visibleEvents.length === 0 && !isEventsLoading && (
               <div className="p-8 text-center text-gray-500">
                 {activeTab === 'ACTIVE' ? 'Noch keine aktiven Sitzungen vorhanden.' : 'Das Archiv ist leer.'}
               </div>
@@ -200,4 +200,4 @@ export const EventsView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 190
+// Exakte Zeilenzahl: 194

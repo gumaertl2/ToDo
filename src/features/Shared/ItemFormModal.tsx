@@ -112,7 +112,6 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
         if (dueDateStr && !isDueNextMeeting) payload.dueDate = new Date(dueDateStr).getTime();
       }
 
-      // CHIRURGISCHER EINGRIFF: Routinen sind nun für ALLE Typen gültig
       payload.isRoutine = isRoutine;
       if (isRoutine) {
         payload.routinePattern = routinePattern;
@@ -198,32 +197,76 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
             </div>
           )}
 
+          {/* CHIRURGISCHER EINGRIFF: Aufgaben-Details und Automatisierung in EINER sichtbaren Box vereint */}
           {type === 'AUFGABE' && (
-            <div className="grid grid-cols-2 gap-4 bg-orange-50/50 p-3 rounded-lg border border-orange-100">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Status & Fortschritt ({progress}%)</label>
-                <div className="flex items-center gap-2">
-                  <select value={status} onChange={e => {
-                    setStatus(e.target.value as ItemStatus);
-                    if (e.target.value === 'ERLEDIGT') setProgress(100);
-                  }} className="p-1.5 text-sm border border-gray-300 rounded font-bold w-1/2">
-                    <option value="OFFEN">Offen</option>
-                    <option value="IN_ARBEIT">In Arbeit</option>
-                    <option value="ERLEDIGT">Erledigt</option>
-                  </select>
-                  <input type="range" min="0" max="100" value={progress} onChange={e => setProgress(Number(e.target.value))} className="w-1/2" />
-                </div>
+            <div className="bg-orange-50/50 p-4 rounded-lg border border-orange-200 space-y-4">
+              <div className="border-b border-orange-200 pb-2 mb-2">
+                  <h3 className="text-sm font-bold text-orange-900">Aufgaben-Status & Planung</h3>
               </div>
-              {!isDueNextMeeting && (
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Status & Fortschritt ({progress}%)</label>
+                  <div className="flex items-center gap-2">
+                    <select value={status} onChange={e => {
+                      setStatus(e.target.value as ItemStatus);
+                      if (e.target.value === 'ERLEDIGT') setProgress(100);
+                    }} className="p-1.5 text-sm border border-gray-300 rounded font-bold w-1/2 bg-white">
+                      <option value="OFFEN">Offen</option>
+                      <option value="IN_ARBEIT">In Arbeit</option>
+                      <option value="ERLEDIGT">Erledigt</option>
+                    </select>
+                    <input type="range" min="0" max="100" value={progress} onChange={e => setProgress(Number(e.target.value))} className="w-1/2" />
+                  </div>
+                </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">Fällig am</label>
-                  <input type="date" min={todayStr} value={dueDateStr} onChange={e => setDueDateStr(e.target.value)} className="w-full p-1.5 text-sm border border-gray-300 rounded" />
+                  <input type="date" min={todayStr} value={dueDateStr} onChange={e => { setDueDateStr(e.target.value); setIsDueNextMeeting(false); }} className="w-full p-1.5 text-sm border border-gray-300 rounded bg-white" />
                 </div>
-              )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Dauer (Min)</label>
+                  <input type="number" value={durationEstimate} onChange={e => setDurationEstimate(Number(e.target.value))} className="w-full p-1.5 text-sm border border-gray-300 rounded bg-white" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Eingebracht von</label>
+                  <input type="text" value={requestedBy} onChange={e => setRequestedBy(e.target.value)} className="w-full p-1.5 text-sm border border-gray-300 rounded bg-white" />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 pt-2 border-t border-orange-200">
+                 <label className="flex items-center text-sm font-bold text-orange-900">
+                   <input type="checkbox" checked={isDueNextMeeting} onChange={e => { setIsDueNextMeeting(e.target.checked); if(e.target.checked) setDueDateStr(''); }} className="w-4 h-4 mr-2" />
+                   Automatisch fällig zur NÄCHSTEN Sitzung
+                 </label>
+                 
+                 <label className="flex items-center text-sm font-medium text-gray-700">
+                   <input type="checkbox" checked={mustBeDoneBeforeEvent} onChange={e => { setMustBeDoneBeforeEvent(e.target.checked); if (e.target.checked) setIsDueNextMeeting(false); }} className="w-4 h-4 mr-2" />
+                   Muss VOR dem Event erledigt sein
+                 </label>
+                 
+                 {mustBeDoneBeforeEvent && (
+                   <div className="flex gap-3 pl-6">
+                     <div className="flex-1">
+                       <label className="block text-xs font-medium text-gray-700 mb-1">Vorlauf</label>
+                       <input type="number" value={leadTimeValue} onChange={e => setLeadTimeValue(Number(e.target.value))} className="w-full p-1.5 text-sm border border-gray-300 rounded bg-white" />
+                     </div>
+                     <div className="flex-1">
+                       <label className="block text-xs font-medium text-gray-700 mb-1">Einheit</label>
+                       <select value={leadTimeUnit} onChange={e => setLeadTimeUnit(e.target.value as 'hours'|'days')} className="w-full p-1.5 text-sm border border-gray-300 rounded bg-white">
+                         <option value="days">Tage</option>
+                         <option value="hours">Stunden</option>
+                       </select>
+                     </div>
+                   </div>
+                 )}
+              </div>
             </div>
           )}
 
-          {(type === 'AUFGABE' || type === 'VORLAGE') && (
+          {type === 'VORLAGE' && (
             <div className="border border-purple-100 rounded-lg overflow-hidden">
               <button onClick={() => setShowAdvanced(!showAdvanced)} className="w-full p-2 bg-purple-50 text-purple-800 text-xs font-bold flex justify-between items-center hover:bg-purple-100">
                 <span>⚙️ Automatisierung & Planung (Optional)</span>
@@ -314,4 +357,4 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
     </div>
   );
 };
-// Exakte Zeilenzahl: 283
+// Exakte Zeilenzahl: 308

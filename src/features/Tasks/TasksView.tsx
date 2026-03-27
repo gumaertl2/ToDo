@@ -1,5 +1,5 @@
 // src/features/Tasks/TasksView.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import { KanbanBoard } from './KanbanBoard';
 import { ItemFormModal } from '../Shared/ItemFormModal';
@@ -17,28 +17,30 @@ export const TasksView: React.FC = () => {
     fetchEvents();
   }, [fetchTasks, fetchEvents]);
 
-  const displayedTasks = tasks.filter((task) => {
-    // CHIRURGISCHER EINGRIFF: Der Kanban-Staubsauger
-    if (task.eventId) {
-      const ev = events.find(e => e.id === task.eventId);
-      if (!ev) return false; // Event existiert nicht mehr
-      
-      // Ist das Event abgeschlossen oder im Archiv? Dann weg mit den Aufgaben von hier!
-      if (ev.status === 'ABGESCHLOSSEN' || ev.isArchived) return false;
-      
-      if (ev.status === 'PLANUNG') {
-        if (!ev.isPublished) return false;
-        if (ev.isPublished && !task.mustBeDoneBeforeEvent) return false;
+  // CHIRURGISCHER EINGRIFF: Performance-Boost (useMemo) & Der Kanban-Staubsauger
+  const displayedTasks = useMemo(() => {
+    return tasks.filter((task) => {
+      if (task.eventId) {
+        const ev = events.find(e => e.id === task.eventId);
+        if (!ev) return false; // Event existiert nicht mehr
+        
+        // Ist das Event abgeschlossen oder im Archiv? Dann weg mit den Aufgaben von hier!
+        if (ev.status === 'ABGESCHLOSSEN' || ev.isArchived) return false;
+        
+        if (ev.status === 'PLANUNG') {
+          if (!ev.isPublished) return false;
+          if (ev.isPublished && !task.mustBeDoneBeforeEvent) return false;
+        }
       }
-    }
 
-    if (filter === 'my' && user) {
-      const isUserDirectlyAssigned = task.assigneeUserIds && task.assigneeUserIds.includes(user.id);
-      const isUserGroupAssigned = task.assigneeGroupIds && user.groupIds && task.assigneeGroupIds.some(groupId => user.groupIds.includes(groupId));
-      return isUserDirectlyAssigned || isUserGroupAssigned;
-    }
-    return true;
-  });
+      if (filter === 'my' && user) {
+        const isUserDirectlyAssigned = task.assigneeUserIds && task.assigneeUserIds.includes(user.id);
+        const isUserGroupAssigned = task.assigneeGroupIds && user.groupIds && task.assigneeGroupIds.some(groupId => user.groupIds.includes(groupId));
+        return isUserDirectlyAssigned || isUserGroupAssigned;
+      }
+      return true;
+    });
+  }, [tasks, events, filter, user]);
 
   const handleEditTask = (task: Task) => {
     setEditingItem(task);
@@ -100,4 +102,4 @@ export const TasksView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 100
+// Exakte Zeilenzahl: 103

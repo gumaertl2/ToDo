@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useClubStore } from '../../store/useClubStore';
-import { ArrowLeft, Plus, Calendar, MapPin, Clock, ChevronRight, ChevronLeft, User, ChevronUp, ChevronDown, Users, X, Printer } from 'lucide-react';
+import { ArrowLeft, Plus, Calendar, MapPin, Clock, ChevronRight, ChevronLeft, User, ChevronUp, ChevronDown, Users, X, Printer, Edit2 } from 'lucide-react';
 import { doc, collection } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { ItemFormModal } from '../Shared/ItemFormModal';
@@ -17,8 +17,9 @@ export const EventDetailView: React.FC = () => {
   const { events, currentEvent, eventAgenda, templates, users, groups, tasks, fetchEventDetails, fetchEventAgenda, fetchTemplatesAndRoutines, fetchTasks, importTemplateToEvent, moveAgendaItem, deleteAgendaItem, saveAgendaItem, updateEvent, addEvent } = useClubStore();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditEventModalOpen, setIsEditEventModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<AgendaItem | null>(null);
-  const [isLibraryVisible, setIsLibraryVisible] = useState(false); // CHIRURGISCHER EINGRIFF: Focus-Mode als Standard!
+  const [isLibraryVisible, setIsLibraryVisible] = useState(false); 
   const [showCompleted, setShowCompleted] = useState(false);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
@@ -36,6 +37,40 @@ export const EventDetailView: React.FC = () => {
     users.forEach(u => { if (u.groupIds && u.groupIds.some(gId => eventGroupIds.includes(gId))) ids.add(u.id); });
     return Array.from(ids);
   }, [currentEvent, users]);
+
+  // CHIRURGISCHER EINGRIFF: Dieser Hook muss ZWINGEND VOR dem "if (!currentEvent) return" stehen!
+  const rolloverTemplateEvent: Partial<Event> | undefined = useMemo(() => {
+    if (!isEventModalOpen || !currentEvent || currentEvent.status !== 'AKTIV') return undefined;
+
+    const targetSeriesId = currentEvent.seriesId || currentEvent.id;
+    const now = new Date();
+    const oldStart = currentEvent.plannedStartTime ? new Date(currentEvent.plannedStartTime) : now;
+    
+    const newStart = new Date(now.getTime());
+    newStart.setHours(oldStart.getHours(), oldStart.getMinutes(), 0, 0);
+
+    let newEnd: number | undefined = undefined;
+    if (currentEvent.plannedEndTime) {
+       const oldEnd = new Date(currentEvent.plannedEndTime);
+       const nE = new Date(now.getTime());
+       nE.setHours(oldEnd.getHours(), oldEnd.getMinutes(), 0, 0);
+       newEnd = nE.getTime();
+    }
+
+    return {
+      title: currentEvent.title,
+      description: currentEvent.description,
+      location: currentEvent.location,
+      participantGroupIds: currentEvent.participantGroupIds,
+      participantUserIds: currentEvent.participantUserIds,
+      status: 'PLANUNG',
+      seriesId: targetSeriesId,
+      plannedStartTime: newStart.getTime(),
+      plannedEndTime: newEnd,
+    };
+  }, [isEventModalOpen, currentEvent]);
+
+  // --- AB HIER DÜRFEN KEINE HOOKS MEHR KOMMEN ---
 
   if (!currentEvent) return <div className="p-8 text-center text-gray-500 animate-pulse">Lade Sitzung...</div>;
 
@@ -78,10 +113,10 @@ export const EventDetailView: React.FC = () => {
     const incompleteTasks = eventAgenda.filter(item => {
       if (item.type !== 'AUFGABE' || item.status === 'ERLEDIGT') return false;
       const hasAssignee = (item.assigneeUserIds && item.assigneeUserIds.length > 0) || (item.assigneeGroupIds && item.assigneeGroupIds.length > 0);
-      return !hasAssignee || (!item.dueDate && !item.isDueNextMeeting);
+      return !hasAssignee;
     });
     if (incompleteTasks.length > 0) {
-      alert(`Halt! Das Protokoll kann noch nicht geschlossen werden.\n\nFolgenden Aufgaben fehlt ein Verantwortlicher oder ein Fälligkeitsdatum:\n${incompleteTasks.map(t => `- ${t.title}`).join('\n')}\n\nBitte trage diese Infos nach!`);
+      alert(`Halt! Das Protokoll kann noch nicht geschlossen werden.\n\nFolgenden Aufgaben fehlt ein Verantwortlicher:\n${incompleteTasks.map(t => `- ${t.title}`).join('\n')}\n\nBitte weise diese Aufgaben jemandem zu!`);
       return false;
     }
     return true;
@@ -94,18 +129,6 @@ export const EventDetailView: React.FC = () => {
 
   let currentRunningTime = currentEvent.plannedStartTime || new Date().setHours(19, 0, 0, 0);
 
-  const rolloverTemplateEvent: Partial<Event> | undefined = isEventModalOpen && currentEvent.status === 'AKTIV' ? {
-    title: currentEvent.title,
-    description: currentEvent.description,
-    location: currentEvent.location,
-    participantGroupIds: currentEvent.participantGroupIds,
-    participantUserIds: currentEvent.participantUserIds,
-    status: 'PLANUNG',
-    seriesId: targetSeriesId,
-    plannedStartTime: currentEvent.plannedStartTime,
-    plannedEndTime: currentEvent.plannedEndTime,
-  } : undefined;
-
   return (
     <div className="h-full flex flex-col print:!bg-white print:!h-auto print:!block print:!w-full print:!m-0 print:!p-0">
       <div className="flex items-center justify-between mb-6 print:!mb-4">
@@ -113,8 +136,13 @@ export const EventDetailView: React.FC = () => {
           <button onClick={() => navigate('/events')} className="mr-4 text-gray-400 hover:text-blue-600 transition-colors print:!hidden print:!absolute print:!w-0 print:!h-0"><ArrowLeft className="w-6 h-6" /></button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-gray-900 print:!text-black">
+              <h1 className="text-2xl font-bold text-gray-900 print:!text-black flex items-center">
                 {currentEvent.title}
+                {!isReadOnly && (
+                  <button onClick={() => setIsEditEventModalOpen(true)} className="ml-3 p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors print:!hidden" title="Projekt / Sitzung bearbeiten">
+                    <Edit2 className="w-5 h-5" />
+                  </button>
+                )}
                 {currentEvent.status === 'PLANUNG' && !currentEvent.isPublished && <span className="ml-3 text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded uppercase print:!border print:!border-gray-400 print:!bg-transparent print:!text-gray-800">Entwurf</span>}
                 {currentEvent.status === 'PLANUNG' && currentEvent.isPublished && <span className="ml-3 text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded uppercase border border-purple-200 print:!border-gray-400 print:!text-gray-800 print:!bg-transparent">Agenda Veröffentlicht</span>}
                 {isReadOnly && <span className="ml-3 text-xs bg-gray-600 text-white px-2 py-1 rounded uppercase print:!border print:!border-gray-400 print:!text-gray-800 print:!bg-transparent">Versiegelt</span>}
@@ -155,6 +183,7 @@ export const EventDetailView: React.FC = () => {
           <button onClick={handlePrint} className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-gray-300" title="Drucken / PDF">
             <Printer className="w-5 h-5" />
           </button>
+          
           {!isReadOnly && currentEvent.status === 'PLANUNG' && !currentEvent.isPublished && <button onClick={() => updateEvent({ ...currentEvent, isPublished: true })} className="px-4 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 shadow-sm">Agenda veröffentlichen</button>}
           {!isReadOnly && currentEvent.status === 'PLANUNG' && currentEvent.isPublished && <button onClick={() => updateEvent({ ...currentEvent, status: 'AKTIV', isPublished: true })} className="px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 shadow-sm">Sitzung starten</button>}
           {!isReadOnly && (
@@ -181,7 +210,7 @@ export const EventDetailView: React.FC = () => {
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 shadow-sm print:!hidden print:!absolute print:!w-0 print:!h-0 print:!overflow-hidden print:!m-0 print:!p-0 print:!border-0">
                 <h3 className="font-bold text-red-800 mb-3 flex items-center">
                   <span className="w-2 h-2 rounded-full bg-red-600 mr-2 animate-pulse"></span>
-                  Protokollkontrolle: Offene Aufgaben
+                  Historische offene Aufgaben (Aus alten Protokollen)
                 </h3>
                 <div className="space-y-2">
                   {pastOpenTasks.map(t => (
@@ -240,18 +269,15 @@ export const EventDetailView: React.FC = () => {
                   })}
                 </div>
 
-                {!isReadOnly && (
+                {!isReadOnly && currentEvent.status === 'AKTIV' && (
                   <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between shadow-sm print:!hidden print:!absolute print:!w-0 print:!h-0 print:!overflow-hidden print:!m-0 print:!p-0 print:!border-0">
                     <div>
-                      <h3 className="text-lg font-bold text-blue-900 flex items-center"><Calendar className="w-5 h-5 mr-2 text-blue-700" />Protokoll Abschluss & Nächste Sitzung</h3>
+                      <h3 className="text-lg font-bold text-blue-900 flex items-center"><Calendar className="w-5 h-5 mr-2 text-blue-700" />Sitzung abschließen & Nächste Sitzung planen</h3>
+                      <p className="text-sm text-blue-700 mt-1">Protokoll wird versiegelt, offene Aufgaben & Routinen werden ins neue Meeting übernommen.</p>
                     </div>
                     <div className="flex flex-col items-center sm:items-end mt-4 sm:mt-0">
-                      {currentEvent.status === 'AKTIV' ? (
-                        <>
-                          <button onClick={() => { if (validateBeforeClose()) setIsEventModalOpen(true); }} className="px-5 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-sm whitespace-nowrap">Datum festlegen & Protokoll schließen</button>
-                          <button onClick={async () => { if (validateBeforeClose() && window.confirm('Projekt abschließen?')) await updateEvent({ ...currentEvent, status: 'ABGESCHLOSSEN', actualEndTime: Date.now() }); }} className="text-xs text-blue-600 hover:underline mt-2">Projekt abschließen</button>
-                        </>
-                      ) : currentEvent.status === 'PLANUNG' && <button onClick={() => setIsEventModalOpen(true)} className="px-5 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-sm whitespace-nowrap">Datum festlegen & anlegen</button>}
+                      <button onClick={() => { if (validateBeforeClose()) setIsEventModalOpen(true); }} className="px-5 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-sm whitespace-nowrap">Nächste Sitzung planen</button>
+                      <button onClick={async () => { if (validateBeforeClose() && window.confirm('Projekt abschließen?')) await updateEvent({ ...currentEvent, status: 'ABGESCHLOSSEN', actualEndTime: Date.now() }); }} className="text-xs text-blue-600 hover:underline mt-3">Projekt abschließen (Kein Folgetermin)</button>
                     </div>
                   </div>
                 )}
@@ -283,6 +309,20 @@ export const EventDetailView: React.FC = () => {
 
       <ItemFormModal key={editingItem ? editingItem.id : 'new'} isOpen={isModalOpen} existingItem={editingItem || { eventId: eventId, type: 'AGENDA' }} onClose={() => setIsModalOpen(false)} onSave={async (data) => { await saveAgendaItem({ ...data, eventId, ...( !editingItem ? { createdAt: Date.now() } : {}) }); if (eventId) fetchEventAgenda(eventId); setIsModalOpen(false); }} />
 
+      {isEditEventModalOpen && (
+        <EventFormModal 
+          isOpen={true} 
+          existingEvent={currentEvent}
+          onClose={() => setIsEditEventModalOpen(false)} 
+          onSave={async (data) => {
+            const result = await updateEvent(data);
+            if (!result?.success) throw new Error(result?.error?.message);
+            setIsEditEventModalOpen(false);
+            if (eventId) fetchEventDetails(eventId);
+          }} 
+        />
+      )}
+
       {isEventModalOpen && (
         <EventFormModal 
           isOpen={true} 
@@ -296,35 +336,46 @@ export const EventDetailView: React.FC = () => {
               await updateEvent({ ...currentEvent, status: 'ABGESCHLOSSEN', actualEndTime: Date.now() });
               
               const itemsToCopy = eventAgenda.filter(item => {
-                const isUnfinishedTask = item.type === 'AUFGABE' && item.status !== 'ERLEDIGT';
-                // CHIRURGISCHER EINGRIFF: Explizit auf true prüfen, damit auch wirklich JEDER Routinepunkt mitkommt!
-                const isRoutineItem = item.isRoutine === true; 
+                const isUnfinishedTask = item.type === 'AUFGABE' && item.status !== 'ERLEDIGT' && item.progress !== 100;
+                const isRoutineItem = item.isRoutine === true || String(item.isRoutine) === 'true'; 
                 return isUnfinishedTask || isRoutineItem;
               });
 
+              let delay = 0;
               for (const item of itemsToCopy) {
                 const { id, ...rest } = item; 
                 const newId = doc(collection(db, 'agenda_items')).id;
-                await saveAgendaItem({ 
+                
+                let newDueDate = item.dueDate;
+                if (item.type === 'AUFGABE') {
+                   if (item.isDueNextMeeting || !item.dueDate) {
+                      newDueDate = data.plannedStartTime;
+                   }
+                }
+
+                const isRoutine = item.isRoutine === true || String(item.isRoutine) === 'true';
+
+                const safePayload = { 
                   ...rest,
                   id: newId,
                   eventId: data.id, 
-                  status: item.isRoutine && item.type !== 'AUFGABE' ? 'OFFEN' : (item.isRoutine ? 'OFFEN' : item.status), 
-                  progress: item.isRoutine ? 0 : item.progress, 
-                  approvedBy: item.isRoutine ? [] : item.approvedBy,
-                  createdAt: Date.now(), 
+                  status: isRoutine && item.type !== 'AUFGABE' ? 'OFFEN' : (isRoutine ? 'OFFEN' : item.status), 
+                  progress: isRoutine ? 0 : item.progress, 
+                  approvedBy: isRoutine ? [] : item.approvedBy,
+                  createdAt: Date.now() + delay, 
                   isDueNextMeeting: false, 
-                  dueDate: item.isDueNextMeeting ? data.plannedStartTime : item.dueDate 
+                  dueDate: newDueDate 
+                };
+
+                Object.keys(safePayload).forEach(key => {
+                  if ((safePayload as any)[key] === undefined) {
+                    delete (safePayload as any)[key];
+                  }
                 });
+
+                await saveAgendaItem(safePayload);
+                delay += 100;
               }
-              
-            } else {
-               const itemsToUpdate = eventAgenda.filter(i => i.isDueNextMeeting);
-               if (itemsToUpdate.length > 0 && data.plannedStartTime) {
-                 for (const item of itemsToUpdate) {
-                   await saveAgendaItem({ ...item, isDueNextMeeting: false, dueDate: data.plannedStartTime });
-                 }
-               }
             }
             
             setIsEventModalOpen(false);
@@ -362,4 +413,4 @@ export const EventDetailView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 351
+// Exakte Zeilenzahl: 382
