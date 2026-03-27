@@ -15,15 +15,15 @@ export const AppLayout: React.FC = () => {
   const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/users', icon: Users, label: 'User & Gruppen' },
-    { to: '/events', icon: Calendar, label: 'Events & Sitzungen' },
+    { to: '/events', icon: Calendar, label: 'Projekte & Sitzungen' },
     { to: '/templates', icon: ClipboardList, label: 'Vorlagen & Routinen' },
     { to: '/todos', icon: CheckSquare, label: 'Meine ToDos' },
     { to: '/help', icon: BookOpen, label: 'Handbuch & Hilfe' },
   ];
 
   return (
-    <div className="flex h-screen bg-gray-100 flex-col md:flex-row">
-      <aside className="hidden md:flex flex-col w-64 bg-white shadow-md">
+    <div className="flex h-screen bg-gray-100 flex-col md:flex-row print:!h-auto print:!bg-white print:!block">
+      <aside className="hidden md:flex flex-col w-64 bg-white shadow-md print:!hidden print:!absolute print:!w-0 print:!h-0 print:!overflow-hidden print:!m-0 print:!p-0">
         <div className="p-4 border-b border-gray-200">
           <h1 className="text-xl font-bold text-blue-600">PapaToDo</h1>
           <div className="text-sm text-gray-500 mt-1">Hallo {user?.name || 'Vorstand'}</div>
@@ -55,11 +55,11 @@ export const AppLayout: React.FC = () => {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto p-4 md:p-8 md:pb-8 pb-24">
+      <main className="flex-1 overflow-y-auto p-4 md:p-8 md:pb-8 pb-24 print:!overflow-visible print:!p-0 print:!w-full print:!block print:!m-0">
         <Outlet />
       </main>
 
-      <nav className="md:hidden fixed bottom-0 w-full bg-white border-t border-gray-200 flex justify-around p-2 pb-safe shadow-lg z-50">
+      <nav className="md:hidden fixed bottom-0 w-full bg-white border-t border-gray-200 flex justify-around p-2 pb-safe shadow-lg z-50 print:!hidden print:!absolute print:!w-0 print:!h-0 print:!overflow-hidden">
         {navItems.map((item) => (
           <NavLink
             key={item.to}

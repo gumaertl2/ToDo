@@ -110,7 +110,7 @@ export interface AgendaItem extends BaseDocument {
   isDueNextMeeting?: boolean;
 
   isRoutine?: boolean;
-  routinePattern?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  routinePattern?: 'every_meeting' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
   routineEndDate?: number;
 
   postponedToDate?: number;

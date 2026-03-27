@@ -57,6 +57,12 @@ export const EventFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, exist
       return;
     }
 
+    // CHIRURGISCHER EINGRIFF: Datums-Validierung
+    if (!startDateStr) {
+      setError('Bitte wähle ein Datum für die Sitzung aus.');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       const eventId = existingEvent?.id || doc(collection(db, 'events')).id;
@@ -64,20 +70,31 @@ export const EventFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, exist
       let plannedStartTime: number | undefined = undefined;
       let plannedEndTime: number | undefined = undefined;
 
-      if (startDateStr) {
-        const startD = new Date(startDateStr);
-        if (startTimeStr) {
-          const [h, m] = startTimeStr.split(':').map(Number);
-          startD.setHours(h, m, 0, 0);
-        }
-        plannedStartTime = startD.getTime();
+      const startD = new Date(startDateStr);
+      if (startTimeStr) {
+        const [h, m] = startTimeStr.split(':').map(Number);
+        startD.setHours(h, m, 0, 0);
+      } else {
+        startD.setHours(0, 0, 0, 0);
+      }
+      plannedStartTime = startD.getTime();
 
-        if (endTimeStr) {
-          const endD = new Date(startDateStr);
-          const [h, m] = endTimeStr.split(':').map(Number);
-          endD.setHours(h, m, 0, 0);
-          plannedEndTime = endD.getTime();
-        }
+      if (endTimeStr) {
+        const endD = new Date(startDateStr);
+        const [h, m] = endTimeStr.split(':').map(Number);
+        endD.setHours(h, m, 0, 0);
+        plannedEndTime = endD.getTime();
+      }
+
+      // CHIRURGISCHER EINGRIFF: Wenn es ein Rollover (Folge-Meeting) ist, darf das Datum nicht in der Vergangenheit liegen
+      if (existingEvent?.seriesId && status === 'PLANUNG') {
+          const today = new Date();
+          today.setHours(0,0,0,0);
+          if (startD.getTime() < today.getTime()) {
+              setError('Das Datum für die neue Sitzung darf nicht in der Vergangenheit liegen. Bitte Datum anpassen.');
+              setIsSubmitting(false);
+              return;
+          }
       }
 
       const eventPayload: Event = {
@@ -93,6 +110,9 @@ export const EventFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, exist
         plannedStartTime,
         plannedEndTime,
         startDate: plannedStartTime,
+        // CHIRURGISCHER EINGRIFF: Die seriesId MUSS zwingend gerettet werden, sonst bricht die Kette ab!
+        seriesId: existingEvent?.seriesId || eventId,
+        isArchived: existingEvent?.isArchived || false,
       };
 
       const safePayload = Object.fromEntries(
@@ -147,7 +167,14 @@ export const EventFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, exist
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Datum</label>
-              <input type="date" value={startDateStr} onChange={e => setStartDateStr(e.target.value)} className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500" />
+              <input 
+                type="date" 
+                value={startDateStr} 
+                onChange={e => setStartDateStr(e.target.value)} 
+                min={existingEvent?.seriesId ? new Date().toISOString().substring(0,10) : undefined}
+                className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500" 
+                required 
+              />
             </div>
 
             <div className="flex gap-2">
@@ -209,4 +236,4 @@ export const EventFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, exist
     </div>
   );
 };
-// Exakte Zeilenzahl: 212
+// Exakte Zeilenzahl: 227

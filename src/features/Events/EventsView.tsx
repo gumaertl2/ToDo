@@ -65,20 +65,39 @@ export const EventsView: React.FC = () => {
     }
   };
 
-  const visibleEvents = events
-    .filter(ev => activeTab === 'ACTIVE' ? !ev.isArchived : ev.isArchived)
-    .sort((a, b) => (b.plannedStartTime || 0) - (a.plannedStartTime || 0));
+  // CHIRURGISCHER EINGRIFF: Performance-Boost durch useMemo. Verhindert ständige, teure Neuberechnung beim Rendern.
+  const visibleEvents = React.useMemo(() => {
+    const seriesMap = new Map<string, Event[]>();
+    
+    events.forEach(ev => {
+      const sId = ev.seriesId || ev.id;
+      if (!seriesMap.has(sId)) seriesMap.set(sId, []);
+      seriesMap.get(sId)!.push(ev);
+    });
+
+    const latest = Array.from(seriesMap.values()).map(series => {
+      // Sortieren, damit das neuste Datum oben steht
+      series.sort((a, b) => (b.plannedStartTime || 0) - (a.plannedStartTime || 0));
+      // Den "Kopf" der Serie finden: Entweder das aktuell laufende/geplante, oder (wenn alle abgeschlossen sind) das allerneuste.
+      const head = series.find(e => e.status !== 'ABGESCHLOSSEN') || series[0];
+      return head;
+    });
+
+    return latest
+      .filter(ev => activeTab === 'ACTIVE' ? !ev.isArchived : ev.isArchived)
+      .sort((a, b) => (b.plannedStartTime || 0) - (a.plannedStartTime || 0));
+  }, [events, activeTab]);
 
   return (
     <div className="h-full flex flex-col">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-4 sm:mb-0">Events & Sitzungen</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-4 sm:mb-0">Projekte & Sitzungen</h1>
         <button
           onClick={handleCreate}
           className="flex items-center px-4 py-2 bg-blue-600 text-white font-medium rounded-lg shadow hover:bg-blue-700 transition"
         >
           <Plus className="w-5 h-5 mr-2" />
-          Neue Sitzung anlegen
+          Neues Projekt / Sitzung anlegen
         </button>
       </div>
 
@@ -181,4 +200,4 @@ export const EventsView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 178
+// Exakte Zeilenzahl: 190

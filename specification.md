@@ -1,3 +1,4 @@
+// specification.md
 # Projektbeschreibung & Spezifikation: PapaToDo (PWA)
 
 > **MASTER-INSTRUKTION FÜR KI-KOLLABORATOREN:**
@@ -29,7 +30,7 @@ Die Anwendung wird als **Progressive Web App (PWA)** konzipiert. Sie funktionier
 
 ### A. Der fließende Workflow (Sitzungen & Protokolle)
 Die Anwendung nutzt keine starren Tabellen für Protokolle und Aufgaben, sondern ein fließendes "Chamäleon"-Konzept.
-* **Event vs. Sitzung & Serien:** Ein "Event" in der Datenbank entspricht exakt einer konkreten Sitzung an einem bestimmten Datum. Wiederkehrende Projekte (z. B. "Vorstandssitzung") werden über eine gemeinsame, unveränderliche `seriesId` gebündelt. Jede Sitzung behält so ihr eigenes, historisch sauberes Protokoll.
+* **Projekt (Serie) vs. Sitzung:** Ein "Projekt" (oder eine Sitzungsreihe) bildet den großen Container (z. B. "Gartenfest planen"). Technisch wird dies über eine gemeinsame, unveränderliche `seriesId` gebündelt. Eine "Sitzung" (`Event` in der Datenbank) ist der exakte, einzelne Termin (z. B. am 14.04.). Jede Sitzung behält so ihr eigenes, historisch sauberes Protokoll.
 * **Entwurfs-Modus (Publishing):** Eine neue Agenda startet im Entwurfs-Modus (Versteckt) und ist nur für den Ersteller sichtbar. Erst durch Klick auf "Veröffentlichen" sehen alle Teilnehmer die Agenda auf ihrem Dashboard und können vorab Kommentare eintragen.
 * **Der Chamäleon-Baustein:** Alles ist ein `AgendaItem`. Während der Sitzung ändert der Baustein fließend seinen Typ (`INFO`, `BESCHLUSS`, `AUFGABE`).
 * **Die Endlos-Kette (Sitzungs-Abschluss & Rollover):** Beim Schließen eines Protokolls greift ein Zwangsworkflow: Der Nutzer legt den Termin für die nächste Sitzung der Serie fest. Das System generiert die neue Sitzung, versiegelt das alte Protokoll revisionssicher (`isReadOnly` / "Abgeschlossen") und klont alle unerledigten Aufgaben sowie Routinen in das neue Event. Die Historie des alten Protokolls bleibt dabei zu 100 % erhalten.
@@ -49,7 +50,7 @@ Die Anwendung nutzt keine starren Tabellen für Protokolle und Aufgaben, sondern
 
 ### D. Menüstruktur & Navigation (App-Layout)
 * **👥 User & Gruppen Verwaltung:** Anlage von Vorständen/Helfern, Definition von Gruppen (z.B. Spieler, Abteilungsleitung) inkl. Stellenbeschreibungen.
-* **📅 Event Verwaltung & Sitzungen:** Übersicht offener Events/Serien, Agenda erstellen, Protokoll-Transformation.
+* **📅 Projekt & Sitzungen:** Übersicht offener Projekte/Serien, Agenda erstellen, Protokoll-Transformation.
 * **📋 Aufgaben- & Textbaustein Verwaltung:** Pflege der universellen Bausteine, Vorlagen und Kaskaden.
 * **✅ Meine ToDos & Reports:** Kanban-Board, Historien-Filter und ToDo-Listen abrufen.
 
@@ -76,8 +77,8 @@ Zur Minimierung unnötiger Lesezugriffe wird eine flache Struktur verwendet. Jed
 
 * **`users`:** ID, Name, Amt, Systemrolle (`ADMIN`, `VORSTAND`, `BEREICHSLEITER`), Kontaktdaten. **Zuordnung zu Gruppen:** Jeder User muss zu mindestens einer Gruppe gehören; Mehrfachzugehörigkeit zu mehreren Gruppen gleichzeitig ist zulässig (Array `groupIds: string[]`, Mindestelemente: 1).
 * **`helpers`:** ID, Name, Bezug, `consentConfirmed`, optionale Kontaktdaten, `lastActivityAt`, `retentionExpiresAt`.
-* **`events` (Die Sitzung / Der Container):** Titel, Ort, Typ (Einmalig/Wiederkehrend), Status (`PLANUNG`, `AKTIV`, `ABGESCHLOSSEN`). 
-  * *Workflow-Status:* `isPublished: boolean` (Entwurfs-Modus), `seriesId?: string` (Bündelung von Sitzungen zur historischen Projekt-Serie).
+* **`events` (Die einzelne Sitzung):** Titel, Ort, Typ (Einmalig/Wiederkehrend), Status (`PLANUNG`, `AKTIV`, `ABGESCHLOSSEN`). 
+  * *Workflow-Status:* `isPublished: boolean` (Entwurfs-Modus), `seriesId?: string` (Bündelung von Sitzungen zum übergeordneten Projekt / zur Serie).
   * *Teilnehmer:* `participantUserIds: string[]` (einzelne User) und `participantGroupIds: string[]` (ganze Gruppen).
   * *Zeiten:* Geplanter Beginn (`plannedStartTime`), Geplantes Ende (`plannedEndTime`), Tatsächliches Ende (`actualEndTime`).
   * *Wiederkehrend:* `recurrencePattern` (täglich/wöchentlich/monatlich/quartalsweise/jährlich), `startDate`, `endDate`, `occurrenceCount`.
@@ -147,3 +148,4 @@ Wenn ein neuer Projekt-Chat gestartet wird, gilt dieses Protokoll für die KI zw
 3. **Protokoll-Check:** Bestätige die Einhaltung des "Strict Code Integrity Protocols" (Chirurgen-Modus).
 4. **Keine UI in Core:** Beachte zwingend, dass alle UI-Interaktionen im Feature-Folder bleiben und alle Daten-Logiken in den Slices.
 5. **Typen-Sicherheit:** Verwende ausschließlich 100% TypeScript (Zero Any).
+// Exakte Zeilenzahl: 129

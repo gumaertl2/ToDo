@@ -43,7 +43,7 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
   );
   
   const [isRoutine, setIsRoutine] = useState(existingItem?.isRoutine || false);
-  const [routinePattern, setRoutinePattern] = useState<'weekly' | 'monthly' | 'quarterly' | 'yearly'>(existingItem?.routinePattern || 'monthly');
+  const [routinePattern, setRoutinePattern] = useState<'every_meeting' | 'weekly' | 'monthly' | 'quarterly' | 'yearly'>(existingItem?.routinePattern || 'every_meeting');
   const [routineEndDateStr, setRoutineEndDateStr] = useState(existingItem?.routineEndDate ? new Date(existingItem.routineEndDate).toISOString().substring(0,10) : '');
 
   const [approvedBy, setApprovedBy] = useState<string[]>(existingItem?.approvedBy || []);
@@ -110,15 +110,16 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
         payload.status = status;
         payload.progress = progress;
         if (dueDateStr && !isDueNextMeeting) payload.dueDate = new Date(dueDateStr).getTime();
-        
-        payload.isRoutine = isRoutine;
-        if (isRoutine) {
-          payload.routinePattern = routinePattern;
-          if (routineEndDateStr) payload.routineEndDate = new Date(routineEndDateStr).getTime();
-        } else {
-          payload.routinePattern = undefined;
-          payload.routineEndDate = undefined;
-        }
+      }
+
+      // CHIRURGISCHER EINGRIFF: Routinen sind nun für ALLE Typen gültig
+      payload.isRoutine = isRoutine;
+      if (isRoutine) {
+        payload.routinePattern = routinePattern;
+        if (routineEndDateStr) payload.routineEndDate = new Date(routineEndDateStr).getTime();
+      } else {
+        payload.routinePattern = undefined;
+        payload.routineEndDate = undefined;
       }
 
       if (type === 'BESCHLUSS') payload.approvedBy = approvedBy;
@@ -155,7 +156,6 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
                 <option value="BESCHLUSS">BESCHLUSS</option>
                 <option value="AUFGABE">AUFGABE</option>
               </select>
-              {/* CHIRURGISCHER EINGRIFF: Als Vorlage speichern */}
               {type !== 'VORLAGE' && (
                 <button onClick={handleSaveAsTemplate} disabled={isSubmitting} className="mt-1 flex items-center justify-center text-[10px] text-blue-600 font-bold hover:bg-blue-50 p-1 rounded border border-transparent hover:border-blue-200 transition-colors">
                   <Copy className="w-3 h-3 mr-1" /> Als Vorlage speichern
@@ -269,37 +269,38 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
             </div>
           )}
 
-          {type === 'AUFGABE' && (
-            <div className="border border-indigo-100 rounded-lg overflow-hidden">
-              <button onClick={() => setShowRoutine(!showRoutine)} className="w-full p-2 bg-indigo-50 text-indigo-800 text-xs font-bold flex justify-between items-center hover:bg-indigo-100">
-                <span>🔄 Wiederholung / Routine {isRoutine ? '(Aktiv)' : ''}</span>
-                {showRoutine ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-              </button>
-              {showRoutine && (
-                <div className="p-3 bg-white space-y-3">
-                  <label className="flex items-center text-sm font-medium text-gray-700">
-                    <input type="checkbox" checked={isRoutine} onChange={e => setIsRoutine(e.target.checked)} className="w-4 h-4 mr-2" />
-                    Ist eine wiederkehrende Routine
-                  </label>
-                  {isRoutine && (
-                    <div className="flex gap-3">
-                      <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Intervall</label>
-                        <select value={routinePattern} onChange={e => setRoutinePattern(e.target.value as any)} className="w-full p-1.5 text-sm border border-gray-300 rounded">
-                          <option value="weekly">Wöchentlich</option><option value="monthly">Monatlich</option><option value="quarterly">Quartalsweise</option><option value="yearly">Jährlich</option>
-                        </select>
-                      </div>
-                      <div className="flex-1">
-                        {/* CHIRURGISCHER EINGRIFF: Neues Label Ohne Ende */}
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Endet am (Leer = Ohne Ende)</label>
-                        <input type="date" min={todayStr} value={routineEndDateStr} onChange={e => setRoutineEndDateStr(e.target.value)} className="w-full p-1.5 text-sm border border-gray-300 rounded" />
-                      </div>
+          <div className="border border-indigo-100 rounded-lg overflow-hidden">
+            <button onClick={() => setShowRoutine(!showRoutine)} className="w-full p-2 bg-indigo-50 text-indigo-800 text-xs font-bold flex justify-between items-center hover:bg-indigo-100">
+              <span>🔄 Wiederholung / Routine {isRoutine ? '(Aktiv)' : ''}</span>
+              {showRoutine ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            </button>
+            {showRoutine && (
+              <div className="p-3 bg-white space-y-3">
+                <label className="flex items-center text-sm font-medium text-gray-700">
+                  <input type="checkbox" checked={isRoutine} onChange={e => setIsRoutine(e.target.checked)} className="w-4 h-4 mr-2" />
+                  Ist eine wiederkehrende Routine
+                </label>
+                {isRoutine && (
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Intervall</label>
+                      <select value={routinePattern} onChange={e => setRoutinePattern(e.target.value as any)} className="w-full p-1.5 text-sm border border-gray-300 rounded">
+                        <option value="every_meeting">Bei jeder Sitzung</option>
+                        <option value="weekly">Wöchentlich</option>
+                        <option value="monthly">Monatlich</option>
+                        <option value="quarterly">Quartalsweise</option>
+                        <option value="yearly">Jährlich</option>
+                      </select>
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Endet am (Leer = Ohne Ende)</label>
+                      <input type="date" min={todayStr} value={routineEndDateStr} onChange={e => setRoutineEndDateStr(e.target.value)} className="w-full p-1.5 text-sm border border-gray-300 rounded" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-2">
@@ -313,4 +314,4 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
     </div>
   );
 };
-// Exakte Zeilenzahl: 282
+// Exakte Zeilenzahl: 283
