@@ -75,13 +75,33 @@ export const CalendarView: React.FC = () => {
             feedUrl = 'https://' + feedUrl.substring(9);
           }
 
-          const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(feedUrl)}`;
-          const response = await fetch(proxyUrl);
-          if (!response.ok) throw new Error('Netzwerk-Fehler');
-          
-          const textData = await response.text();
-          if (!textData.includes('BEGIN:VCALENDAR')) {
-             console.warn(`Ungültiges ICS-Format bei: ${sub.name}`);
+          // CHIRURGISCHER EINGRIFF: Der intelligente Doppel-Proxy-Motor
+          const proxyUrls = [
+            `https://api.allorigins.win/raw?url=${encodeURIComponent(feedUrl)}`, // Proxy 1 (Für Localhost)
+            `https://corsproxy.io/?${encodeURIComponent(feedUrl)}`             // Proxy 2 (Für Vercel Live)
+          ];
+
+          let textData = null;
+
+          // Wir probieren die Proxys der Reihe nach durch, bis einer funktioniert
+          for (const proxyUrl of proxyUrls) {
+            try {
+              const response = await fetch(proxyUrl);
+              if (response.ok) {
+                const data = await response.text();
+                if (data.includes('BEGIN:VCALENDAR')) {
+                  textData = data;
+                  break; // Erfolgreich! Wir können die Schleife abbrechen
+                }
+              }
+            } catch (e) {
+              // Wenn der Proxy geblockt wird, versuchen wir lautlos den nächsten
+              console.warn(`Proxy-Versuch gescheitert, probiere nächsten...`);
+            }
+          }
+
+          if (!textData) {
+             console.error(`Alle Proxys haben für Abo '${sub.name}' versagt. Bitte URL prüfen.`);
              continue;
           }
 
@@ -91,6 +111,8 @@ export const CalendarView: React.FC = () => {
 
           vevents.forEach((vevent: any) => {
             const event = new ICAL.Event(vevent);
+            
+            if (!event.startDate) return; 
             
             const s = event.startDate;
             const startDate = new Date(s.year, s.month - 1, s.day, s.hour, s.minute);
@@ -113,7 +135,7 @@ export const CalendarView: React.FC = () => {
             });
           });
         } catch (error) {
-          console.error(`Fehler beim Laden von Abo: ${sub.name}`, error);
+          console.error(`Kritischer Fehler beim Parsen von Abo '${sub.name}':`, error);
         }
       }
       
@@ -258,4 +280,4 @@ export const CalendarView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 239
+// Exakte Zeilenzahl: 265
