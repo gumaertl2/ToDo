@@ -19,7 +19,7 @@ export interface CalendarSlice {
   deleteCalendarSubscription: (id: string) => Promise<Result<void>>;
 }
 
-export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSlice> = (set, get) => ({
+export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSlice> = (set) => ({
   calendarEvents: [],
   calendarSubscriptions: [],
   isCalendarLoading: false,

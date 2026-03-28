@@ -2,18 +2,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import type { Event as RBCEvent } from 'react-big-calendar';
-import format from 'date-fns/format';
-import parse from 'date-fns/parse';
-import startOfWeek from 'date-fns/startOfWeek';
-import getDay from 'date-fns/getDay';
-import de from 'date-fns/locale/de';
+import { format } from 'date-fns/format';
+import { parse } from 'date-fns/parse';
+import { startOfWeek } from 'date-fns/startOfWeek';
+import { getDay } from 'date-fns/getDay';
+import { de } from 'date-fns/locale/de';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { useClubStore } from '../../store/useClubStore';
 import { Plus, DownloadCloud, Globe } from 'lucide-react';
 import type { CalendarEvent } from '../../core/types/models';
 import { CalendarEventFormModal } from './CalendarEventFormModal';
 import { CalendarSubscriptionModal } from './CalendarSubscriptionModal';
-import { CalendarIcsDetailModal } from './CalendarIcsDetailModal'; // CHIRURGISCHER EINGRIFF: Neues Modal importiert
+import { CalendarIcsDetailModal } from './CalendarIcsDetailModal';
 import ICAL from 'ical.js';
 
 const locales = {
@@ -32,8 +32,8 @@ interface AdaptedEvent extends RBCEvent {
   id: string;
   sourceEvent?: CalendarEvent;
   color?: string;
-  description?: string; // CHIRURGISCHER EINGRIFF: Neues Feld für lange Texte
-  location?: string;    // CHIRURGISCHER EINGRIFF: Neues Feld für Orte
+  description?: string;
+  location?: string;
 }
 
 export const CalendarView: React.FC = () => {
@@ -47,7 +47,6 @@ export const CalendarView: React.FC = () => {
   
   const [isSubModalOpen, setIsSubModalOpen] = useState(false);
   
-  // CHIRURGISCHER EINGRIFF: State für das neue ICS Info-Fenster
   const [selectedIcsEvent, setSelectedIcsEvent] = useState<AdaptedEvent | undefined>(undefined);
   const [isIcsDetailModalOpen, setIsIcsDetailModalOpen] = useState(false);
   
@@ -102,7 +101,6 @@ export const CalendarView: React.FC = () => {
               endDate = new Date(e.year, e.month - 1, e.day, e.hour, e.minute);
             }
 
-            // CHIRURGISCHER EINGRIFF: Wir saugen description und location aus der Datei
             parsedEvents.push({
               id: `ics-${sub.id}-${event.uid}`,
               title: `${event.summary} (${sub.name})`,
@@ -159,7 +157,6 @@ export const CalendarView: React.FC = () => {
 
   const handleSelectEvent = (event: AdaptedEvent) => {
     if (event.id.startsWith('ics-')) {
-      // CHIRURGISCHER EINGRIFF: Statt des alerts öffnen wir das neue Info-Fenster
       setSelectedIcsEvent(event);
       setIsIcsDetailModalOpen(true);
       return;
@@ -252,7 +249,6 @@ export const CalendarView: React.FC = () => {
         <CalendarSubscriptionModal onClose={() => setIsSubModalOpen(false)} />
       )}
 
-      {/* CHIRURGISCHER EINGRIFF: Das neue Info-Fenster für externe Termine */}
       {isIcsDetailModalOpen && (
         <CalendarIcsDetailModal 
           event={selectedIcsEvent} 
