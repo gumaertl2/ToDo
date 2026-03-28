@@ -29,14 +29,16 @@ export const EventsView: React.FC = () => {
   };
 
   const handleDelete = async (id: string, title: string) => {
-    if (window.confirm(`Achtung: Möchtest du die Sitzung "${title}" inkl. ALLER zugehörigen Aufgaben und Protokolle unwiderruflich löschen?`)) {
+    // CHIRURGISCHER EINGRIFF: Wording geschärft, da nun das ganze Projekt gelöscht wird.
+    if (window.confirm(`Achtung: Möchtest du das gesamte Projekt "${title}" inkl. ALLER bisherigen Sitzungen, Aufgaben und Protokolle unwiderruflich löschen?`)) {
       await deleteEvent(id);
     }
   };
 
   const handleToggleArchive = async (ev: Event) => {
     const action = ev.isArchived ? 'wiederherstellen' : 'archivieren';
-    if (window.confirm(`Möchtest du dieses Event ${action}?`)) {
+    // CHIRURGISCHER EINGRIFF: Wording geschärft, da nun das ganze Projekt archiviert wird.
+    if (window.confirm(`Möchtest du das gesamte Projekt "${ev.title}" mit allen zugehörigen Sitzungen ${action}?`)) {
       await toggleArchiveEvent(ev.id, !ev.isArchived);
     }
   };
@@ -122,7 +124,6 @@ export const EventsView: React.FC = () => {
           </button>
         </div>
 
-        {/* CHIRURGISCHER EINGRIFF: Blockierenden Loading-Screen entfernt. Zeigt Daten sofort aus dem Cache. */}
         {isEventsLoading && visibleEvents.length === 0 ? (
           <div className="p-8 text-center text-gray-500 animate-pulse">Lade Projekte & Sitzungen...</div>
         ) : (

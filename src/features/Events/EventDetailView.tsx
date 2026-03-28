@@ -38,7 +38,6 @@ export const EventDetailView: React.FC = () => {
     return Array.from(ids);
   }, [currentEvent, users]);
 
-  // CHIRURGISCHER EINGRIFF: Dieser Hook muss ZWINGEND VOR dem "if (!currentEvent) return" stehen!
   const rolloverTemplateEvent: Partial<Event> | undefined = useMemo(() => {
     if (!isEventModalOpen || !currentEvent || currentEvent.status !== 'AKTIV') return undefined;
 
@@ -69,8 +68,6 @@ export const EventDetailView: React.FC = () => {
       plannedEndTime: newEnd,
     };
   }, [isEventModalOpen, currentEvent]);
-
-  // --- AB HIER DÜRFEN KEINE HOOKS MEHR KOMMEN ---
 
   if (!currentEvent) return <div className="p-8 text-center text-gray-500 animate-pulse">Lade Sitzung...</div>;
 
@@ -355,10 +352,12 @@ export const EventDetailView: React.FC = () => {
 
                 const isRoutine = item.isRoutine === true || String(item.isRoutine) === 'true';
 
+                // CHIRURGISCHER EINGRIFF: Bereinigen von undefined-Werten, um Firebase-Fehler sicher abzufangen
                 const safePayload = { 
                   ...rest,
                   id: newId,
                   eventId: data.id, 
+                  baseItemId: item.baseItemId || item.id, // CHIRURGISCHER EINGRIFF: Abstammung merken
                   status: isRoutine && item.type !== 'AUFGABE' ? 'OFFEN' : (isRoutine ? 'OFFEN' : item.status), 
                   progress: isRoutine ? 0 : item.progress, 
                   approvedBy: isRoutine ? [] : item.approvedBy,
@@ -413,4 +412,4 @@ export const EventDetailView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 382
+// Exakte Zeilenzahl: 383

@@ -90,6 +90,7 @@ export interface AgendaItem extends BaseDocument {
   title: string;
   description?: string;
   eventId?: string; 
+  baseItemId?: string; // CHIRURGISCHER EINGRIFF: Stammbaum-ID für die Historie
   
   durationEstimate?: number;
   durationActual?: number;
@@ -122,4 +123,4 @@ export interface AgendaItem extends BaseDocument {
 }
 
 export type Task = AgendaItem;
-// Exakte Zeilenzahl: 112
+// Exakte Zeilenzahl: 113

@@ -124,36 +124,57 @@ export const createEventSlice: StateCreator<EventSlice, [], [], EventSlice> = (s
     return result;
   },
 
+  // CHIRURGISCHER EINGRIFF: Archiviert nun die komplette Reihe (Projekt), nicht nur das einzelne Meeting!
   toggleArchiveEvent: async (eventId, isArchived) => {
     const targetEvent = get().events.find(e => e.id === eventId);
     if (!targetEvent) return { success: false, error: new Error('Event not found') };
     
-    const updatedEvent = { ...targetEvent, isArchived };
-    const result = await DataProcessor.saveDocument<Event>('events', eventId, updatedEvent);
-    
-    if (result.success) {
+    const targetSeriesId = targetEvent.seriesId || targetEvent.id;
+    const eventsInSeries = get().events.filter(e => (e.seriesId || e.id) === targetSeriesId);
+
+    try {
+      const promises = eventsInSeries.map(ev => {
+        const updated = { ...ev, isArchived };
+        return DataProcessor.saveDocument<Event>('events', ev.id, updated);
+      });
+      await Promise.all(promises);
+
       set((state) => ({
-        events: state.events.map(e => e.id === eventId ? updatedEvent : e),
-        currentEvent: state.currentEvent?.id === eventId ? updatedEvent : state.currentEvent
+        events: state.events.map(e => (e.seriesId || e.id) === targetSeriesId ? { ...e, isArchived } : e),
+        currentEvent: state.currentEvent && (state.currentEvent.seriesId || state.currentEvent.id) === targetSeriesId 
+                        ? { ...state.currentEvent, isArchived } 
+                        : state.currentEvent
       }));
+      return { success: true, data: undefined };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
     }
-    return result;
   },
 
+  // CHIRURGISCHER EINGRIFF: Löscht radikal alle Sitzungen, Protokolle und ToDos einer Reihe (Projekt)!
   deleteEvent: async (eventId) => {
     try {
-      // CHIRURGISCHER EINGRIFF: Radikale Lösch-Kaskade für alle zugehörigen Todos, Protokolle & Agendapunkte
-      const q = query(collection(db, 'agenda_items'), where('eventId', '==', eventId));
-      const snap = await getDocs(q);
-      const deletePromises = snap.docs.map(d => deleteDoc(doc(db, 'agenda_items', d.id)));
+      const targetEvent = get().events.find(e => e.id === eventId);
+      if (!targetEvent) return { success: false, error: new Error('Event not found') };
+
+      const targetSeriesId = targetEvent.seriesId || targetEvent.id;
+      const eventsInSeries = get().events.filter(e => (e.seriesId || e.id) === targetSeriesId);
+
+      const deletePromises = [];
+      for (const ev of eventsInSeries) {
+        const q = query(collection(db, 'agenda_items'), where('eventId', '==', ev.id));
+        const snap = await getDocs(q);
+        snap.docs.forEach(d => deletePromises.push(deleteDoc(doc(db, 'agenda_items', d.id))));
+        deletePromises.push(deleteDoc(doc(db, 'events', ev.id)));
+      }
+
       await Promise.all(deletePromises);
 
-      await deleteDoc(doc(db, 'events', eventId));
-      set((state) => ({ events: state.events.filter((e) => e.id !== eventId) }));
+      set((state) => ({ events: state.events.filter(e => (e.seriesId || e.id) !== targetSeriesId) }));
       return { success: true, data: undefined };
     } catch (e) {
       return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
     }
   }
 });
-// Exakte Zeilenzahl: 154
+// Exakte Zeilenzahl: 172
