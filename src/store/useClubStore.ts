@@ -10,8 +10,10 @@ import { createUserSlice } from './slices/createUserSlice';
 import type { UserSlice } from './slices/createUserSlice';
 import { createTemplateSlice } from './slices/createTemplateSlice';
 import type { TemplateSlice } from './slices/createTemplateSlice';
+import { createCalendarSlice } from './slices/createCalendarSlice';
+import type { CalendarSlice } from './slices/createCalendarSlice';
 
-export type StoreState = AuthSlice & TaskSlice & EventSlice & UserSlice & TemplateSlice;
+export type StoreState = AuthSlice & TaskSlice & EventSlice & UserSlice & TemplateSlice & CalendarSlice;
 
 export const useClubStore = create<StoreState>()((...a) => ({
   ...createAuthSlice(...a),
@@ -19,6 +21,7 @@ export const useClubStore = create<StoreState>()((...a) => ({
   ...createEventSlice(...a),
   ...createUserSlice(...a),
   ...createTemplateSlice(...a),
+  ...createCalendarSlice(...a),
 }));
 
-// Exakte Zeilenzahl: 13
+// Exakte Zeilenzahl: 25

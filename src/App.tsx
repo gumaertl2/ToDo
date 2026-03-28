@@ -7,6 +7,7 @@ import { AppLayout } from './features/Layout/AppLayout';
 import { useClubStore } from './store/useClubStore';
 
 import { DashboardView } from './features/Dashboard/DashboardView';
+import { CalendarView } from './features/Events/CalendarView'; // CHIRURGISCHER EINGRIFF: Kalender Import
 import { EventsView } from './features/Events/EventsView';
 import { EventDetailView } from './features/Events/EventDetailView';
 import { TasksView } from './features/Tasks/TasksView';
@@ -35,6 +36,7 @@ export default function App() {
           }
         >
           <Route index element={<DashboardView />} />
+          <Route path="calendar" element={<CalendarView />} /> {/* CHIRURGISCHER EINGRIFF: Kalender Route */}
           <Route path="users" element={<UsersView />} />
           <Route path="events" element={<EventsView />} />
           <Route path="events/:eventId" element={<EventDetailView />} />
@@ -46,4 +48,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
-// Exakte Zeilenzahl: 45
+// Exakte Zeilenzahl: 47

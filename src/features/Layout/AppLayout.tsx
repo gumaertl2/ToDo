@@ -1,7 +1,7 @@
 // src/features/Layout/AppLayout.tsx
 import React, { useEffect } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { Users, Calendar, ClipboardList, CheckSquare, LogOut, LayoutDashboard, BookOpen } from 'lucide-react';
+import { Users, Calendar, ClipboardList, CheckSquare, LogOut, LayoutDashboard, BookOpen, CalendarDays } from 'lucide-react';
 import { useClubStore } from '../../store/useClubStore';
 
 export const AppLayout: React.FC = () => {
@@ -14,6 +14,7 @@ export const AppLayout: React.FC = () => {
 
   const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/calendar', icon: CalendarDays, label: 'Vereinskalender' }, // CHIRURGISCHER EINGRIFF: Neuer Menüpunkt
     { to: '/users', icon: Users, label: 'User & Gruppen' },
     { to: '/events', icon: Calendar, label: 'Projekte & Sitzungen' },
     { to: '/templates', icon: ClipboardList, label: 'Vorlagen & Routinen' },
@@ -85,4 +86,4 @@ export const AppLayout: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 85
+// Exakte Zeilenzahl: 86

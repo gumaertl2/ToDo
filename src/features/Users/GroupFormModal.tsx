@@ -13,6 +13,7 @@ export const GroupFormModal: React.FC<Props> = ({ onClose, existingGroup }) => {
   const { createGroup, updateGroup } = useClubStore();
   const [name, setName] = useState(existingGroup?.name || '');
   const [description, setDescription] = useState(existingGroup?.description || '');
+  const [color, setColor] = useState(existingGroup?.color || '#3b82f6'); // CHIRURGISCHER EINGRIFF: Standard-Blau
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -30,6 +31,7 @@ export const GroupFormModal: React.FC<Props> = ({ onClose, existingGroup }) => {
       schemaVersion: '1.0',
       name: name.trim(),
       description: description.trim(),
+      color: color, // CHIRURGISCHER EINGRIFF: Farbe in die Firebase übergeben
     };
 
     try {
@@ -81,6 +83,18 @@ export const GroupFormModal: React.FC<Props> = ({ onClose, existingGroup }) => {
               className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
+          
+          {/* CHIRURGISCHER EINGRIFF: Farbauswahl */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Farbe für Kalender</label>
+            <div className="flex items-center gap-3">
+              <input 
+                type="color" value={color} onChange={(e) => setColor(e.target.value)} disabled={isSaving}
+                className="w-12 h-10 p-1 border border-gray-300 rounded cursor-pointer bg-white"
+              />
+              <span className="text-sm text-gray-500 font-mono uppercase">{color}</span>
+            </div>
+          </div>
         </div>
 
         <div className="p-6 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
@@ -97,4 +111,4 @@ export const GroupFormModal: React.FC<Props> = ({ onClose, existingGroup }) => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 99
+// Exakte Zeilenzahl: 111
