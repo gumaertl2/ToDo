@@ -32,6 +32,7 @@ export interface User extends BaseDocument {
 export interface Group extends BaseDocument {
   name: string;
   description?: string;
+  color?: string; // CHIRURGISCHER EINGRIFF: Farbe für das Kalender-Farbleitsystem
 }
 
 export interface Helper extends BaseDocument {
@@ -52,7 +53,7 @@ export interface ClubEvent extends BaseDocument {
   
   isPublished: boolean; 
   seriesId?: string;    
-  isArchived?: boolean; // CHIRURGISCHER EINGRIFF: Die Archiv-Funktion
+  isArchived?: boolean; 
   
   participantUserIds: string[];
   participantGroupIds: string[];
@@ -90,7 +91,7 @@ export interface AgendaItem extends BaseDocument {
   title: string;
   description?: string;
   eventId?: string; 
-  baseItemId?: string; // CHIRURGISCHER EINGRIFF: Stammbaum-ID für die Historie
+  baseItemId?: string; 
   
   durationEstimate?: number;
   durationActual?: number;
@@ -123,4 +124,24 @@ export interface AgendaItem extends BaseDocument {
 }
 
 export type Task = AgendaItem;
-// Exakte Zeilenzahl: 113
+
+// --- CHIRURGISCHER EINGRIFF: NEUE MODULE FÜR DEN VEREINSKALENDER ---
+
+export interface CalendarSubscription extends BaseDocument {
+  name: string;
+  url: string;
+  color: string;
+  isActive: boolean;
+}
+
+export interface CalendarEvent extends BaseDocument {
+  title: string;
+  startTime: number;
+  endTime?: number;
+  isAllDay: boolean;
+  location?: string;
+  description?: string;
+  color?: string;
+  isPublic: boolean;
+}
+// Exakte Zeilenzahl: 147
