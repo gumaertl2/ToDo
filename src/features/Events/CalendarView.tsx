@@ -1,5 +1,5 @@
 // src/features/Events/CalendarView.tsx
-// Version: 2026-03-29 | Code-Chirurg: Gemini
+// Version: 2026-03-29 | Fix: HideEmptyDays Toggle restored
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import type { Event as RBCEvent } from 'react-big-calendar';
@@ -47,7 +47,6 @@ export const CalendarView: React.FC = () => {
   const [currentView, setCurrentView] = useState<'month' | 'week' | 'day' | 'agenda'>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   
-  // Modals
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [selectedEventToEdit, setSelectedEventToEdit] = useState<CalendarEvent | undefined>(undefined);
   const [isSubModalOpen, setIsSubModalOpen] = useState(false);
@@ -57,8 +56,6 @@ export const CalendarView: React.FC = () => {
   const [isIcsDetailModalOpen, setIsIcsDetailModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  // CHIRURGISCHER EINGRIFF: State für Wischgesten
   const [touchStart, setTouchStart] = useState<number | null>(null);
 
   useEffect(() => { fetchCalendarData(); }, [fetchCalendarData]);
@@ -91,19 +88,13 @@ export const CalendarView: React.FC = () => {
     else setCurrentDate(addDays(currentDate, 1));
   };
 
-  // CHIRURGISCHER EINGRIFF: Touch-Logik zum Blättern
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStart(e.targetTouches[0].clientX);
-  };
-
+  const handleTouchStart = (e: React.TouchEvent) => { setTouchStart(e.targetTouches[0].clientX); };
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStart === null) return;
     const touchEnd = e.changedTouches[0].clientX;
     const diff = touchStart - touchEnd;
-
     if (diff > 70) handleNavNext();
     if (diff < -70) handleNavPrev();
-    
     setTouchStart(null);
   };
 
@@ -129,9 +120,7 @@ export const CalendarView: React.FC = () => {
     });
   }, [rbcEvents, activeFilters]);
 
-  const eventStyleGetter = (event: AdaptedEvent) => {
-    return { style: { backgroundColor: event.color || '#3b82f6', borderRadius: '6px', opacity: 0.9, color: 'white', border: 'none', display: 'block', cursor: 'pointer' } };
-  };
+  const eventStyleGetter = (event: AdaptedEvent) => ({ style: { backgroundColor: event.color || '#3b82f6', borderRadius: '6px', opacity: 0.9, color: 'white', border: 'none', display: 'block', cursor: 'pointer' } });
 
   const handleSelectEvent = (event: AdaptedEvent) => {
     if (event.id.startsWith('ics-')) { setSelectedIcsEvent(event); setIsIcsDetailModalOpen(true); return; }
@@ -197,7 +186,7 @@ export const CalendarView: React.FC = () => {
 
   const renderActionButtons = () => (
     <>
-      <button onClick={() => alert('Wird in Phase 4 gebaut: iFrame Link')} className="flex items-center w-full lg:w-auto px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-50 transition shadow-sm justify-center"><Globe className="w-4 h-4 mr-2 text-blue-500" /> Public Link</button>
+      <button onClick={() => alert('Phase 4: iFrame')} className="flex items-center w-full lg:w-auto px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-50 transition shadow-sm justify-center"><Globe className="w-4 h-4 mr-2 text-blue-500" /> Public Link</button>
       <button onClick={() => { setIsMobileMenuOpen(false); setIsExportModalOpen(true); }} className="flex items-center w-full lg:w-auto px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-50 transition shadow-sm justify-center"><Printer className="w-4 h-4 mr-2 text-gray-600" /> Export / Druck</button>
       <button onClick={() => { setIsMobileMenuOpen(false); setIsSubModalOpen(true); }} className="flex items-center w-full lg:w-auto px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-50 transition shadow-sm justify-center"><DownloadCloud className="w-4 h-4 mr-2 text-green-500" /> Abos</button>
       <button onClick={() => { setIsMobileMenuOpen(false); setSelectedSeriesId(undefined); setIsBulkModalOpen(true); }} className="flex items-center w-full lg:w-auto px-3 py-2 bg-orange-50 border border-orange-200 text-orange-700 text-sm font-bold rounded-lg hover:bg-orange-100 transition shadow-sm justify-center"><Settings className="w-4 h-4 mr-2 text-orange-600" /> Dienste</button>
@@ -211,6 +200,16 @@ export const CalendarView: React.FC = () => {
       <label className="flex items-center space-x-2 text-sm cursor-pointer"><input type="checkbox" checked={activeFilters.includes('manual')} onChange={() => toggleFilter('manual')} className="rounded w-4 h-4 text-blue-600 focus:ring-blue-500"/><span className="font-bold text-gray-700">Termine</span></label>
       <label className="flex items-center space-x-2 text-sm cursor-pointer"><input type="checkbox" checked={activeFilters.includes('dienste')} onChange={() => toggleFilter('dienste')} className="rounded w-4 h-4 text-orange-600 focus:ring-orange-500"/><span className="font-bold text-orange-600">Dienste</span></label>
       {calendarSubscriptions.filter(s => s.isActive).map(sub => (<label key={sub.id} className="flex items-center space-x-2 text-sm cursor-pointer"><input type="checkbox" checked={activeFilters.includes(sub.id)} onChange={() => toggleFilter(sub.id)} className="rounded w-4 h-4 focus:ring-blue-500" style={{ accentColor: sub.color || '#10b981' }}/><span className="font-bold" style={{ color: sub.color || '#10b981' }}>{sub.name}</span></label>))}
+      {/* CHIRURGISCHER EINGRIFF: Schalter wiederhergestellt */}
+      {currentView === 'agenda' && (
+        <>
+          <div className="hidden sm:block flex-1 min-w-[10px]"></div>
+          <label className="flex items-center space-x-2 text-sm cursor-pointer sm:border-l border-gray-200 sm:pl-4 mt-2 sm:mt-0 w-full sm:w-auto">
+            <input type="checkbox" checked={hideEmptyDays} onChange={(e) => setHideEmptyDays(e.target.checked)} className="rounded w-4 h-4 text-gray-600 focus:ring-gray-500"/>
+            <span className="text-gray-600 font-bold">Leere Tage ausblenden</span>
+          </label>
+        </>
+      )}
     </div>
   );
 
@@ -229,16 +228,13 @@ export const CalendarView: React.FC = () => {
         <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="lg:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-lg"><Menu className="w-6 h-6" /></button>
         <div className="hidden lg:flex flex-wrap items-center gap-2">{renderActionButtons()}</div>
       </div>
-
       {isMobileMenuOpen && (
         <div className="lg:hidden flex flex-col gap-3 p-4 bg-white rounded-xl shadow-lg border border-gray-200 z-20 absolute top-16 left-0 right-0">
           <div className="grid grid-cols-2 gap-2">{renderActionButtons()}</div>
           <div className="border-t border-gray-100 pt-3">{renderFilters()}</div>
         </div>
       )}
-
       <div className="hidden lg:block">{renderFilters()}</div>
-
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between bg-white p-2 rounded-xl shadow-sm border border-gray-200 gap-2">
         <div className="flex items-center justify-between sm:justify-start gap-1 flex-1">
           <button onClick={handleNavPrev} className="p-3 bg-gray-50 rounded-lg text-gray-700 border border-gray-200"><ChevronLeft className="w-5 h-5"/></button>
@@ -257,15 +253,11 @@ export const CalendarView: React.FC = () => {
           ))}
         </div>
       </div>
-
       <div 
         className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 p-2 sm:p-3 overflow-hidden flex flex-col min-h-[500px]"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
+        onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}
       >
-        {isCalendarLoading ? (
-          <div className="flex-1 flex items-center justify-center text-gray-400 animate-pulse">Lade...</div>
-        ) : (
+        {isCalendarLoading ? ( <div className="flex-1 flex items-center justify-center text-gray-400 animate-pulse">Lade...</div> ) : (
           <Calendar
             culture="de" localizer={localizer} events={filteredEvents} startAccessor="start" endAccessor="end"
             view={currentView} toolbar={false} onView={(view: any) => setCurrentView(view)}
@@ -277,7 +269,6 @@ export const CalendarView: React.FC = () => {
           />
         )}
       </div>
-
       {isEventModalOpen && <CalendarEventFormModal existingEvent={selectedEventToEdit} onClose={() => { setIsEventModalOpen(false); setSelectedEventToEdit(undefined); }} />}
       {isSubModalOpen && <CalendarSubscriptionModal onClose={() => setIsSubModalOpen(false)} />}
       {isIcsDetailModalOpen && <CalendarIcsDetailModal event={selectedIcsEvent} onClose={() => setIsIcsDetailModalOpen(false)} />}
@@ -286,4 +277,4 @@ export const CalendarView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 254
+// Exakte Zeilenzahl: 262
