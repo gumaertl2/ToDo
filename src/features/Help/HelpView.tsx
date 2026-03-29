@@ -1,6 +1,6 @@
 // src/features/Help/HelpView.tsx
 import React, { useState } from 'react';
-import { BookOpen, Target, Rocket, Calendar, ListTodo, ShieldCheck, ChevronDown, ChevronUp } from 'lucide-react';
+import { BookOpen, Target, Rocket, Calendar, ListTodo, ShieldCheck, ChevronDown, ChevronUp, Layers, Printer, Smartphone } from 'lucide-react';
 
 export const HelpView: React.FC = () => {
   const [openSection, setOpenSection] = useState<string | null>('vision');
@@ -83,7 +83,35 @@ export const HelpView: React.FC = () => {
           </div>
         </AccordionItem>
 
-        <AccordionItem id="meetings" title="Teil 3: Sitzungen & Protokolle führen" icon={Calendar}>
+        <AccordionItem id="calendar" title="Teil 3: Vereinskalender, Spielplan & Dienste" icon={Calendar}>
+          <div className="space-y-6">
+            <div>
+              <h4 className="font-bold text-gray-900 flex items-center"><Layers className="w-5 h-5 mr-2 text-blue-600" />Wie unterscheide ich Termine und Dienste?</h4>
+              <p className="mt-1 text-sm">Der Kalender unterscheidet zwischen einfachen Terminen (z. B. Vorstandssitzung) und Diensten. Dienste sind wiederkehrende Schicht- oder Dienstpläne (z. B. der wöchentliche Hallendienst). Mit dem <strong>Dienstplan-Generator</strong> kannst du eine ganze Serie für Monate im Voraus mit einem Klick anlegen und bearbeiten.</p>
+            </div>
+            <div>
+              <h4 className="font-bold text-gray-900 flex items-center"><ListTodo className="w-5 h-5 mr-2 text-blue-600" />Was ist der Spielplan?</h4>
+              <p className="mt-1 text-sm">Nutze in der Kalenderansicht den Schalter "Spielplan", um den Kalender in eine übersichtliche und kompakte Listenform zu verwandeln. Leere Tage ohne Termine kannst du einfach verstecken.</p>
+            </div>
+            <div>
+              <h4 className="font-bold text-gray-900 flex items-center"><Printer className="w-5 h-5 mr-2 text-blue-600" />Wie kann ich drucken oder exportieren?</h4>
+              <p className="mt-1 text-sm">Klicke in der Menüleiste auf <strong>"Export / Druck"</strong>. Wähle hier exakt aus, ob du Termine oder Dienste exportieren möchtest, stelle den Zeitraum ein und lade die Daten als ICS-Datei herunter oder drucke eine saubere A4-Liste.</p>
+            </div>
+          </div>
+        </AccordionItem>
+
+        <AccordionItem id="mobile" title="Teil 4: Mobile Bedienung & PWA" icon={Smartphone}>
+          <div className="space-y-4">
+            <p className="text-sm">PapaToDo ist als echte PWA (Progressive Web App) für dein Smartphone optimiert:</p>
+            <ul className="space-y-3 list-none pl-0 text-sm">
+              <li className="flex items-start"><strong className="mr-2 text-blue-600">• Wischgesten (Swipe):</strong> Wische im Kalender mit dem Finger nach links oder rechts, um zwischen den Monaten oder Wochen zu blättern.</li>
+              <li className="flex items-start"><strong className="mr-2 text-blue-600">• Datums-Sprung:</strong> Klicke im Kalender in der oberen Leiste direkt auf das Datum (z. B. "März 2026"). Es öffnet sich das Scrollrad deines Handys, um schnell in ein anderes Jahr zu springen.</li>
+              <li className="flex items-start"><strong className="mr-2 text-blue-600">• Quick-Home:</strong> Das Haus-Icon bringt dich im Kalender sofort zurück zum heutigen Tag.</li>
+            </ul>
+          </div>
+        </AccordionItem>
+
+        <AccordionItem id="meetings" title="Teil 5: Sitzungen & Protokolle führen" icon={Calendar}>
           <div className="space-y-6">
             <div>
               <h4 className="font-bold text-gray-900">Wie bereite ich ein neues Meeting vor?</h4>
@@ -105,7 +133,7 @@ export const HelpView: React.FC = () => {
           </div>
         </AccordionItem>
 
-        <AccordionItem id="tasks" title="Teil 4: Aufgaben & Helfer managen" icon={ListTodo}>
+        <AccordionItem id="tasks" title="Teil 6: Aufgaben & Helfer managen" icon={ListTodo}>
           <div className="space-y-6">
             <div>
               <h4 className="font-bold text-gray-900">Wie weise ich Aufgaben an externe Helfer zu?</h4>
@@ -118,7 +146,7 @@ export const HelpView: React.FC = () => {
           </div>
         </AccordionItem>
 
-        <AccordionItem id="security" title="Teil 5: Sicherheit & Datenschutz" icon={ShieldCheck}>
+        <AccordionItem id="security" title="Teil 7: Sicherheit & Datenschutz" icon={ShieldCheck}>
           <div>
             <h4 className="font-bold text-gray-900">Wie halte ich die Vereinsdaten DSGVO-konform sauber?</h4>
             <p className="mt-2 text-sm">Da externe Helfer oft nur für ein bestimmtes Fest aushelfen, speichert die App abgelaufene Helfer-Profile. Gehe als Admin im Bereich "Externe Helfer" auf den gelben Button <strong>"DSGVO-Bereinigung prüfen"</strong>. Die App zeigt dir alle "Karteileichen" an, die du mit einem Klick sicher und datenschutzkonform aus dem System löschen kannst.</p>
@@ -128,4 +156,4 @@ export const HelpView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 133
+// Exakte Zeilenzahl: 161

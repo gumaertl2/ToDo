@@ -34,6 +34,22 @@ Unter **"Meine ToDos"** findest du dein visuelles Aufgaben-Board.
 
 ## Teil 3: Das Nachschlagewerk (Wie mache ich was?)
 
+### 📅 Vereinskalender, Spielplan & Dienste
+**Wie unterscheide ich Termine und Dienste?**
+Der Kalender unterscheidet zwischen einfachen **Terminen** (z. B. Vorstandssitzung, Sommerfest) und **Diensten**. Dienste sind wiederkehrende Schicht- oder Dienstpläne (z. B. der wöchentliche Hallendienst). Mit dem **Dienstplan-Generator** kannst du eine ganze Serie für Monate im Voraus mit einem Klick anlegen. Klickst du später auf einen Termin aus dieser Serie, kannst du die gesamte Serie auf einmal bearbeiten!
+
+**Was ist der Spielplan?**
+Nutze oben rechts in der Kalenderansicht den Schalter "Spielplan", um den Kalender in eine extrem übersichtliche und kompakte Listenform zu verwandeln. Leere Tage ohne Termine kannst du über die Checkbox "Leere Tage ausblenden" einfach verstecken.
+
+**Wie kann ich den Kalender drucken oder exportieren?**
+Klicke in der Menüleiste auf **"Export / Druck"**. Es öffnet sich der Profi-Dialog: Wähle hier exakt aus, ob du nur Termine, nur Dienste oder beides exportieren möchtest. Stelle den gewünschten Zeitraum ein (z. B. das 2. Halbjahr) und lade die Daten entweder als ICS-Datei für dein Handy/Outlook herunter, oder drucke eine tintensparende, saubere A4-Liste für das schwarze Brett aus.
+
+### 📱 Mobile Bedienung & PWA
+PapaToDo ist als echte PWA (Progressive Web App) für dein Smartphone optimiert:
+* **Wischgesten (Swipe):** Du kannst im Kalender einfach mit dem Finger nach links oder rechts wischen, um entspannt zwischen den Monaten oder Wochen zu blättern.
+* **Datums-Sprung:** Klicke im Kalender in der oberen Leiste direkt auf das angezeigte Datum (z. B. "März 2026"). Daraufhin öffnet sich das native Datums-Scrollrad deines Handys und du kannst blitzschnell in ein ganz anderes Jahr springen.
+* **Quick-Home:** Das kleine Haus-Icon bringt dich jederzeit sofort zurück zum heutigen Tag.
+
 ### 📅 Sitzungen & Protokolle führen
 **Wie bereite ich ein neues Meeting vor?**
 Klicke in der Event-Übersicht auf "Neue Sitzung anlegen". Die Sitzung ist zunächst ein "Entwurf" und nur für dich sichtbar. Du kannst nun entspannt die Themen sammeln, Vorlagen importieren oder Kollegen als Verantwortliche eintragen. Bist du fertig, klicke auf "Agenda veröffentlichen", damit alle Teilnehmer sie auf ihrem Dashboard sehen und sich vorbereiten können.
