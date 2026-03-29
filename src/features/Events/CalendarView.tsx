@@ -15,7 +15,7 @@ import { addMonths } from 'date-fns/addMonths';
 import { subMonths } from 'date-fns/subMonths';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { useClubStore } from '../../store/useClubStore';
-import { Plus, DownloadCloud, Globe, LayoutGrid, List, ChevronLeft, ChevronRight, Calendar as CalIcon, Settings, Edit3 } from 'lucide-react';
+import { Plus, DownloadCloud, Globe, Settings, Edit3 } from 'lucide-react';
 import type { CalendarEvent } from '../../core/types/models';
 import { CalendarEventFormModal } from './CalendarEventFormModal';
 import { CalendarSubscriptionModal } from './CalendarSubscriptionModal';
@@ -41,17 +41,16 @@ interface AdaptedEvent extends RBCEvent {
   color?: string;
   description?: string;
   location?: string;
+  seriesId?: string;
 }
 
 export const CalendarView: React.FC = () => {
   const { calendarEvents, calendarSubscriptions, fetchCalendarData, isCalendarLoading } = useClubStore();
   
-  // CHIRURGISCHER EINGRIFF: Eigener Kalender-Titel (wird im LocalStorage des Browsers gespeichert)
   const [calendarTitle, setCalendarTitle] = useState(() => localStorage.getItem('papatodo_calendar_title') || 'Vereinskalender');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState('');
 
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [hideEmptyDays, setHideEmptyDays] = useState(true);
 
@@ -61,7 +60,11 @@ export const CalendarView: React.FC = () => {
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [selectedEventToEdit, setSelectedEventToEdit] = useState<CalendarEvent | undefined>(undefined);
   const [isSubModalOpen, setIsSubModalOpen] = useState(false);
+  
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  // CHIRURGISCHER EINGRIFF: State für die ausgewählte Serie
+  const [selectedSeriesId, setSelectedSeriesId] = useState<string | undefined>(undefined);
+  
   const [selectedIcsEvent, setSelectedIcsEvent] = useState<AdaptedEvent | undefined>(undefined);
   const [isIcsDetailModalOpen, setIsIcsDetailModalOpen] = useState(false);
 
@@ -69,9 +72,8 @@ export const CalendarView: React.FC = () => {
     fetchCalendarData();
   }, [fetchCalendarData]);
 
-  // Setzt die Filter am Anfang alle auf aktiv
   useEffect(() => {
-    const ids = ['manual', ...calendarSubscriptions.map(s => s.id)];
+    const ids = ['manual', 'dienste', ...calendarSubscriptions.map(s => s.id)];
     setActiveFilters(ids);
   }, [calendarSubscriptions]);
 
@@ -90,6 +92,7 @@ export const CalendarView: React.FC = () => {
     const internalEvents = calendarEvents.map(ev => ({
       id: ev.id,
       sourceId: 'manual',
+      seriesId: ev.seriesId,
       title: ev.title,
       description: ev.description || '',
       location: ev.location || '',
@@ -119,9 +122,14 @@ export const CalendarView: React.FC = () => {
     return [...internalEvents, ...cachedExternalEvents];
   }, [calendarEvents, calendarSubscriptions]);
 
-  // CHIRURGISCHER EINGRIFF: Globale Filterung VOR dem Rendern in Grid ODER Liste
   const filteredEvents = useMemo(() => {
-    return rbcEvents.filter(ev => activeFilters.includes(ev.sourceId));
+    return rbcEvents.filter(ev => {
+      if (ev.sourceId === 'manual') {
+        if (ev.seriesId) return activeFilters.includes('dienste');
+        return activeFilters.includes('manual');
+      }
+      return activeFilters.includes(ev.sourceId);
+    });
   }, [rbcEvents, activeFilters]);
 
   const eventStyleGetter = (event: AdaptedEvent) => {
@@ -146,33 +154,27 @@ export const CalendarView: React.FC = () => {
       return;
     }
     if (event.sourceEvent) {
-      setSelectedEventToEdit(event.sourceEvent);
-      setIsEventModalOpen(true);
+      // CHIRURGISCHER EINGRIFF: Die Weiche für Serien!
+      if (event.sourceEvent.seriesId) {
+        setSelectedSeriesId(event.sourceEvent.seriesId);
+        setIsBulkModalOpen(true);
+      } else {
+        setSelectedEventToEdit(event.sourceEvent);
+        setIsEventModalOpen(true);
+      }
     }
   };
 
-  const renderListView = () => {
-    const monthStart = startOfMonth(currentDate);
-    const monthEnd = endOfMonth(currentDate);
-    const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const CustomAgendaView = useMemo(() => {
+    const View = ({ date, events }: { date: Date, events: AdaptedEvent[] }) => {
+      const monthStart = startOfMonth(date);
+      const monthEnd = endOfMonth(date);
+      const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
-    return (
-      <div className="flex-1 flex flex-col bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-white">
-          <h2 className="text-lg font-bold text-gray-800 capitalize flex items-center">
-            <CalIcon className="w-5 h-5 mr-2 text-blue-600" />
-            {format(currentDate, 'MMMM yyyy', { locale: de })}
-          </h2>
-          <div className="flex items-center gap-1">
-            <button onClick={() => setCurrentDate(subMonths(currentDate, 1))} className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition"><ChevronLeft className="w-5 h-5" /></button>
-            <button onClick={() => setCurrentDate(new Date())} className="px-3 py-1 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition">Heute</button>
-            <button onClick={() => setCurrentDate(addMonths(currentDate, 1))} className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition"><ChevronRight className="w-5 h-5" /></button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/30">
+      return (
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/30 h-full">
           {daysInMonth.map(day => {
-            const dayEvents = filteredEvents.filter(e => {
+            const dayEvents = events.filter(e => {
               const eStart = startOfDay(e.start!);
               let exclusiveEnd = e.end || e.start!;
               if (e.allDay && exclusiveEnd.getTime() > e.start!.getTime()) {
@@ -224,16 +226,25 @@ export const CalendarView: React.FC = () => {
             );
           })}
         </div>
-      </div>
-    );
-  };
+      );
+    };
+
+    View.title = (date: Date) => format(date, 'MMMM yyyy', { locale: de });
+    View.navigate = (date: Date, action: string) => {
+      switch (action) {
+        case 'PREV': return subMonths(date, 1);
+        case 'NEXT': return addMonths(date, 1);
+        default: return new Date();
+      }
+    };
+
+    return View;
+  }, [hideEmptyDays]);
 
   return (
     <div className="h-full flex flex-col space-y-3">
-      {/* CHIRURGISCHER EINGRIFF: Kompaktere, aufgeräumte Header-Leiste */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white p-3 rounded-xl shadow-sm border border-gray-200">
         
-        {/* Der klickbare, speicherbare Titel */}
         <div className="flex-1">
           {isEditingTitle ? (
             <input
@@ -260,25 +271,6 @@ export const CalendarView: React.FC = () => {
         </div>
         
         <div className="flex flex-wrap items-center gap-2">
-          {/* Umschalter für die Ansicht */}
-          <div className="flex bg-gray-100 p-1 rounded-lg">
-            <button 
-              onClick={() => setViewMode('grid')}
-              className={`flex items-center px-3 py-1.5 rounded text-xs font-bold transition ${viewMode === 'grid' ? 'bg-white shadow-sm text-blue-700' : 'text-gray-500 hover:text-gray-800'}`}
-            >
-              <LayoutGrid className="w-4 h-4 mr-1.5" /> Kalender
-            </button>
-            <button 
-              onClick={() => setViewMode('list')}
-              className={`flex items-center px-3 py-1.5 rounded text-xs font-bold transition ${viewMode === 'list' ? 'bg-white shadow-sm text-blue-700' : 'text-gray-500 hover:text-gray-800'}`}
-            >
-              <List className="w-4 h-4 mr-1.5" /> Spielplan
-            </button>
-          </div>
-
-          <div className="w-px h-6 bg-gray-200 hidden sm:block mx-1"></div>
-
-          {/* Kompaktere Aktions-Buttons */}
           <button 
             onClick={() => alert('Wird in Phase 4 gebaut: Generiert den iFrame-Link für die Homepage!')}
             className="flex items-center px-2.5 py-1.5 bg-white border border-gray-300 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-50 transition shadow-sm"
@@ -292,7 +284,7 @@ export const CalendarView: React.FC = () => {
             <DownloadCloud className="w-3.5 h-3.5 mr-1.5 text-green-500" /> Abos
           </button>
           <button 
-            onClick={() => setIsBulkModalOpen(true)}
+            onClick={() => { setSelectedSeriesId(undefined); setIsBulkModalOpen(true); }}
             className="flex items-center px-2.5 py-1.5 bg-orange-50 border border-orange-200 text-orange-700 text-xs font-bold rounded-lg hover:bg-orange-100 transition shadow-sm"
             title="Dienstpläne (z.B. Hallendienst) wochenweise generieren"
           >
@@ -307,12 +299,16 @@ export const CalendarView: React.FC = () => {
         </div>
       </div>
 
-      {/* CHIRURGISCHER EINGRIFF: Die globale Filter-Leiste (gilt jetzt für Grid UND Liste) */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 bg-white px-4 py-2.5 rounded-xl border border-gray-200 shadow-sm">
         <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Ansicht:</span>
         <label className="flex items-center space-x-1.5 text-xs cursor-pointer">
           <input type="checkbox" checked={activeFilters.includes('manual')} onChange={() => toggleFilter('manual')} className="rounded w-3.5 h-3.5 text-blue-600 focus:ring-blue-500"/>
-          <span className="font-bold text-gray-700">Interne Termine</span>
+          <span className="font-bold text-gray-700">Termine</span>
+        </label>
+        
+        <label className="flex items-center space-x-1.5 text-xs cursor-pointer">
+          <input type="checkbox" checked={activeFilters.includes('dienste')} onChange={() => toggleFilter('dienste')} className="rounded w-3.5 h-3.5 text-orange-600 focus:ring-orange-500"/>
+          <span className="font-bold text-orange-600">Dienste</span>
         </label>
         
         {calendarSubscriptions.filter(s => s.isActive).map(sub => (
@@ -322,7 +318,7 @@ export const CalendarView: React.FC = () => {
           </label>
         ))}
         
-        {viewMode === 'list' && (
+        {currentView === 'agenda' && (
           <>
             <div className="flex-1 min-w-[10px]"></div>
             <label className="flex items-center space-x-1.5 text-xs cursor-pointer sm:border-l border-gray-200 sm:pl-4">
@@ -338,52 +334,49 @@ export const CalendarView: React.FC = () => {
           Lade Vereinskalender...
         </div>
       ) : (
-        <>
-          {viewMode === 'grid' ? (
-            <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 p-3 overflow-hidden flex flex-col min-h-[500px]">
-              <Calendar
-                culture="de"
-                localizer={localizer}
-                events={filteredEvents} // CHIRURGISCHER EINGRIFF: Nutzt jetzt die global gefilterten Events!
-                startAccessor="start"
-                endAccessor="end"
-                view={currentView}
-                onView={(view: any) => setCurrentView(view)}
-                date={currentDate}
-                onNavigate={(date) => setCurrentDate(date)}
-                eventPropGetter={eventStyleGetter}
-                onSelectEvent={handleSelectEvent}
-                popup 
-                messages={{
-                  next: "Vor",
-                  previous: "Zurück",
-                  today: "Heute",
-                  month: "Monat",
-                  week: "Woche",
-                  day: "Tag",
-                  agenda: "Agenda",
-                  noEventsInRange: "Keine Termine in diesem Zeitraum.",
-                  showMore: (total) => `+${total} weitere` 
-                }}
-                className="font-sans text-gray-700 text-sm"
-              />
-            </div>
-          ) : (
-            renderListView()
-          )}
-        </>
+        <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 p-3 overflow-hidden flex flex-col min-h-[500px]">
+          <Calendar
+            culture="de"
+            localizer={localizer}
+            events={filteredEvents} 
+            startAccessor="start"
+            endAccessor="end"
+            view={currentView}
+            onView={(view: any) => setCurrentView(view)}
+            views={{ month: true, week: true, day: true, agenda: CustomAgendaView }}
+            date={currentDate}
+            onNavigate={(date) => setCurrentDate(date)}
+            eventPropGetter={eventStyleGetter}
+            onSelectEvent={handleSelectEvent}
+            popup 
+            messages={{
+              next: "Vor",
+              previous: "Zurück",
+              today: "Heute",
+              month: "Monat",
+              week: "Woche",
+              day: "Tag",
+              agenda: "Spielplan", 
+              noEventsInRange: "Keine Termine in diesem Zeitraum.",
+              showMore: (total) => `+${total} weitere` 
+            }}
+            className="font-sans text-gray-700 text-sm"
+          />
+        </div>
       )}
 
-      {isEventModalOpen && (
-        <CalendarEventFormModal 
-          existingEvent={selectedEventToEdit} 
-          onClose={() => { setIsEventModalOpen(false); setSelectedEventToEdit(undefined); }} 
-        />
-      )}
+      {isEventModalOpen && <CalendarEventFormModal existingEvent={selectedEventToEdit} onClose={() => { setIsEventModalOpen(false); setSelectedEventToEdit(undefined); }} />}
       {isSubModalOpen && <CalendarSubscriptionModal onClose={() => setIsSubModalOpen(false)} />}
       {isIcsDetailModalOpen && <CalendarIcsDetailModal event={selectedIcsEvent} onClose={() => setIsIcsDetailModalOpen(false)} />}
-      {isBulkModalOpen && <CalendarBulkEventModal onClose={() => setIsBulkModalOpen(false)} />}
+      
+      {/* CHIRURGISCHER EINGRIFF: Bulk Modal mit bestehender ID aufrufen */}
+      {isBulkModalOpen && (
+        <CalendarBulkEventModal 
+          existingSeriesId={selectedSeriesId} 
+          onClose={() => { setIsBulkModalOpen(false); setSelectedSeriesId(undefined); }} 
+        />
+      )}
     </div>
   );
 };
-// Exakte Zeilenzahl: 388
+// Exakte Zeilenzahl: 346

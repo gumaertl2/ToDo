@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import type { CalendarEvent } from '../../core/types/models';
-import { X, Save, AlertCircle, Globe, Trash2, Layers } from 'lucide-react'; // CHIRURGISCHER EINGRIFF: Layers Icon
+import { X, Save, AlertCircle, Globe, Trash2, Layers, Info } from 'lucide-react';
 
 interface Props {
   onClose: () => void;
@@ -10,7 +10,7 @@ interface Props {
 }
 
 export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent }) => {
-  const { addCalendarEvent, updateCalendarEvent, deleteCalendarEvent, deleteCalendarSeries } = useClubStore(); // CHIRURGISCHER EINGRIFF: deleteCalendarSeries
+  const { addCalendarEvent, updateCalendarEvent, deleteCalendarEvent, deleteCalendarSeries } = useClubStore();
   
   const initStart = existingEvent ? new Date(existingEvent.startTime) : new Date();
   const initEnd = existingEvent?.endTime ? new Date(existingEvent.endTime) : new Date(initStart.getTime() + 2 * 60 * 60 * 1000);
@@ -58,7 +58,7 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
       isAllDay,
       color,
       isPublic,
-      seriesId: existingEvent?.seriesId, // CHIRURGISCHER EINGRIFF: Erhalte die Serien-ID beim Bearbeiten
+      seriesId: existingEvent?.seriesId,
     };
 
     const result = existingEvent 
@@ -82,10 +82,9 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
     }
   };
 
-  // CHIRURGISCHER EINGRIFF: Löschen der kompletten Serie
   const handleDeleteSeries = async () => {
     if (!existingEvent?.seriesId) return;
-    if (window.confirm('Achtung: Möchtest du wirklich ALLE Termine aus diesem Dienstplan (Serie) löschen?')) {
+    if (window.confirm('Achtung: Möchtest du wirklich ALLE Termine aus diesem gesamten Dienstplan löschen?')) {
       setIsSaving(true);
       await deleteCalendarSeries(existingEvent.seriesId);
       onClose();
@@ -96,7 +95,7 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
     <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col">
         <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-gray-50">
-          <h2 className="text-xl font-bold text-gray-900">{existingEvent ? 'Termin bearbeiten' : 'Neuer Kalender-Termin'}</h2>
+          <h2 className="text-xl font-bold text-gray-900">{existingEvent ? 'Termin bearbeiten' : 'Neuer Termin'}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600" disabled={isSaving}>
             <X className="w-6 h-6" />
           </button>
@@ -110,14 +109,21 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
              </div>
           )}
 
+          {/* CHIRURGISCHER EINGRIFF: Optimierte Info-Box für Serien/Dienste */}
           {existingEvent?.seriesId && (
-            <div className="bg-orange-50 border border-orange-100 p-3 rounded-lg flex items-center text-orange-800 text-sm mb-2">
-              <Layers className="w-4 h-4 mr-2" /> Dieser Termin ist Teil eines generierten Dienstplans.
+            <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg space-y-2 mb-2">
+              <div className="flex items-center text-blue-800 font-bold text-sm">
+                <Layers className="w-4 h-4 mr-2" /> Dieser Termin gehört zu einem Dienstplan.
+              </div>
+              <p className="text-xs text-blue-700 leading-relaxed flex items-start">
+                <Info className="w-3 h-3 mr-1.5 mt-0.5 shrink-0" />
+                Du kannst hier einfach den Namen oder die Zeit ändern und <strong>Speichern</strong> drücken. Das System ändert dann <strong>nur diesen einen Termin</strong>. Der Rest des Dienstplans bleibt unverändert.
+              </p>
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Titel des Termins</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Titel</label>
             <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} disabled={isSaving} className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500" placeholder="z.B. Hallenputz" />
           </div>
 
@@ -157,15 +163,15 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
               <label className="block text-sm font-medium text-gray-700 mb-1">Anzeigefarbe</label>
               <div className="flex items-center gap-2">
                 <input type="color" value={color} onChange={(e) => setColor(e.target.value)} disabled={isSaving} className="w-10 h-10 p-1 border border-gray-300 rounded cursor-pointer" />
-                <span className="text-xs text-gray-500 font-mono">{color}</span>
+                <span className="text-xs text-gray-500 font-mono uppercase">{color}</span>
               </div>
             </div>
             <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Öffentlich sichtbar?</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Sichtbarkeit</label>
               <div className="flex items-center mt-2">
                 <input type="checkbox" id="isPublic" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} className="mr-2 rounded text-blue-600 focus:ring-blue-500" disabled={isSaving} />
                 <label htmlFor="isPublic" className="text-sm text-gray-600 flex items-center">
-                  <Globe className="w-3 h-3 mr-1" /> Ja, auf Homepage zeigen
+                  <Globe className="w-3 h-3 mr-1" /> Auf Homepage zeigen
                 </label>
               </div>
             </div>
@@ -175,22 +181,22 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
         <div className="p-4 border-t border-gray-200 bg-gray-50 flex flex-wrap justify-between gap-3">
           {existingEvent ? (
             <div className="flex gap-2">
-              <button onClick={handleDelete} disabled={isSaving} className="flex items-center px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium transition text-sm">
+              <button onClick={handleDelete} disabled={isSaving} className="flex items-center px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-bold transition text-xs">
                 <Trash2 className="w-4 h-4 mr-1" /> Löschen
               </button>
               {existingEvent.seriesId && (
-                <button onClick={handleDeleteSeries} disabled={isSaving} className="flex items-center px-3 py-2 text-orange-600 hover:bg-orange-50 rounded-lg font-medium transition text-sm" title="Die gesamte generierte Serie löschen">
-                  <Layers className="w-4 h-4 mr-1" /> Serie löschen
+                <button onClick={handleDeleteSeries} disabled={isSaving} className="flex items-center px-3 py-2 text-orange-600 hover:bg-orange-50 rounded-lg font-bold transition text-xs">
+                  <Layers className="w-4 h-4 mr-1" /> Ganze Serie löschen
                 </button>
               )}
             </div>
           ) : <div></div>}
           
           <div className="flex gap-3">
-            <button onClick={onClose} disabled={isSaving} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium">Abbrechen</button>
-            <button onClick={handleSave} disabled={isSaving} className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium transition">
+            <button onClick={onClose} disabled={isSaving} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-bold text-sm">Abbrechen</button>
+            <button onClick={handleSave} disabled={isSaving} className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-bold text-sm transition">
               <Save className="w-4 h-4 mr-2" />
-              {isSaving ? 'Speichert...' : 'Speichern'}
+              {isSaving ? 'Lädt...' : 'Speichern'}
             </button>
           </div>
         </div>
@@ -198,4 +204,4 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
     </div>
   );
 };
-// Exakte Zeilenzahl: 182
+// Exakte Zeilenzahl: 191

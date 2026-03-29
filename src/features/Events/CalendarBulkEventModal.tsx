@@ -1,8 +1,8 @@
 // src/features/Events/CalendarBulkEventModal.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import type { CalendarEvent } from '../../core/types/models';
-import { X, Save, AlertCircle, Globe, Calendar as CalIcon } from 'lucide-react';
+import { X, Save, AlertCircle, Globe, Calendar as CalIcon, Trash2 } from 'lucide-react';
 import { startOfWeek } from 'date-fns/startOfWeek';
 import { endOfWeek } from 'date-fns/endOfWeek';
 import { addWeeks } from 'date-fns/addWeeks';
@@ -11,27 +11,61 @@ import { de } from 'date-fns/locale/de';
 
 interface Props {
   onClose: () => void;
+  existingSeriesId?: string; // CHIRURGISCHER EINGRIFF: Die ID zum Laden der alten Daten
 }
 
-export const CalendarBulkEventModal: React.FC<Props> = ({ onClose }) => {
-  const { addCalendarEventsBulk } = useClubStore();
+export const CalendarBulkEventModal: React.FC<Props> = ({ onClose, existingSeriesId }) => {
+  const { calendarEvents, addCalendarEventsBulk, deleteCalendarSeries } = useClubStore();
   
   const pad = (n: number) => String(n).padStart(2, '0');
   const initStart = new Date();
-  const initEnd = addWeeks(initStart, 4); // Standard: 4 Wochen im Voraus
+  const initEnd = addWeeks(initStart, 4); 
   const fDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
   const [baseTitle, setBaseTitle] = useState('Hallendienst');
   const [startDate, setStartDate] = useState(fDate(initStart));
   const [endDate, setEndDate] = useState(fDate(initEnd));
-  const [color, setColor] = useState('#f97316'); // Standard-Orange für Dienste
+  const [color, setColor] = useState('#f97316'); 
   const [isPublic, setIsPublic] = useState(true);
   
   const [assignments, setAssignments] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // CHIRURGISCHER EINGRIFF: Berechnet alle Kalenderwochen zwischen Start und Ende
+  // CHIRURGISCHER EINGRIFF: Lädt die bestehenden Daten, falls wir im Bearbeitungs-Modus sind
+  useEffect(() => {
+    if (existingSeriesId) {
+      const seriesEvents = calendarEvents.filter(e => e.seriesId === existingSeriesId);
+      if (seriesEvents.length > 0) {
+        seriesEvents.sort((a, b) => a.startTime - b.startTime);
+        const first = seriesEvents[0];
+        const last = seriesEvents[seriesEvents.length - 1];
+
+        setStartDate(fDate(new Date(first.startTime)));
+        setEndDate(fDate(new Date(last.endTime)));
+        setColor(first.color || '#f97316');
+        setIsPublic(first.isPublic);
+
+        let bTitle = 'Hallendienst';
+        if (first.title.includes(': ')) {
+          bTitle = first.title.split(': ')[0];
+        } else {
+          bTitle = first.title; // Fallback
+        }
+        setBaseTitle(bTitle);
+
+        const loaded: Record<string, string> = {};
+        seriesEvents.forEach(ev => {
+          const weekDate = startOfWeek(new Date(ev.startTime), { weekStartsOn: 1 });
+          const wId = weekDate.toISOString();
+          const parts = ev.title.split(': ');
+          loaded[wId] = parts.length > 1 ? parts.slice(1).join(': ') : ev.title;
+        });
+        setAssignments(loaded);
+      }
+    }
+  }, [existingSeriesId, calendarEvents]);
+
   const weeks = useMemo(() => {
     const start = new Date(startDate);
     const end = new Date(endDate);
@@ -48,7 +82,7 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose }) => {
         start: current,
         end: weekEnd,
         label: `${format(current, 'dd.MM.', { locale: de })} - ${format(weekEnd, 'dd.MM.yyyy', { locale: de })}`,
-        kw: format(current, 'I', { locale: de }) // Kalenderwoche
+        kw: format(current, 'I', { locale: de }) 
       });
       current = addWeeks(current, 1);
     }
@@ -65,8 +99,8 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose }) => {
       return;
     }
 
+    const targetSeriesId = existingSeriesId || `series-${Date.now()}`;
     const eventsToCreate: CalendarEvent[] = [];
-    const seriesId = `series-${Date.now()}`;
 
     weeks.forEach((week, index) => {
       const assignee = assignments[week.id]?.trim();
@@ -77,10 +111,10 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose }) => {
           title: `${baseTitle.trim()}: ${assignee}`,
           startTime: week.start.getTime(),
           endTime: week.end.getTime(),
-          isAllDay: true, // Dienstplan gilt immer für die ganze Woche ganztägig
+          isAllDay: true, 
           color,
           isPublic,
-          seriesId, // Verbindet alle Termine zu einer löschbaren Kette
+          seriesId: targetSeriesId, 
         });
       }
     });
@@ -93,6 +127,11 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose }) => {
     setIsSaving(true);
     setError(null);
 
+    // Wenn wir bearbeiten, löschen wir erst die alte Serie, dann speichern wir die neue
+    if (existingSeriesId) {
+      await deleteCalendarSeries(existingSeriesId);
+    }
+
     const result = await addCalendarEventsBulk(eventsToCreate);
     if (result.success) {
       onClose();
@@ -102,13 +141,22 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose }) => {
     }
   };
 
+  const handleDeleteSeries = async () => {
+    if (!existingSeriesId) return;
+    if (window.confirm('Möchtest du diesen kompletten Dienstplan wirklich löschen?')) {
+      setIsSaving(true);
+      await deleteCalendarSeries(existingSeriesId);
+      onClose();
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
         <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-gray-50">
           <h2 className="text-xl font-bold text-gray-900 flex items-center">
             <CalIcon className="w-5 h-5 mr-2 text-orange-500" />
-            Dienstplan Generator
+            {existingSeriesId ? 'Dienstplan bearbeiten' : 'Dienstplan Generator'}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600" disabled={isSaving}>
             <X className="w-6 h-6" />
@@ -185,15 +233,23 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose }) => {
           </div>
         </div>
 
-        <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
-          <button onClick={onClose} disabled={isSaving} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium">Abbrechen</button>
-          <button onClick={handleSave} disabled={isSaving || weeks.length === 0} className="flex items-center px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 font-medium transition">
-            <Save className="w-4 h-4 mr-2" />
-            {isSaving ? 'Erstellt...' : 'Dienstplan generieren'}
-          </button>
+        <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between gap-3">
+          {existingSeriesId ? (
+            <button onClick={handleDeleteSeries} disabled={isSaving} className="flex items-center px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-bold text-sm transition">
+              <Trash2 className="w-4 h-4 mr-2" /> Ganze Serie löschen
+            </button>
+          ) : <div></div>}
+          
+          <div className="flex gap-3">
+            <button onClick={onClose} disabled={isSaving} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-bold text-sm">Abbrechen</button>
+            <button onClick={handleSave} disabled={isSaving || weeks.length === 0} className="flex items-center px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 font-bold text-sm transition">
+              <Save className="w-4 h-4 mr-2" />
+              {isSaving ? 'Speichert...' : (existingSeriesId ? 'Änderungen speichern' : 'Dienstplan generieren')}
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 };
-// Exakte Zeilenzahl: 165
+// Exakte Zeilenzahl: 226
