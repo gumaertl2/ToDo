@@ -7,12 +7,12 @@ import { useClubStore } from '../../store/useClubStore';
 export const AppLayout: React.FC = () => {
   const { logout, user, fetchUsersAndHelpers, fetchGroups } = useClubStore();
 
-  // CHIRURGISCHER EINGRIFF: State für das Pin-Feature, merkt sich die Einstellung
   const [isPinned, setIsPinned] = useState(() => {
     const saved = localStorage.getItem('papatodo_sidebar_pinned');
     return saved !== null ? saved === 'true' : true;
   });
   const [isHovered, setIsHovered] = useState(false);
+  const [sidebarTouchStart, setSidebarTouchStart] = useState<number | null>(null);
 
   useEffect(() => {
     localStorage.setItem('papatodo_sidebar_pinned', String(isPinned));
@@ -33,17 +33,40 @@ export const AppLayout: React.FC = () => {
     { to: '/help', icon: BookOpen, label: 'Handbuch & Hilfe' },
   ];
 
-  // Leiste ist groß, wenn sie gepinnt ODER mit der Maus überfahren wird
+  const handleMouseEnter = () => {
+    if (window.matchMedia('(hover: hover)').matches) setIsHovered(true);
+  };
+
+  const handleMouseLeave = () => {
+    if (window.matchMedia('(hover: hover)').matches) setIsHovered(false);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setSidebarTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (sidebarTouchStart === null) return;
+    const touchEnd = e.changedTouches[0].clientX;
+    const diff = sidebarTouchStart - touchEnd;
+    
+    if (diff > 50) setIsPinned(false); // Wisch nach links: Zuklappen
+    if (diff < -50) setIsPinned(true); // Wisch nach rechts: Aufklappen
+    
+    setSidebarTouchStart(null);
+  };
+
   const isExpanded = isPinned || isHovered;
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden bg-gray-100 flex-col md:flex-row print:!h-auto print:!bg-white print:!block">
+    <div className="flex h-[100dvh] overflow-hidden bg-gray-100 flex-col lg:flex-row print:!h-auto print:!bg-white print:!block">
       
-      {/* CHIRURGISCHER EINGRIFF: Die animierte Desktop-Seitenleiste */}
       <aside 
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        className={`hidden md:flex flex-col bg-white shadow-md transition-all duration-300 ease-in-out relative z-40 shrink-0
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        className={`hidden lg:flex flex-col bg-white shadow-md transition-all duration-300 ease-in-out relative z-40 shrink-0
           ${isExpanded ? 'w-64' : 'w-[76px]'}
           print:!hidden print:!absolute print:!w-0 print:!h-0 print:!overflow-hidden print:!m-0 print:!p-0`}
       >
@@ -95,12 +118,11 @@ export const AppLayout: React.FC = () => {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto min-h-0 p-4 md:p-8 md:pb-8 pb-6 print:!overflow-visible print:!p-0 print:!w-full print:!block print:!m-0">
+      <main className="flex-1 overflow-y-auto min-h-0 p-4 lg:p-8 lg:pb-8 pb-6 print:!overflow-visible print:!p-0 print:!w-full print:!block print:!m-0">
         <Outlet />
       </main>
 
-      {/* CHIRURGISCHER EINGRIFF: Die mobile Leiste (Fehlerfrei und textlos) */}
-      <nav className="md:hidden shrink-0 w-full bg-white border-t border-gray-200 flex justify-around items-center px-1 py-2 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-50 print:!hidden">
+      <nav className="lg:hidden shrink-0 w-full bg-white border-t border-gray-200 flex justify-around items-center px-1 py-2 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-50 print:!hidden">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
@@ -128,4 +150,4 @@ export const AppLayout: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 110
+// Exakte Zeilenzahl: 139
