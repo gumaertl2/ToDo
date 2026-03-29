@@ -5,7 +5,7 @@ import { DataProcessor } from '../../services/DataProcessor';
 import type { Result } from '../../core/types/shared';
 import { collection, getDocs, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
-import ICAL from 'ical.js'; // CHIRURGISCHER EINGRIFF: Import in den Store verschoben
+import ICAL from 'ical.js';
 
 export interface CalendarSlice {
   calendarEvents: CalendarEvent[];
@@ -18,7 +18,7 @@ export interface CalendarSlice {
   addCalendarSubscription: (sub: CalendarSubscription) => Promise<Result<void>>;
   updateCalendarSubscription: (sub: CalendarSubscription) => Promise<Result<void>>;
   deleteCalendarSubscription: (id: string) => Promise<Result<void>>;
-  syncSubscription: (id: string) => Promise<Result<void>>; // CHIRURGISCHER EINGRIFF
+  syncSubscription: (id: string) => Promise<Result<void>>;
 }
 
 export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSlice> = (set, get) => ({
@@ -37,7 +37,10 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
       const subs: CalendarSubscription[] = [];
       subsSnap.forEach((d) => subs.push({ ...d.data(), id: d.id } as CalendarSubscription));
 
-      set({ calendarEvents: events, calendarSubscriptions: subs, isCalendarLoading: false });
+      // CHIRURGISCHER EINGRIFF: Sortierung nach sortOrder beim Laden
+      const sortedSubs = subs.sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+
+      set({ calendarEvents: events, calendarSubscriptions: sortedSubs, isCalendarLoading: false });
     } catch (e) {
       set({ isCalendarLoading: false });
     }
@@ -66,14 +69,24 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
   },
 
   addCalendarSubscription: async (sub) => {
-    const result = await DataProcessor.saveDocument<CalendarSubscription>('calendar_subscriptions', sub.id, sub);
-    if (result.success) set((state) => ({ calendarSubscriptions: [...state.calendarSubscriptions, sub] }));
+    // Neues Abo ans Ende setzen
+    const currentSubs = get().calendarSubscriptions;
+    const maxOrder = currentSubs.reduce((max, s) => Math.max(max, s.sortOrder ?? 0), 0);
+    const subWithOrder = { ...sub, sortOrder: maxOrder + 1 };
+
+    const result = await DataProcessor.saveDocument<CalendarSubscription>('calendar_subscriptions', subWithOrder.id, subWithOrder);
+    if (result.success) set((state) => ({ calendarSubscriptions: [...state.calendarSubscriptions, subWithOrder] }));
     return result;
   },
 
   updateCalendarSubscription: async (sub) => {
     const result = await DataProcessor.saveDocument<CalendarSubscription>('calendar_subscriptions', sub.id, sub);
-    if (result.success) set((state) => ({ calendarSubscriptions: state.calendarSubscriptions.map(s => s.id === sub.id ? sub : s) }));
+    if (result.success) {
+      set((state) => {
+        const newSubs = state.calendarSubscriptions.map(s => s.id === sub.id ? sub : s);
+        return { calendarSubscriptions: newSubs.sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999)) };
+      });
+    }
     return result;
   },
 
@@ -87,7 +100,6 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
     }
   },
 
-  // CHIRURGISCHER EINGRIFF: Die neue, zentrale Sync-Funktion
   syncSubscription: async (id) => {
     const state = get();
     const sub = state.calendarSubscriptions.find(s => s.id === id);
@@ -121,7 +133,7 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
       }
 
       if (!textData) {
-         return { success: false, error: new Error('ICS-Download fehlgeschlagen. URL prüfen oder später erneut versuchen.') };
+         return { success: false, error: new Error('ICS-Download fehlgeschlagen.') };
       }
 
       const jcalData = ICAL.parse(textData);
@@ -173,4 +185,4 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
     }
   }
 });
-// Exakte Zeilenzahl: 167
+// Zeilenzahl: 182

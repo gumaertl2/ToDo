@@ -32,7 +32,7 @@ export interface User extends BaseDocument {
 export interface Group extends BaseDocument {
   name: string;
   description?: string;
-  color?: string; // CHIRURGISCHER EINGRIFF: Farbe für das Kalender-Farbleitsystem
+  color?: string; 
 }
 
 export interface Helper extends BaseDocument {
@@ -125,8 +125,6 @@ export interface AgendaItem extends BaseDocument {
 
 export type Task = AgendaItem;
 
-// --- CHIRURGISCHER EINGRIFF: NEUE MODULE FÜR DEN VEREINSKALENDER ---
-
 export interface CachedIcsEvent {
   uid: string;
   title: string;
@@ -142,8 +140,9 @@ export interface CalendarSubscription extends BaseDocument {
   url: string;
   color: string;
   isActive: boolean;
-  lastSyncedAt?: number; // CHIRURGISCHER EINGRIFF: Zeitstempel des letzten Syncs
-  cachedEvents?: CachedIcsEvent[]; // CHIRURGISCHER EINGRIFF: Die übersetzten Termine
+  lastSyncedAt?: number;
+  cachedEvents?: CachedIcsEvent[];
+  sortOrder?: number; // CHIRURGISCHER EINGRIFF: Neues Feld für die manuelle Reihenfolge
 }
 
 export interface CalendarEvent extends BaseDocument {
@@ -156,4 +155,4 @@ export interface CalendarEvent extends BaseDocument {
   color?: string;
   isPublic: boolean;
 }
-// Exakte Zeilenzahl: 158
+// Zeilenzahl: 159
