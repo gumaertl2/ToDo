@@ -11,7 +11,7 @@ import { de } from 'date-fns/locale/de';
 
 interface Props {
   onClose: () => void;
-  existingSeriesId?: string; // CHIRURGISCHER EINGRIFF: Die ID zum Laden der alten Daten
+  existingSeriesId?: string; 
 }
 
 export const CalendarBulkEventModal: React.FC<Props> = ({ onClose, existingSeriesId }) => {
@@ -32,7 +32,6 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose, existingSerie
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // CHIRURGISCHER EINGRIFF: Lädt die bestehenden Daten, falls wir im Bearbeitungs-Modus sind
   useEffect(() => {
     if (existingSeriesId) {
       const seriesEvents = calendarEvents.filter(e => e.seriesId === existingSeriesId);
@@ -42,7 +41,8 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose, existingSerie
         const last = seriesEvents[seriesEvents.length - 1];
 
         setStartDate(fDate(new Date(first.startTime)));
-        setEndDate(fDate(new Date(last.endTime)));
+        // CHIRURGISCHER EINGRIFF: Fallback für TypeScript hinzugefügt
+        setEndDate(fDate(new Date(last.endTime || last.startTime)));
         setColor(first.color || '#f97316');
         setIsPublic(first.isPublic);
 
@@ -50,7 +50,7 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose, existingSerie
         if (first.title.includes(': ')) {
           bTitle = first.title.split(': ')[0];
         } else {
-          bTitle = first.title; // Fallback
+          bTitle = first.title; 
         }
         setBaseTitle(bTitle);
 
@@ -127,7 +127,6 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose, existingSerie
     setIsSaving(true);
     setError(null);
 
-    // Wenn wir bearbeiten, löschen wir erst die alte Serie, dann speichern wir die neue
     if (existingSeriesId) {
       await deleteCalendarSeries(existingSeriesId);
     }
