@@ -2,17 +2,16 @@
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import type { CalendarEvent } from '../../core/types/models';
-import { X, Save, AlertCircle, Globe, Trash2 } from 'lucide-react';
+import { X, Save, AlertCircle, Globe, Trash2, Layers } from 'lucide-react'; // CHIRURGISCHER EINGRIFF: Layers Icon
 
 interface Props {
   onClose: () => void;
-  existingEvent?: CalendarEvent; // CHIRURGISCHER EINGRIFF: Optionaler bestehender Termin
+  existingEvent?: CalendarEvent;
 }
 
 export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent }) => {
-  const { addCalendarEvent, updateCalendarEvent, deleteCalendarEvent } = useClubStore();
+  const { addCalendarEvent, updateCalendarEvent, deleteCalendarEvent, deleteCalendarSeries } = useClubStore(); // CHIRURGISCHER EINGRIFF: deleteCalendarSeries
   
-  // CHIRURGISCHER EINGRIFF: Datums-Helfer für die Initialisierung
   const initStart = existingEvent ? new Date(existingEvent.startTime) : new Date();
   const initEnd = existingEvent?.endTime ? new Date(existingEvent.endTime) : new Date(initStart.getTime() + 2 * 60 * 60 * 1000);
   
@@ -59,6 +58,7 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
       isAllDay,
       color,
       isPublic,
+      seriesId: existingEvent?.seriesId, // CHIRURGISCHER EINGRIFF: Erhalte die Serien-ID beim Bearbeiten
     };
 
     const result = existingEvent 
@@ -75,9 +75,19 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
 
   const handleDelete = async () => {
     if (!existingEvent) return;
-    if (window.confirm('Termin wirklich löschen?')) {
+    if (window.confirm('Diesen Termin wirklich löschen?')) {
       setIsSaving(true);
       await deleteCalendarEvent(existingEvent.id);
+      onClose();
+    }
+  };
+
+  // CHIRURGISCHER EINGRIFF: Löschen der kompletten Serie
+  const handleDeleteSeries = async () => {
+    if (!existingEvent?.seriesId) return;
+    if (window.confirm('Achtung: Möchtest du wirklich ALLE Termine aus diesem Dienstplan (Serie) löschen?')) {
+      setIsSaving(true);
+      await deleteCalendarSeries(existingEvent.seriesId);
       onClose();
     }
   };
@@ -98,6 +108,12 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
                <AlertCircle className="w-5 h-5 mr-2 shrink-0" />
                <span className="text-sm">{error}</span>
              </div>
+          )}
+
+          {existingEvent?.seriesId && (
+            <div className="bg-orange-50 border border-orange-100 p-3 rounded-lg flex items-center text-orange-800 text-sm mb-2">
+              <Layers className="w-4 h-4 mr-2" /> Dieser Termin ist Teil eines generierten Dienstplans.
+            </div>
           )}
 
           <div>
@@ -156,11 +172,18 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
           </div>
         </div>
 
-        <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between gap-3">
+        <div className="p-4 border-t border-gray-200 bg-gray-50 flex flex-wrap justify-between gap-3">
           {existingEvent ? (
-            <button onClick={handleDelete} disabled={isSaving} className="flex items-center px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium transition">
-              <Trash2 className="w-4 h-4 mr-2" /> Löschen
-            </button>
+            <div className="flex gap-2">
+              <button onClick={handleDelete} disabled={isSaving} className="flex items-center px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium transition text-sm">
+                <Trash2 className="w-4 h-4 mr-1" /> Löschen
+              </button>
+              {existingEvent.seriesId && (
+                <button onClick={handleDeleteSeries} disabled={isSaving} className="flex items-center px-3 py-2 text-orange-600 hover:bg-orange-50 rounded-lg font-medium transition text-sm" title="Die gesamte generierte Serie löschen">
+                  <Layers className="w-4 h-4 mr-1" /> Serie löschen
+                </button>
+              )}
+            </div>
           ) : <div></div>}
           
           <div className="flex gap-3">
@@ -175,4 +198,4 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
     </div>
   );
 };
-// Exakte Zeilenzahl: 162
+// Exakte Zeilenzahl: 182
