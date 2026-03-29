@@ -14,7 +14,6 @@ import type { CalendarEvent } from '../../core/types/models';
 import { CalendarEventFormModal } from './CalendarEventFormModal';
 import { CalendarSubscriptionModal } from './CalendarSubscriptionModal';
 import { CalendarIcsDetailModal } from './CalendarIcsDetailModal';
-import ICAL from 'ical.js';
 
 const locales = {
   'de': de,
@@ -49,104 +48,14 @@ export const CalendarView: React.FC = () => {
   
   const [selectedIcsEvent, setSelectedIcsEvent] = useState<AdaptedEvent | undefined>(undefined);
   const [isIcsDetailModalOpen, setIsIcsDetailModalOpen] = useState(false);
-  
-  const [icsEvents, setIcsEvents] = useState<AdaptedEvent[]>([]);
-  const [isIcsLoading, setIsIcsLoading] = useState(false);
 
   useEffect(() => {
     fetchCalendarData();
   }, [fetchCalendarData]);
 
-  useEffect(() => {
-    const loadExternalCalendars = async () => {
-      if (calendarSubscriptions.length === 0) {
-        setIcsEvents([]);
-        return;
-      }
-      
-      setIsIcsLoading(true);
-      const parsedEvents: AdaptedEvent[] = [];
-
-      for (const sub of calendarSubscriptions) {
-        if (!sub.isActive) continue;
-        try {
-          let feedUrl = sub.url.trim();
-          if (feedUrl.toLowerCase().startsWith('webcal://')) {
-            feedUrl = 'https://' + feedUrl.substring(9);
-          }
-
-          // CHIRURGISCHER EINGRIFF: Der intelligente Doppel-Proxy-Motor
-          const proxyUrls = [
-            `https://api.allorigins.win/raw?url=${encodeURIComponent(feedUrl)}`, // Proxy 1 (Für Localhost)
-            `https://corsproxy.io/?${encodeURIComponent(feedUrl)}`             // Proxy 2 (Für Vercel Live)
-          ];
-
-          let textData = null;
-
-          // Wir probieren die Proxys der Reihe nach durch, bis einer funktioniert
-          for (const proxyUrl of proxyUrls) {
-            try {
-              const response = await fetch(proxyUrl);
-              if (response.ok) {
-                const data = await response.text();
-                if (data.includes('BEGIN:VCALENDAR')) {
-                  textData = data;
-                  break; // Erfolgreich! Wir können die Schleife abbrechen
-                }
-              }
-            } catch (e) {
-              // Wenn der Proxy geblockt wird, versuchen wir lautlos den nächsten
-              console.warn(`Proxy-Versuch gescheitert, probiere nächsten...`);
-            }
-          }
-
-          if (!textData) {
-             console.error(`Alle Proxys haben für Abo '${sub.name}' versagt. Bitte URL prüfen.`);
-             continue;
-          }
-
-          const jcalData = ICAL.parse(textData);
-          const comp = new ICAL.Component(jcalData);
-          const vevents = comp.getAllSubcomponents('vevent');
-
-          vevents.forEach((vevent: any) => {
-            const event = new ICAL.Event(vevent);
-            
-            if (!event.startDate) return; 
-            
-            const s = event.startDate;
-            const startDate = new Date(s.year, s.month - 1, s.day, s.hour, s.minute);
-            
-            let endDate = startDate;
-            if (event.endDate) {
-              const e = event.endDate;
-              endDate = new Date(e.year, e.month - 1, e.day, e.hour, e.minute);
-            }
-
-            parsedEvents.push({
-              id: `ics-${sub.id}-${event.uid}`,
-              title: `${event.summary} (${sub.name})`,
-              description: event.description || '',
-              location: event.location || '',
-              start: startDate,
-              end: endDate,
-              allDay: s.isDate,
-              color: sub.color,
-            });
-          });
-        } catch (error) {
-          console.error(`Kritischer Fehler beim Parsen von Abo '${sub.name}':`, error);
-        }
-      }
-      
-      setIcsEvents(parsedEvents);
-      setIsIcsLoading(false);
-    };
-
-    loadExternalCalendars();
-  }, [calendarSubscriptions]);
-
+  // CHIRURGISCHER EINGRIFF: Die View baut die Events jetzt nur noch aus dem pfeilschnellen Cache zusammen!
   const rbcEvents: AdaptedEvent[] = useMemo(() => {
+    // 1. Manuelle Termine
     const internalEvents = calendarEvents.map(ev => ({
       id: ev.id,
       title: ev.title,
@@ -159,8 +68,24 @@ export const CalendarView: React.FC = () => {
       color: ev.color || '#3b82f6' 
     }));
     
-    return [...internalEvents, ...icsEvents];
-  }, [calendarEvents, icsEvents]);
+    // 2. Gecachte Verbands-Termine
+    const cachedExternalEvents = calendarSubscriptions
+      .filter(sub => sub.isActive && sub.cachedEvents)
+      .flatMap(sub => 
+        sub.cachedEvents!.map(ev => ({
+          id: `ics-${sub.id}-${ev.uid}`,
+          title: `${ev.title} (${sub.name})`,
+          description: ev.description || '',
+          location: ev.location || '',
+          start: new Date(ev.startTime),
+          end: new Date(ev.endTime),
+          allDay: ev.isAllDay,
+          color: sub.color,
+        }))
+      );
+      
+    return [...internalEvents, ...cachedExternalEvents];
+  }, [calendarEvents, calendarSubscriptions]);
 
   const eventStyleGetter = (event: AdaptedEvent) => {
     const backgroundColor = event.color || '#3b82f6';
@@ -195,7 +120,6 @@ export const CalendarView: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center">
             Vereinskalender
-            {isIcsLoading && <span className="ml-3 flex h-3 w-3"><span className="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span></span>}
           </h1>
           <p className="text-sm text-gray-500 mt-1">Die zentrale Übersicht aller Spiele, Turniere und Vereinstermine.</p>
         </div>
@@ -280,4 +204,4 @@ export const CalendarView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 265
+// Exakte Zeilenzahl: 184

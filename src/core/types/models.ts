@@ -127,11 +127,23 @@ export type Task = AgendaItem;
 
 // --- CHIRURGISCHER EINGRIFF: NEUE MODULE FÜR DEN VEREINSKALENDER ---
 
+export interface CachedIcsEvent {
+  uid: string;
+  title: string;
+  description?: string;
+  location?: string;
+  startTime: number;
+  endTime: number;
+  isAllDay: boolean;
+}
+
 export interface CalendarSubscription extends BaseDocument {
   name: string;
   url: string;
   color: string;
   isActive: boolean;
+  lastSyncedAt?: number; // CHIRURGISCHER EINGRIFF: Zeitstempel des letzten Syncs
+  cachedEvents?: CachedIcsEvent[]; // CHIRURGISCHER EINGRIFF: Die übersetzten Termine
 }
 
 export interface CalendarEvent extends BaseDocument {
@@ -144,4 +156,4 @@ export interface CalendarEvent extends BaseDocument {
   color?: string;
   isPublic: boolean;
 }
-// Exakte Zeilenzahl: 147
+// Exakte Zeilenzahl: 158

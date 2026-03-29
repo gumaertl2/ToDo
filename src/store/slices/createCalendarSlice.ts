@@ -1,10 +1,11 @@
 // src/store/slices/createCalendarSlice.ts
 import type { StateCreator } from 'zustand';
-import type { CalendarEvent, CalendarSubscription } from '../../core/types/models';
+import type { CalendarEvent, CalendarSubscription, CachedIcsEvent } from '../../core/types/models';
 import { DataProcessor } from '../../services/DataProcessor';
 import type { Result } from '../../core/types/shared';
 import { collection, getDocs, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
+import ICAL from 'ical.js'; // CHIRURGISCHER EINGRIFF: Import in den Store verschoben
 
 export interface CalendarSlice {
   calendarEvents: CalendarEvent[];
@@ -17,9 +18,10 @@ export interface CalendarSlice {
   addCalendarSubscription: (sub: CalendarSubscription) => Promise<Result<void>>;
   updateCalendarSubscription: (sub: CalendarSubscription) => Promise<Result<void>>;
   deleteCalendarSubscription: (id: string) => Promise<Result<void>>;
+  syncSubscription: (id: string) => Promise<Result<void>>; // CHIRURGISCHER EINGRIFF
 }
 
-export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSlice> = (set) => ({
+export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSlice> = (set, get) => ({
   calendarEvents: [],
   calendarSubscriptions: [],
   isCalendarLoading: false,
@@ -83,6 +85,92 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
     } catch (e) {
       return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
     }
+  },
+
+  // CHIRURGISCHER EINGRIFF: Die neue, zentrale Sync-Funktion
+  syncSubscription: async (id) => {
+    const state = get();
+    const sub = state.calendarSubscriptions.find(s => s.id === id);
+    if (!sub) return { success: false, error: new Error('Abo nicht gefunden') };
+
+    try {
+      let feedUrl = sub.url.trim();
+      if (feedUrl.toLowerCase().startsWith('webcal://')) {
+        feedUrl = 'https://' + feedUrl.substring(9);
+      }
+
+      const proxyUrls = [
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(feedUrl)}`,
+        `https://corsproxy.io/?${encodeURIComponent(feedUrl)}`
+      ];
+
+      let textData = null;
+      for (const proxyUrl of proxyUrls) {
+        try {
+          const response = await fetch(proxyUrl);
+          if (response.ok) {
+            const data = await response.text();
+            if (data.includes('BEGIN:VCALENDAR')) {
+              textData = data;
+              break;
+            }
+          }
+        } catch (e) {
+          console.warn(`Proxy-Versuch gescheitert...`);
+        }
+      }
+
+      if (!textData) {
+         return { success: false, error: new Error('ICS-Download fehlgeschlagen. URL prüfen oder später erneut versuchen.') };
+      }
+
+      const jcalData = ICAL.parse(textData);
+      const comp = new ICAL.Component(jcalData);
+      const vevents = comp.getAllSubcomponents('vevent');
+      
+      const cachedEvents: CachedIcsEvent[] = [];
+
+      vevents.forEach((vevent: any) => {
+        const event = new ICAL.Event(vevent);
+        if (!event.startDate) return; 
+        
+        const s = event.startDate;
+        const startDate = new Date(s.year, s.month - 1, s.day, s.hour, s.minute).getTime();
+        
+        let endDate = startDate;
+        if (event.endDate) {
+          const e = event.endDate;
+          endDate = new Date(e.year, e.month - 1, e.day, e.hour, e.minute).getTime();
+        }
+
+        cachedEvents.push({
+          uid: event.uid,
+          title: event.summary || 'Ohne Titel',
+          description: event.description || '',
+          location: event.location || '',
+          startTime: startDate,
+          endTime: endDate,
+          isAllDay: s.isDate,
+        });
+      });
+
+      const updatedSub: CalendarSubscription = {
+        ...sub,
+        cachedEvents,
+        lastSyncedAt: Date.now()
+      };
+
+      const result = await DataProcessor.saveDocument<CalendarSubscription>('calendar_subscriptions', sub.id, updatedSub);
+      if (result.success) {
+        set((state) => ({ 
+          calendarSubscriptions: state.calendarSubscriptions.map(s => s.id === sub.id ? updatedSub : s) 
+        }));
+      }
+      return result;
+
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error : new Error(String(error)) };
+    }
   }
 });
-// Exakte Zeilenzahl: 74
+// Exakte Zeilenzahl: 167
