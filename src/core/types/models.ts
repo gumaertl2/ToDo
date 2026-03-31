@@ -154,17 +154,6 @@ export interface CalendarEvent extends BaseDocument {
   description?: string;
   color?: string;
   isPublic: boolean;
-}
-
-export interface CalendarEvent extends BaseDocument {
-  title: string;
-  startTime: number;
-  endTime?: number;
-  isAllDay: boolean;
-  location?: string;
-  description?: string;
-  color?: string;
-  isPublic: boolean;
   seriesId?: string; // CHIRURGISCHER EINGRIFF: Kennung für zusammenhängende Planungen
 }
 // Exakte Zeilenzahl: 159
