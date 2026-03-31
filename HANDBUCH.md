@@ -44,6 +44,9 @@ Nutze oben rechts in der Kalenderansicht den Schalter "Spielplan", um den Kalend
 **Wie kann ich den Kalender drucken oder exportieren?**
 Klicke in der Menüleiste auf **"Export / Druck"**. Es öffnet sich der Profi-Dialog: Wähle hier exakt aus, ob du nur Termine, nur Dienste oder beides exportieren möchtest. Stelle den gewünschten Zeitraum ein (z. B. das 2. Halbjahr) und lade die Daten entweder als ICS-Datei für dein Handy/Outlook herunter, oder drucke eine tintensparende, saubere A4-Liste für das schwarze Brett aus.
 
+**Wie binde ich externe Kalender ein (ICS-Abos)?**
+Ihr habt einen Verbandsspielplan oder einen externen öffentlichen Kalender? Klicke im Kalender auf **"Abonnements"**. Hier kannst du beliebige ICS-URLs (Feeds) eintragen. PapaToDo synchronisiert diese Feeds automatisch (inkl. Offline-Cache), sodass ihr bei euren Club-Sitzungen mögliche Terminüberschneidungen sofort seht!
+
 ### 📱 Mobile Bedienung & PWA
 PapaToDo ist als echte PWA (Progressive Web App) für dein Smartphone optimiert:
 * **Wischgesten (Swipe):** Du kannst im Kalender einfach mit dem Finger nach links oder rechts wischen, um entspannt zwischen den Monaten oder Wochen zu blättern.

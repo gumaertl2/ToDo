@@ -97,6 +97,10 @@ export const HelpView: React.FC = () => {
               <h4 className="font-bold text-gray-900 flex items-center"><Printer className="w-5 h-5 mr-2 text-blue-600" />Wie kann ich drucken oder exportieren?</h4>
               <p className="mt-1 text-sm">Klicke in der Menüleiste auf <strong>"Export / Druck"</strong>. Wähle hier exakt aus, ob du Termine oder Dienste exportieren möchtest, stelle den Zeitraum ein und lade die Daten als ICS-Datei herunter oder drucke eine saubere A4-Liste.</p>
             </div>
+            <div>
+              <h4 className="font-bold text-gray-900 flex items-center"><Calendar className="w-5 h-5 mr-2 text-blue-600" />Wie binde ich externe ICS-Kalender ein?</h4>
+              <p className="mt-1 text-sm">Klicke im Kalender auf <strong>"Abonnements"</strong>. Hier kannst du ICS-URLs (z.B. Verbandspläne oder Google Calendar) eintragen. Das System zieht die externen Termine automatisch als Read-Only Version in euren Plan!</p>
+            </div>
           </div>
         </AccordionItem>
 
@@ -156,4 +160,4 @@ export const HelpView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 161
+// Exakte Zeilenzahl: 165
