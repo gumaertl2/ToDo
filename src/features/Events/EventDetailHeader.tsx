@@ -1,5 +1,5 @@
 // src/features/Events/EventDetailHeader.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useClubStore } from '../../store/useClubStore';
 import { ArrowLeft, Calendar, MapPin, Clock, ChevronRight, ChevronLeft, Users, Printer, Edit2 } from 'lucide-react';
@@ -25,6 +25,9 @@ export const EventDetailHeader: React.FC<EventDetailHeaderProps> = ({
 }) => {
   const navigate = useNavigate();
   const { updateEvent } = useClubStore();
+  
+  // CHIRURGISCHER EINGRIFF: Lokaler State für das Historien-Menü (Touch-Support)
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   return (
     <div className="flex items-center justify-between mb-6 print:!mb-4">
@@ -44,21 +47,28 @@ export const EventDetailHeader: React.FC<EventDetailHeaderProps> = ({
               {isReadOnly && <span className="ml-3 text-xs bg-gray-600 text-white px-2 py-1 rounded uppercase print:!border print:!border-gray-400 print:!text-gray-800 print:!bg-transparent">Versiegelt</span>}
             </h1>
             
-            <div className="relative group ml-2 print:!hidden print:!absolute print:!w-0 print:!h-0">
-              <button className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors" title="Historie dieses Projekts / dieser Reihe">
+            {/* CHIRURGISCHER EINGRIFF: group-Klassen entfernt, stattdessen onClick und State */}
+            <div className="relative ml-2 print:!hidden print:!absolute print:!w-0 print:!h-0">
+              <button onClick={() => setIsHistoryOpen(!isHistoryOpen)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors" title="Historie dieses Projekts / dieser Reihe">
                 <Clock className="w-5 h-5" />
               </button>
-              <div className="absolute left-0 top-full mt-1 w-64 bg-white border border-gray-200 shadow-xl rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
-                 <div className="p-2 bg-gray-50 border-b border-gray-200 font-bold text-xs text-gray-500 uppercase tracking-wider">Projekt-Historie</div>
-                 <div className="max-h-60 overflow-y-auto">
-                   {pastEvents.length === 0 && <div className="p-4 text-xs text-gray-400 text-center">Keine früheren Sitzungen für dieses Projekt.</div>}
-                   {pastEvents.map(e => (
-                      <button key={e.id} onClick={() => navigate(`/events/${e.id}`)} className={`w-full text-left px-4 py-2 text-sm hover:bg-blue-50 border-b border-gray-100 last:border-0 ${e.id === eventId ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-700'}`}>
-                        {e.title} <br/><span className="text-xs text-gray-500">{new Date(e.plannedStartTime||0).toLocaleDateString()}</span>
-                      </button>
-                   ))}
-                 </div>
-              </div>
+              
+              {isHistoryOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setIsHistoryOpen(false)}></div>
+                  <div className="absolute left-0 top-full mt-1 w-64 bg-white border border-gray-200 shadow-xl rounded-lg transition-all z-50 overflow-hidden">
+                     <div className="p-2 bg-gray-50 border-b border-gray-200 font-bold text-xs text-gray-500 uppercase tracking-wider">Projekt-Historie</div>
+                     <div className="max-h-60 overflow-y-auto">
+                       {pastEvents.length === 0 && <div className="p-4 text-xs text-gray-400 text-center">Keine früheren Sitzungen für dieses Projekt.</div>}
+                       {pastEvents.map(e => (
+                          <button key={e.id} onClick={() => { setIsHistoryOpen(false); navigate(`/events/${e.id}`); }} className={`w-full text-left px-4 py-2 text-sm hover:bg-blue-50 border-b border-gray-100 last:border-0 ${e.id === eventId ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-700'}`}>
+                            {e.title} <br/><span className="text-xs text-gray-500">{new Date(e.plannedStartTime||0).toLocaleDateString()}</span>
+                          </button>
+                       ))}
+                     </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -104,4 +114,4 @@ export const EventDetailHeader: React.FC<EventDetailHeaderProps> = ({
     </div>
   );
 };
-// Exakte Zeilenzahl: 104
+// Exakte Zeilenzahl: 111
