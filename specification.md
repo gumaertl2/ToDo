@@ -92,6 +92,8 @@ Zur Minimierung unnötiger Lesezugriffe wird eine flache Struktur verwendet. Jed
   * *Sonderfelder Aufgabe:* `postponedToDate` (Termin verschoben auf), `reportingEventId` (Reporting-Event-Link).
   * *Routinen:* `isRoutine: boolean`, `routinePattern`, `routineEndDate`.
   * *Beschluss-Spezifisch:* Arrays für `approvedBy`, `rejectedBy`, `abstainedBy` (Wer hat zugestimmt/abgelehnt/enthalten).
+* **`calendar_subscriptions`:** Verwaltung externer iCal-Feeds inkl. `url`, `isActive`, `lastSyncedAt`, `sortOrder` und einem lokalen `cachedEvents` Array für performanten Offline-Zugriff.
+* **`calendar_events`:** Physisch entkoppelte Kalendertermine (z.B. aus Bulk-Imports). `title`, `startTime`, `endTime`, `location`, `isAllDay` und `seriesId` zur sauberen Bündelung importierter Serien.
 
 ## 6. Unterstützung der DSGVO-Konformität
 Das System liefert technische Werkzeuge zur Unterstützung von Datensparsamkeit und Löschpflichten:
@@ -128,17 +130,23 @@ Die Umsetzung erfolgt strikt im Modus des **"Code-Chirurgen"**. Es gilt das **St
 
 ### State Management (Zustand Slices)
 * `src/store/useClubStore.ts`: Der zentrale Hub, der alle Slices zu einem globalen SSOT-Store vereint.
+* `src/store/slices/createAuthSlice.ts`: Firebase Auth Lifecycle, Registrierung & Türsteher-Sicherheit.
+* `src/store/slices/createCalendarSlice.ts`: Globale Verwaltung von ICS-Abonnements, Caching und Kalender-Synchronisation.
 * `src/store/slices/createEventSlice.ts`: Logik für Events, Sitzungs-Rollover (`seriesId`) und Agenda-Management.
 * `src/store/slices/createTaskSlice.ts`: Management von Aufgaben, Status-Updates und Kanban-Logik.
 * `src/store/slices/createUserSlice.ts`: Verwaltung von Vorständen, Helfern und Rollen (Gruppen).
 * `src/store/slices/createTemplateSlice.ts`: Bibliothek für Vorlagen und Daueraufgaben.
 
 ### Features & UI
+* `src/features/Auth/LoginView.tsx` & `AuthGuard.tsx`: Zwei-Welten Sicherheitsmechanismus zur Login-Steuerung.
+* `src/features/Layout/AppLayout.tsx`: Die Responsive Shell (Sidebar, Mobile Menü, Grundgerüst).
+* `src/features/Dashboard/DashboardView.tsx`: Startzentrale mit Next Actions und überfälligen ToDos.
+* `src/features/Events/CalendarView.tsx`: Die globale Kalenderansicht (vereint Club-Sitzungen mit externen ICS-Feeds).
 * `src/features/Events/EventsView.tsx`: Dashboard der Sitzungen (Intelligente Gruppierung nach Serien-Kopf).
 * `src/features/Events/EventDetailView.tsx`: Das Herzstück – Agenda-Führung, Protokoll-Rollover, Read-Only-Sperre und Archiv-Navigator.
 * `src/features/Shared/AgendaItemRow.tsx`: Hochkomplexe, interaktive Zeile für Agenda-Punkte (Inline-Editing, Ampel-Farben).
 * `src/features/Shared/ItemFormModal.tsx`: Universeller Editor für alle Arten von Agenda-Punkten und Aufgaben.
-* `src/features/Users/UsersView.tsx`: Management von Personen und Rollen inkl. der automatisierten, interaktiven Stellenbeschreibungen für Ämter.
+* `src/features/Users/UsersView.tsx`: Management von Personen und Rollen inkl. der interaktiven Stellenbeschreibungen für Ämter.
 * `src/features/Tasks/TasksView.tsx` / `KanbanBoard.tsx`: Visuelle Kontrolle aller offenen Aufgaben vereinsweit.
 
 ## 11. Interaction Transfer Protocol (Für neue KI-Chats)
@@ -148,4 +156,4 @@ Wenn ein neuer Projekt-Chat gestartet wird, gilt dieses Protokoll für die KI zw
 3. **Protokoll-Check:** Bestätige die Einhaltung des "Strict Code Integrity Protocols" (Chirurgen-Modus).
 4. **Keine UI in Core:** Beachte zwingend, dass alle UI-Interaktionen im Feature-Folder bleiben und alle Daten-Logiken in den Slices.
 5. **Typen-Sicherheit:** Verwende ausschließlich 100% TypeScript (Zero Any).
-// Exakte Zeilenzahl: 129
+// Exakte Zeilenzahl: 137
