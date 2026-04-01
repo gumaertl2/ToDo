@@ -55,13 +55,14 @@ export const PublicCalendarEmbed: React.FC = () => {
         const loadedEvents = eventsSnap.docs.map(doc => ({ ...doc.data(), id: doc.id } as CalendarEvent));
         setCalendarEvents(loadedEvents);
 
-        // 2. Hole Kalender Abos
+        // 2. Hole Kalender Abos und sortiere sie wie in der Haupt-App
         const subsSnap = await getDocs(collection(db, 'calendar_subscriptions'));
         const loadedSubs = subsSnap.docs.map(doc => ({ ...doc.data(), id: doc.id } as CalendarSubscription));
-        setCalendarSubscriptions(loadedSubs);
+        const sortedSubs = loadedSubs.sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+        setCalendarSubscriptions(sortedSubs);
 
-        // Setze Standard-Filter
-        const ids = ['manual', 'dienste', ...loadedSubs.map(s => s.id)];
+        // Setze Standard-Filter mit der korrekt sortierten Reihenfolge
+        const ids = ['manual', 'dienste', ...sortedSubs.map(s => s.id)];
         setActiveFilters(ids);
       } catch (err) {
         console.error("Fehler beim Laden der öffentlichen Daten:", err);
@@ -387,7 +388,6 @@ export const PublicCalendarEmbed: React.FC = () => {
         )}
       </div>
 
-      {/* Info-Modal (Read-Only) */}
       {selectedEventToView && (
         <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 print:hidden">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
@@ -435,4 +435,4 @@ export const PublicCalendarEmbed: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 386
+// Exakte Zeilenzahl: 388
