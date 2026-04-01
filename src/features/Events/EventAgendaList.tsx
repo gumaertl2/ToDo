@@ -49,7 +49,6 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
           <>
             <div className="border border-gray-200 rounded-lg overflow-x-auto bg-white shadow-sm print:!border-none print:!shadow-none print:!overflow-visible print:!block">
               {eventAgenda.map((item, index) => {
-                // CHIRURGISCHER EINGRIFF: Hier greift die Magie der Simulation
                 const effectiveDuration = tempDurations[item.id] !== undefined ? tempDurations[item.id] : (item.durationEstimate || 0);
                 const startTimeStr = new Date(currentRunningTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 const isOvertime = currentEvent.plannedEndTime ? currentRunningTime > currentEvent.plannedEndTime : false;
@@ -62,7 +61,19 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
                     isExpanded={expandedIds.has(item.id)} onToggleExpand={onToggleItemExpanded}
                     onMove={moveAgendaItem} onEdit={onEditItem}
                     onOpenHistory={onOpenHistory as any}
-                    onDelete={(id, title) => window.confirm(`"${title}" löschen?`) && deleteAgendaItem(id)}
+                    
+                    // CHIRURGISCHER EINGRIFF: Intelligente Lösch-Sperre im Protokoll angepasst (nur für geklonte Aufgaben)
+                    onDelete={(id, title) => {
+                      if (item.type === 'AUFGABE' && !!item.baseItemId) {
+                        window.alert(`Die vererbte Aufgabe "${title}" kann nicht gelöscht werden.\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn sie beendet ist.`);
+                        return;
+                      }
+                      
+                      if (window.confirm(`"${title}" wirklich löschen?`)) {
+                        deleteAgendaItem(id);
+                      }
+                    }}
+                    
                     effectiveDuration={effectiveDuration}
                     onDurationPreview={(val) => onDurationPreview(item.id, val)}
                     onSaveInline={async (updatedItem) => {
@@ -95,4 +106,4 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
     </div>
   );
 };
-// Exakte Zeilenzahl: 91
+// Exakte Zeilenzahl: 99

@@ -12,7 +12,8 @@ type SortKey = 'title' | 'status' | 'assignee' | 'dueDate';
 type SortDirection = 'asc' | 'desc';
 
 export const TasksView: React.FC = () => {
-  const { tasks, fetchTasks, isTasksLoading, user, saveAgendaItem, events, fetchEvents, users, groups, deleteTask } = useClubStore();
+  // CHIRURGISCHER EINGRIFF: deleteTask aus dem Store-Abruf entfernt, da es hier verboten ist
+  const { tasks, fetchTasks, isTasksLoading, user, saveAgendaItem, events, fetchEvents, users, groups } = useClubStore();
   
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [filterMode, setFilterMode] = useState<'all' | 'my' | 'custom'>('my');
@@ -29,7 +30,6 @@ export const TasksView: React.FC = () => {
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Task | null>(null);
   
-  // CHIRURGISCHER EINGRIFF: State für das Historien-Modal
   const [historyTask, setHistoryTask] = useState<Task | null>(null);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -157,7 +157,17 @@ export const TasksView: React.FC = () => {
     }
   };
 
-  // CHIRURGISCHER EINGRIFF: Eigener Druck-Generator für die ToDo-Liste
+  const tasksWithDesc = useMemo(() => sortedTasks.filter(t => !!t.description), [sortedTasks]);
+  const allExpanded = tasksWithDesc.length > 0 && tasksWithDesc.every(t => expandedIds.has(t.id));
+
+  const toggleAllExpanded = () => {
+    if (allExpanded) {
+      setExpandedIds(new Set());
+    } else {
+      setExpandedIds(new Set(tasksWithDesc.map(t => t.id)));
+    }
+  };
+
   const handlePrint = () => {
     let html = `
       <html>
@@ -183,7 +193,7 @@ export const TasksView: React.FC = () => {
             <thead>
               <tr>
                 <th>Aufgabe</th>
-                <th style="width: 20%;">Verantwortlich</th>
+                <th style="width: 20%;">Wer</th>
                 <th style="width: 15%;">Status</th>
                 <th style="width: 15%;">Fällig</th>
               </tr>
@@ -257,7 +267,6 @@ export const TasksView: React.FC = () => {
   return (
     <div className="h-full flex flex-col">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
-        {/* CHIRURGISCHER EINGRIFF: Titel aktualisiert */}
         <h1 className="text-2xl font-bold text-gray-900">Offene ToDos</h1>
         
         <div className="flex flex-wrap items-center gap-3">
@@ -284,37 +293,42 @@ export const TasksView: React.FC = () => {
 
           <div className="flex bg-gray-200 p-1 rounded-lg">
             <button
-              onClick={() => { setFilterMode('my'); setSelectedAssignees([]); }}
+              onClick={() => { setFilterMode('my'); setSelectedAssignees([]); setSelectedStatuses([]); setIsFilterDropdownOpen(false); }}
               className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                filterMode === 'my' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'
+                filterMode === 'my' && selectedAssignees.length === 0 ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
               Meine
             </button>
-            <button
-              onClick={() => { setFilterMode('all'); setSelectedAssignees([]); }}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                filterMode === 'all' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Alle
-            </button>
             
-            <div className="relative" ref={dropdownRef}>
-              <button
-                onClick={() => { setFilterMode('custom'); setIsFilterDropdownOpen(!isFilterDropdownOpen); }}
-                className={`flex items-center px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                  filterMode === 'custom' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <Filter className="w-4 h-4 mr-1" />
-                Ausgewählte {selectedAssignees.length > 0 && filterMode === 'custom' && <span className="ml-1 bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full text-xs">{selectedAssignees.length}</span>}
-              </button>
-              
-              {isFilterDropdownOpen && filterMode === 'custom' && (
-                <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-[50]">
-                  <div className="p-3 border-b border-gray-100 bg-gray-50 rounded-t-lg">
-                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Nach Personen filtern</p>
+            <div className="relative flex items-center ml-1" ref={dropdownRef}>
+              <div className={`flex items-center rounded-md transition-colors ${
+                (filterMode === 'all' || filterMode === 'custom') && selectedAssignees.length === 0 ? 'bg-white shadow text-blue-600' : 
+                selectedAssignees.length > 0 ? 'bg-blue-100 shadow text-blue-800' : 'text-gray-600 hover:text-gray-900'
+              }`}>
+                <button
+                  onClick={() => { setFilterMode('all'); setSelectedAssignees([]); setIsFilterDropdownOpen(false); }}
+                  className="px-3 py-1.5 text-sm font-medium rounded-l-md transition-colors"
+                >
+                  {selectedAssignees.length > 0 ? `Einige (${selectedAssignees.length})` : 'Alle'}
+                </button>
+                <button
+                  onClick={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
+                  className={`px-2 py-1.5 border-l rounded-r-md transition-colors ${
+                     selectedAssignees.length > 0 ? 'border-blue-200 hover:bg-blue-200' : 'border-gray-100 hover:bg-gray-100'
+                  }`}
+                >
+                  <Filter className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {isFilterDropdownOpen && (
+                <div className="absolute top-full right-0 mt-2 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-[50]">
+                  <div className="p-3 border-b border-gray-100 bg-gray-50 rounded-t-lg flex justify-between items-center">
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Wer?</p>
+                    {selectedAssignees.length > 0 && (
+                      <button onClick={() => { setSelectedAssignees([]); setFilterMode('all'); }} className="text-xs text-blue-600 hover:underline">Auswahl aufheben</button>
+                    )}
                   </div>
                   {renderAssigneeDropdown()}
                 </div>
@@ -322,7 +336,6 @@ export const TasksView: React.FC = () => {
             </div>
           </div>
 
-          {/* CHIRURGISCHER EINGRIFF: Drucken Button */}
           <button 
             onClick={handlePrint}
             className="flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900 bg-gray-200 transition-colors"
@@ -359,7 +372,7 @@ export const TasksView: React.FC = () => {
                     <div className="flex items-center">
                       <div className="w-[140px] flex items-center pr-4 relative" ref={colAssigneeRef}>
                         <span className="cursor-pointer hover:text-blue-600 transition-colors flex items-center" onClick={() => handleSort('assignee')}>
-                          Verantwortlich {renderSortIcon('assignee')}
+                          Wer {renderSortIcon('assignee')}
                         </span>
                         <button onClick={(e) => { e.stopPropagation(); setIsColAssigneeFilterOpen(!isColAssigneeFilterOpen); setIsColStatusFilterOpen(false); setIsFilterDropdownOpen(false); }} className={`ml-1.5 p-1 rounded transition-colors ${selectedAssignees.length > 0 ? 'text-blue-600 bg-blue-100' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-200'}`}>
                           <Filter className="w-3 h-3" />
@@ -407,7 +420,17 @@ export const TasksView: React.FC = () => {
                         </span>
                       </div>
 
-                      <div className="w-[80px]"></div>
+                      <div className="w-[80px] flex items-center justify-end pr-1">
+                        {tasksWithDesc.length > 0 && (
+                          <button 
+                            onClick={toggleAllExpanded} 
+                            className="w-7 h-7 flex items-center justify-center text-gray-500 hover:bg-gray-200 rounded text-lg font-mono font-bold leading-none transition-colors"
+                            title="Alle Beschreibungen ein-/ausklappen"
+                          >
+                            {allExpanded ? '-' : '+'}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -427,9 +450,11 @@ export const TasksView: React.FC = () => {
                           });
                         }}
                         onEdit={(item) => { setEditingItem(item as Task); setIsItemModalOpen(true); }}
-                        // CHIRURGISCHER EINGRIFF: Historie verdrahtet
                         onOpenHistory={(item) => setHistoryTask(item as Task)}
-                        onDelete={(id, title) => { if (window.confirm(`Aufgabe "${title}" löschen?`)) deleteTask(id); }}
+                        // CHIRURGISCHER EINGRIFF: Löschen-Button wirft Alert anstatt zu löschen
+                        onDelete={(id, title) => {
+                          window.alert(`Die Aufgabe "${title}" kann hier nicht gelöscht werden.\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn du sie beendet hast.\n\nDas physische Löschen von Aufgaben ist nur direkt im Sitzungsprotokoll erlaubt.`);
+                        }}
                         onSaveInline={async (updatedTask) => { await saveAgendaItem(updatedTask); }}
                         isTemplateMode={true} 
                         isReadOnly={false}
@@ -461,11 +486,10 @@ export const TasksView: React.FC = () => {
         />
       )}
       
-      {/* CHIRURGISCHER EINGRIFF: Historien-Modal gerendert */}
       {historyTask && (
         <TaskHistoryModal task={historyTask} onClose={() => setHistoryTask(null)} />
       )}
     </div>
   );
 };
-// Exakte Zeilenzahl: 420
+// Exakte Zeilenzahl: 469
