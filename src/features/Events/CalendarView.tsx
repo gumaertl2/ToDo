@@ -298,7 +298,18 @@ export const CalendarView: React.FC = () => {
 
   const renderActionButtons = () => (
     <>
-      <button onClick={() => alert('Phase 4: iFrame')} className="flex items-center w-full lg:w-auto px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-50 transition shadow-sm justify-center"><Globe className="w-4 h-4 mr-2 text-blue-500" /> Public Link</button>
+      {/* CHIRURGISCHER EINGRIFF: Public Link generiert Iframe-Code */}
+      <button 
+        onClick={() => {
+          setIsMobileMenuOpen(false);
+          const currentDomain = window.location.origin;
+          const iframeCode = `<iframe src="${currentDomain}/embed/kalender" width="100%" height="800px" style="border:none;"></iframe>`;
+          window.prompt("Kopiere diesen HTML-Code (Strg+C / Cmd+C) für die Vereinswebseite:", iframeCode);
+        }} 
+        className="flex items-center w-full lg:w-auto px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-50 transition shadow-sm justify-center"
+      >
+        <Globe className="w-4 h-4 mr-2 text-blue-500" /> Public Link
+      </button>
       <button onClick={() => { setIsMobileMenuOpen(false); setIsExportModalOpen(true); }} className="flex items-center w-full lg:w-auto px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-50 transition shadow-sm justify-center"><Printer className="w-4 h-4 mr-2 text-gray-600" /> Export / Druck</button>
       <button onClick={() => { setIsMobileMenuOpen(false); setIsSubModalOpen(true); }} className="flex items-center w-full lg:w-auto px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-50 transition shadow-sm justify-center"><DownloadCloud className="w-4 h-4 mr-2 text-green-500" /> Abos</button>
       <button onClick={() => { setIsMobileMenuOpen(false); setSelectedSeriesId(undefined); setIsBulkModalOpen(true); }} className="flex items-center w-full lg:w-auto px-3 py-2 bg-orange-50 border border-orange-200 text-orange-700 text-sm font-bold rounded-lg hover:bg-orange-100 transition shadow-sm justify-center"><Settings className="w-4 h-4 mr-2 text-orange-600" /> Dienste</button>
@@ -398,4 +409,4 @@ export const CalendarView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 382
+// Exakte Zeilenzahl: 385

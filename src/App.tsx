@@ -7,7 +7,8 @@ import { AppLayout } from './features/Layout/AppLayout';
 import { useClubStore } from './store/useClubStore';
 
 import { DashboardView } from './features/Dashboard/DashboardView';
-import { CalendarView } from './features/Events/CalendarView'; // CHIRURGISCHER EINGRIFF: Kalender Import
+import { CalendarView } from './features/Events/CalendarView'; 
+import { PublicCalendarEmbed } from './features/Events/PublicCalendarEmbed'; // CHIRURGISCHER EINGRIFF: Embed Import
 import { EventsView } from './features/Events/EventsView';
 import { EventDetailView } from './features/Events/EventDetailView';
 import { TasksView } from './features/Tasks/TasksView';
@@ -27,6 +28,9 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginView />} />
         
+        {/* CHIRURGISCHER EINGRIFF: Öffentliche Route ohne AuthGuard */}
+        <Route path="/embed/kalender" element={<PublicCalendarEmbed />} />
+        
         <Route
           path="/"
           element={
@@ -36,7 +40,7 @@ export default function App() {
           }
         >
           <Route index element={<DashboardView />} />
-          <Route path="calendar" element={<CalendarView />} /> {/* CHIRURGISCHER EINGRIFF: Kalender Route */}
+          <Route path="calendar" element={<CalendarView />} /> 
           <Route path="users" element={<UsersView />} />
           <Route path="events" element={<EventsView />} />
           <Route path="events/:eventId" element={<EventDetailView />} />
@@ -48,4 +52,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
-// Exakte Zeilenzahl: 47
+// Exakte Zeilenzahl: 49
