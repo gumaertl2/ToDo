@@ -62,11 +62,20 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
                     onMove={moveAgendaItem} onEdit={onEditItem}
                     onOpenHistory={onOpenHistory as any}
                     
-                    // CHIRURGISCHER EINGRIFF: Intelligente Lösch-Sperre im Protokoll angepasst (nur für geklonte Aufgaben)
+                    // CHIRURGISCHER EINGRIFF: Intelligente Lösch-Sperre im Protokoll
                     onDelete={(id, title) => {
-                      if (item.type === 'AUFGABE' && !!item.baseItemId) {
-                        window.alert(`Die vererbte Aufgabe "${title}" kann nicht gelöscht werden.\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn sie beendet ist.`);
-                        return;
+                      if (item.type === 'AUFGABE') {
+                        const isClone = !!item.baseItemId;
+                        const isAssigned = (item.assigneeUserIds && item.assigneeUserIds.length > 0) || (item.assigneeGroupIds && item.assigneeGroupIds.length > 0);
+                        
+                        if (isClone) {
+                          window.alert(`Die vererbte Aufgabe "${title}" kann nicht gelöscht werden.\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn sie beendet ist.`);
+                          return;
+                        }
+                        if (isAssigned) {
+                          window.alert(`Die zugewiesene Aufgabe "${title}" kann nicht mehr gelöscht werden.\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn sie beendet ist.`);
+                          return;
+                        }
                       }
                       
                       if (window.confirm(`"${title}" wirklich löschen?`)) {
@@ -106,4 +115,4 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
     </div>
   );
 };
-// Exakte Zeilenzahl: 99
+// Exakte Zeilenzahl: 104
