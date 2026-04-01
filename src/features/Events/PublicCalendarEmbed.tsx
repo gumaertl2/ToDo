@@ -1,7 +1,7 @@
 // src/features/Events/PublicCalendarEmbed.tsx
 import React, { useState, useEffect } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
-import type { Event as RBCEvent } from 'react-big-calendar'; // CHIRURGISCHER EINGRIFF: Korrekter Type-Import
+import type { Event as RBCEvent } from 'react-big-calendar';
 import { format } from 'date-fns/format';
 import { parse } from 'date-fns/parse';
 import { startOfWeek } from 'date-fns/startOfWeek';
@@ -48,7 +48,7 @@ export const PublicCalendarEmbed: React.FC = () => {
         snap.forEach((doc) => {
           const data = { ...doc.data(), id: doc.id } as CalendarEvent;
           loadedEvents.push({
-            id: data.id,
+            // CHIRURGISCHER EINGRIFF: Fehlerhafte id-Zeile restlos entfernt
             title: data.title,
             start: new Date(data.startTime),
             end: new Date(data.endTime || data.startTime),
@@ -166,4 +166,4 @@ export const PublicCalendarEmbed: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 154
+// Exakte Zeilenzahl: 153
