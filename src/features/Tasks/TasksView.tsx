@@ -12,7 +12,8 @@ type SortKey = 'title' | 'status' | 'assignee' | 'dueDate';
 type SortDirection = 'asc' | 'desc';
 
 export const TasksView: React.FC = () => {
-  const { tasks, fetchTasks, isTasksLoading, user, saveAgendaItem, events, fetchEvents, users, groups, deleteTask } = useClubStore();
+  // CHIRURGISCHER EINGRIFF: deleteTask entfernt, da es hier nicht mehr verwendet wird
+  const { tasks, fetchTasks, isTasksLoading, user, saveAgendaItem, events, fetchEvents, users, groups } = useClubStore();
   
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [filterMode, setFilterMode] = useState<'all' | 'my' | 'custom'>('my');
@@ -450,7 +451,6 @@ export const TasksView: React.FC = () => {
                         }}
                         onEdit={(item) => { setEditingItem(item as Task); setIsItemModalOpen(true); }}
                         onOpenHistory={(item) => setHistoryTask(item as Task)}
-                        // CHIRURGISCHER EINGRIFF: Fehler TS6133 durch Ignorieren von id behoben
                         onDelete={(_, title) => {
                           window.alert(`Die Aufgabe "${title}" kann hier nicht gelöscht werden.\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn du sie beendet hast.\n\nDas physische Löschen von Aufgaben ist nur direkt im Sitzungsprotokoll erlaubt.`);
                         }}
