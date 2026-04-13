@@ -37,6 +37,7 @@ export interface Group extends BaseDocument {
 
 export interface Helper extends BaseDocument {
   name: string;
+  alias?: string; // CHIRURGISCHER EINGRIFF: Alias für die öffentliche Anzeige
   bezug: string;
   email: string;
   telefon: string;
@@ -50,6 +51,12 @@ export interface ClubEvent extends BaseDocument {
   description?: string;
   location?: string;
   status: 'PLANUNG' | 'AKTIV' | 'ABGESCHLOSSEN';
+  
+  eventType?: 'TERMIN' | 'DIENST'; // CHIRURGISCHER EINGRIFF: Klare Trennung
+  reminderSenderUserId?: string;   // CHIRURGISCHER EINGRIFF: Zuständiger für Erinnerung
+  reminderLeadDays?: number;       // CHIRURGISCHER EINGRIFF: Vorlaufzeit in Tagen
+  reminderSentAt?: number;         // CHIRURGISCHER EINGRIFF: Zeitstempel für Versand
+  reminderCustomText?: string;     // CHIRURGISCHER EINGRIFF: Individueller Text für WhatsApp
   
   isPublished: boolean; 
   seriesId?: string;    
@@ -100,8 +107,14 @@ export interface AgendaItem extends BaseDocument {
   status: ItemStatus;
   progress: number; 
   dueDate?: number; 
+  
   assigneeUserIds: string[];  
   assigneeGroupIds: string[]; 
+  assigneeHelperIds?: string[];    // CHIRURGISCHER EINGRIFF: Helfer für Aufgaben
+  reminderSenderUserId?: string;   // CHIRURGISCHER EINGRIFF: Zuständiger für Erinnerung
+  reminderLeadDays?: number;       // CHIRURGISCHER EINGRIFF: Vorlaufzeit in Tagen
+  reminderSentAt?: number;         // CHIRURGISCHER EINGRIFF: Zeitstempel für Versand
+  
   comments: ItemComment[];
   checkliste: { id: string; text: string; isDone: boolean }[];
 
@@ -156,4 +169,4 @@ export interface CalendarEvent extends BaseDocument {
   isPublic: boolean;
   seriesId?: string; // CHIRURGISCHER EINGRIFF: Kennung für zusammenhängende Planungen
 }
-// Exakte Zeilenzahl: 159
+// Exakte Zeilenzahl: 173
