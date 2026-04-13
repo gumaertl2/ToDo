@@ -1,4 +1,4 @@
-// 2026-04-13 22:15 - FEATURE: Verwerfen-Button für WhatsApp-Erinnerungen
+// 2026-04-13 22:30 - FIX: Wiederherstellung der detaillierten WhatsApp-Erinnerungen + Verwerfen
 // src/features/Dashboard/DashboardView.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
@@ -7,6 +7,46 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { ItemCard } from '../Shared/ItemCard';
 import { ItemFormModal } from '../Shared/ItemFormModal';
 import type { Task } from '../../core/types/models';
+
+// CHIRURGISCHER EINGRIFF: Die gerettete Hilfsfunktion für vollständige Details (Titel, Termin, Zeit, Ort)
+const formatReminderText = (type: 'Event' | 'Task', item: any, customText?: string) => {
+  const baseText = customText ? customText : 'Hallo, hier ist eine kurze Erinnerung für dich:';
+  const details: string[] = [];
+
+  if (type === 'Event') {
+    const start = new Date(item.startTime);
+    const dateStr = start.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    
+    let timeStr = 'Ganztägig';
+    if (!item.isAllDay) {
+      timeStr = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+      if (item.endTime) {
+        const end = new Date(item.endTime);
+        timeStr += ` - ${end.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`;
+      }
+    }
+
+    details.push(`📌 Titel: ${item.title}`);
+    details.push(`📅 Termin: ${dateStr}`);
+    details.push(`⏰ Zeit: ${timeStr}`);
+    if (item.location) {
+      details.push(`📍 Ort: ${item.location}`);
+    }
+    if (item.description) {
+      details.push(`ℹ️ Info: ${item.description}`);
+    }
+  } else {
+    details.push(`📌 Titel: ${item.title}`);
+    if (item.dueDate) {
+      details.push(`📅 Fällig am: ${new Date(item.dueDate).toLocaleDateString('de-DE')}`);
+    }
+    if (item.description) {
+      details.push(`ℹ️ Info: ${item.description}`);
+    }
+  }
+
+  return `${baseText}\n\n${details.join('\n')}`;
+};
 
 export const DashboardView: React.FC = () => {
   const { 
@@ -74,12 +114,14 @@ export const DashboardView: React.FC = () => {
               }
             }
 
+            const fullText = formatReminderText('Event', ce, ce.reminderCustomText);
+
             items.push({
               id: ce.id,
               type: ce.eventType === 'DIENST' ? 'Dienst' : 'Termin',
               title: ce.title,
               date: ce.startTime,
-              text: ce.reminderCustomText || `Hallo, kurze Erinnerung an: ${ce.title}`,
+              text: fullText,
               targetsNames,
               isDirect, 
               phone,
@@ -114,12 +156,14 @@ export const DashboardView: React.FC = () => {
             const isDirect = targets.length === 1 && !targets[0].isGroup && !!targets[0].phone;
             const phone = isDirect ? targets[0].phone : '';
 
+            const fullText = formatReminderText('Task', t);
+
             items.push({
               id: t.id,
               type: 'Aufgabe',
               title: t.title,
               date: t.dueDate,
-              text: `Erinnerung: ${t.title}${t.description ? ' - ' + t.description : ''}`,
+              text: fullText,
               targetsNames,
               isDirect,
               phone,
@@ -164,7 +208,6 @@ export const DashboardView: React.FC = () => {
     }
   };
 
-  // CHIRURGISCHER EINGRIFF: Neues Verwerfen ohne WhatsApp-Link
   const handleDismissReminder = async (rem: any) => {
     if (!window.confirm('Möchtest du diese Erinnerung verwerfen (ohne zu senden)?')) return;
     try {
@@ -261,7 +304,6 @@ export const DashboardView: React.FC = () => {
                     </p>
                   </div>
                   
-                  {/* CHIRURGISCHER EINGRIFF: Verwerfen-Button hinzugefügt */}
                   <div className="flex items-center gap-2 mt-3 sm:mt-0">
                     <button
                       onClick={() => handleDismissReminder(rem)}
@@ -368,4 +410,4 @@ export const DashboardView: React.FC = () => {
     </div>
   );
 };
-// --- END OF FILE 369 Zeilen ---
+// --- END OF FILE 373 Zeilen ---
