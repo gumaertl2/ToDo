@@ -1,4 +1,4 @@
-// 2026-04-13 19:47 - FIX: Stabile Datumseingabe via Focus-Switch
+// 2026-04-13 22:20 - FIX: Vercel Build Errors (Type Conversion)
 // src/features/Users/HelperFormModal.tsx
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
@@ -64,7 +64,6 @@ export const HelperFormModal: React.FC<HelperFormModalProps> = ({ onClose, exist
       }
     }
     
-    // CHIRURGISCHER EINGRIFF: Der Nummern-Sanitäter (WhatsApp-Ready)
     let formattedPhone = telefon.trim().replace(/[^0-9+]/g, '');
     if (formattedPhone) {
       if (formattedPhone.startsWith('00')) {
@@ -89,7 +88,8 @@ export const HelperFormModal: React.FC<HelperFormModalProps> = ({ onClose, exist
       retentionExpiresAt: existingHelper?.retentionExpiresAt || (now + oneYear),
     };
 
-    const safeHelperData = Object.fromEntries(Object.entries(rawHelperData).filter(([_, v]) => v !== undefined)) as Helper;
+    // CHIRURGISCHER EINGRIFF: as unknown as hinzugefügt, um TS2352 zu beheben
+    const safeHelperData = Object.fromEntries(Object.entries(rawHelperData).filter(([_, v]) => v !== undefined)) as unknown as Helper;
 
     if (existingHelper) {
       await updateHelper(safeHelperData);

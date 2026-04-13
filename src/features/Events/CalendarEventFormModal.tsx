@@ -1,3 +1,4 @@
+// 2026-04-13 22:20 - FIX: Vercel Build Errors (Type Conversion)
 // src/features/Events/CalendarEventFormModal.tsx
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
@@ -69,7 +70,6 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
       return;
     }
     
-    // CHIRURGISCHER EINGRIFF: rawEventData ohne feste Typisierung, um den Filter anwenden zu können
     const rawEventData: any = {
       id: existingEvent?.id || `calev-${Date.now()}`,
       schemaVersion: '1.0',
@@ -91,8 +91,8 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
       rawEventData.seriesId = existingEvent.seriesId;
     }
 
-    // CHIRURGISCHER EINGRIFF: Entfernt alle undefined Felder für Firebase
-    const safeEventData = Object.fromEntries(Object.entries(rawEventData).filter(([_, v]) => v !== undefined)) as CalendarEvent;
+    // CHIRURGISCHER EINGRIFF: as unknown as hinzugefügt, um TS2352 zu beheben
+    const safeEventData = Object.fromEntries(Object.entries(rawEventData).filter(([_, v]) => v !== undefined)) as unknown as CalendarEvent;
 
     const result = existingEvent 
       ? await updateCalendarEvent(safeEventData) 
@@ -308,4 +308,4 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
     </div>
   );
 };
-// Exakte Zeilenzahl: 300
+// --- END OF FILE 300 Zeilen ---

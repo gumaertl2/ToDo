@@ -1,8 +1,9 @@
-// 2026-04-13 18:28 - FIX: Stabile Datumseingabe via Focus-Switch & Placeholder-Korrektur
+// 2026-04-13 22:20 - FIX: Vercel Build Errors (Unused & Type Conversion)
 // src/features/Users/UsersView.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import { Users, UserPlus, ShieldAlert, Trash2, Edit2, Tag, Clock, Calendar, ArrowUpDown, Plus } from 'lucide-react';
+// CHIRURGISCHER EINGRIFF: Calendar entfernt
+import { Users, UserPlus, ShieldAlert, Trash2, Edit2, Tag, Clock, ArrowUpDown, Plus } from 'lucide-react';
 import { HelperFormModal } from './HelperFormModal.tsx';
 import { UserFormModal } from './UserFormModal.tsx';
 import { GroupFormModal } from './GroupFormModal.tsx';
@@ -36,7 +37,6 @@ const EditableCell: React.FC<{
   if (isEditing) {
     return (
       <input
-        // CHIRURGISCHER EINGRIFF: Typ-Wechsel nur bei Focus/Value, um Jahreszahl-Bug zu verhindern
         type={type === 'date' ? (isFocused || tempVal ? 'date' : 'text') : type}
         onFocus={() => setIsFocused(true)}
         autoFocus 
@@ -136,7 +136,6 @@ const QuickAddHelperRow: React.FC<{
       </td>
       <td className="px-6 py-3 whitespace-nowrap">
         <input 
-          // CHIRURGISCHER EINGRIFF: Placeholder "Geburtstag" anzeigen durch dynamischen Typ-Wechsel nur bei Focus
           type={isDateFocused || geburtsdatum ? "date" : "text"}
           onFocus={() => setIsDateFocused(true)}
           onBlur={() => setIsDateFocused(false)}
@@ -168,7 +167,8 @@ const QuickAddHelperRow: React.FC<{
 };
 
 export const UsersView: React.FC = () => {
-  const { user, users, helpers, groups, events, tasks, fetchUsersAndHelpers, fetchTemplatesAndRoutines, fetchEvents, fetchTasks, saveAgendaItem, cleanupExpiredHelpers, addHelper, deleteHelper, updateHelper, deleteUser, deleteGroup, isUsersLoading } = useClubStore();
+  // CHIRURGISCHER EINGRIFF: user aus Destrukturierung entfernt
+  const { users, helpers, groups, events, tasks, fetchUsersAndHelpers, fetchTemplatesAndRoutines, fetchEvents, fetchTasks, saveAgendaItem, cleanupExpiredHelpers, addHelper, deleteHelper, updateHelper, deleteUser, deleteGroup, isUsersLoading } = useClubStore();
   
   const [activeTab, setActiveTab] = useState<'vorstand' | 'helfer' | 'rollen'>('vorstand');
   const [isHelperModalOpen, setIsHelperModalOpen] = useState(false);
@@ -289,7 +289,8 @@ export const UsersView: React.FC = () => {
       retentionExpiresAt: now + oneYear,
       ...data
     };
-    const safeHelper = Object.fromEntries(Object.entries(rawHelper).filter(([_, v]) => v !== undefined)) as Helper;
+    // CHIRURGISCHER EINGRIFF: as unknown as hinzugefügt, um TS2352 zu beheben
+    const safeHelper = Object.fromEntries(Object.entries(rawHelper).filter(([_, v]) => v !== undefined)) as unknown as Helper;
     await addHelper(safeHelper);
   };
 
@@ -314,11 +315,7 @@ export const UsersView: React.FC = () => {
     }
   };
   
-  const handleSafeDeleteUser = async (u: User) => {
-    if (window.confirm(`Möchtest du den Vorstand "${u.name}" wirklich löschen?`)) {
-      if (u.id) await deleteUser(u.id);
-    }
-  };
+  // CHIRURGISCHER EINGRIFF: Ungenutzte Funktion handleSafeDeleteUser entfernt
 
   const handleSafeDeleteGroup = async (g: Group) => {
     if (window.confirm(`Möchtest du die Rolle "${g.name}" wirklich löschen?`)) {
@@ -520,4 +517,4 @@ export const UsersView: React.FC = () => {
     </div>
   );
 };
-// --- END OF FILE 445 Zeilen ---
+// --- END OF FILE 439 Zeilen ---

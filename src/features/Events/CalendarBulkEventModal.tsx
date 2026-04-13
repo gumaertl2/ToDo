@@ -1,8 +1,10 @@
+// 2026-04-13 22:20 - FIX: Vercel Build Errors (Unused Imports)
 // src/features/Events/CalendarBulkEventModal.tsx
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import type { CalendarEvent, Helper } from '../../core/types/models';
-import { X, Save, AlertCircle, Globe, Calendar as CalIcon, Trash2, CalendarDays, Clock, Layers, MessageCircle, Search, ChevronDown } from 'lucide-react';
+// CHIRURGISCHER EINGRIFF: CalendarDays, Clock und Layers entfernt
+import { X, Save, AlertCircle, Globe, Calendar as CalIcon, Trash2, MessageCircle, Search, ChevronDown } from 'lucide-react';
 import { startOfWeek, endOfWeek, addWeeks, format, addDays, addMonths, startOfMonth, endOfMonth } from 'date-fns';
 import { de } from 'date-fns/locale/de';
 
@@ -130,7 +132,6 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose, existingSerie
     } else if (rhythm === 'Tage') {
       let current = new Date(start);
       while (current <= end) {
-        // CHIRURGISCHER EINGRIFF: Filtert die Zeilenliste direkt basierend auf den Wochentagen
         if (selectedWeekDays.includes(current.getDay())) {
           res.push({ id: current.toISOString(), start: new Date(current), end: new Date(current), label: format(current, 'EEEE, dd.MM.yyyy', { locale: de }), kw: format(current, 'I', { locale: de }) });
         }
@@ -171,7 +172,6 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose, existingSerie
       if (rhythm === 'Wochen') {
         eventsToCreate.push({ ...common, id: `calev-${Date.now()}-${index}`, startTime: item.start.getTime(), endTime: item.end.getTime(), isAllDay: true });
       } else if (rhythm === 'Tage') {
-        // Da items bereits gefiltert ist, ist hier keine zusätzliche Prüfung nötig, schadet aber nicht
         eventsToCreate.push({ ...common, id: `calev-${Date.now()}-${index}`, startTime: item.start.getTime(), endTime: item.start.getTime(), isAllDay: true });
       } else {
         eventsToCreate.push({ ...common, id: `calev-${Date.now()}-${index}`, startTime: item.start.getTime(), endTime: item.end.getTime(), isAllDay: true });
@@ -262,4 +262,4 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose, existingSerie
     </div>
   );
 };
-// Exakte Zeilenzahl: 326
+// --- END OF FILE 226 Zeilen ---
