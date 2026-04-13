@@ -1,14 +1,28 @@
 // src/features/Dashboard/DashboardView.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import { Calendar, CheckSquare, Clock, ArrowRight } from 'lucide-react';
+import { Calendar, CheckSquare, Clock, ArrowRight, MessageCircle, Send } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { ItemCard } from '../Shared/ItemCard';
 import { ItemFormModal } from '../Shared/ItemFormModal';
 import type { Task } from '../../core/types/models';
 
 export const DashboardView: React.FC = () => {
-  const { events, tasks, user, fetchEvents, fetchTasks, isEventsLoading, saveAgendaItem } = useClubStore();
+  // CHIRURGISCHER EINGRIFF: Alle benötigten States und Funktionen aus dem Store laden
+  const { 
+    events, 
+    tasks, 
+    calendarEvents, 
+    groups, 
+    helpers, 
+    user, 
+    fetchEvents, 
+    fetchTasks, 
+    isEventsLoading, 
+    saveAgendaItem,
+    updateCalendarEvent 
+  } = useClubStore();
+  
   const navigate = useNavigate();
   
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
@@ -18,6 +32,121 @@ export const DashboardView: React.FC = () => {
     fetchEvents();
     fetchTasks();
   }, [fetchEvents, fetchTasks]);
+
+  // CHIRURGISCHER EINGRIFF: Die intelligente WhatsApp-Fristen-Berechnung
+  const pendingReminders = useMemo(() => {
+    if (!user) return [];
+    
+    const now = new Date();
+    // Um 00:00 Uhr des heutigen Tages für den exakten Tagesabgleich
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+    const items: any[] = [];
+
+    // 1. Kalender-Einträge (Termine & Dienste) prüfen
+    if (calendarEvents) {
+      calendarEvents.forEach(ce => {
+        if (ce.reminderSenderUserId === user.id && !ce.reminderSentAt && ce.reminderLeadDays !== undefined) {
+          const eventStart = new Date(ce.startTime);
+          const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
+          const stichtag = eventDateStart - (ce.reminderLeadDays * MS_PER_DAY);
+          
+          if (todayStart >= stichtag) {
+            items.push({
+              id: ce.id,
+              type: ce.eventType === 'DIENST' ? 'Dienst' : 'Termin',
+              title: ce.title,
+              date: ce.startTime,
+              text: ce.reminderCustomText || `Hallo, kurze Erinnerung an: ${ce.title}`,
+              targetsNames: 'Manuelle Gruppenwahl',
+              isDirect: false, // Bei Diensten immer Joker-Link für WhatsApp-Gruppen
+              phone: '',
+              rawItem: ce,
+              model: 'calendarEvent'
+            });
+          }
+        }
+      });
+    }
+
+    // 2. Aufgaben (Tasks) prüfen
+    if (tasks) {
+      tasks.forEach(t => {
+        if (t.reminderSenderUserId === user.id && !t.reminderSentAt && t.reminderLeadDays !== undefined && t.dueDate) {
+          const taskDue = new Date(t.dueDate);
+          const taskDateStart = new Date(taskDue.getFullYear(), taskDue.getMonth(), taskDue.getDate()).getTime();
+          const stichtag = taskDateStart - (t.reminderLeadDays * MS_PER_DAY);
+          
+          if (todayStart >= stichtag) {
+            const targets: { name: string, phone?: string, isGroup: boolean }[] = [];
+            
+            t.assigneeGroupIds?.forEach(gId => {
+               const g = groups?.find(x => x.id === gId);
+               if (g) targets.push({ name: g.name, isGroup: true });
+            });
+            t.assigneeHelperIds?.forEach(hId => {
+               const h = helpers?.find(x => x.id === hId);
+               if (h) targets.push({ name: h.alias || h.name, phone: h.telefon, isGroup: false });
+            });
+
+            const targetsNames = targets.map(x => x.name).join(', ') || 'Manuelle Auswahl';
+            // Wir bauen den Direktlink nur, wenn exakt 1 Helfer (mit Nummer) zugewiesen ist
+            const isDirect = targets.length === 1 && !targets[0].isGroup && !!targets[0].phone;
+            const phone = isDirect ? targets[0].phone : '';
+
+            items.push({
+              id: t.id,
+              type: 'Aufgabe',
+              title: t.title,
+              date: t.dueDate,
+              text: `Erinnerung: ${t.title}${t.description ? ' - ' + t.description : ''}`,
+              targetsNames,
+              isDirect,
+              phone,
+              rawItem: t,
+              model: 'task'
+            });
+          }
+        }
+      });
+    }
+
+    // Nach Datum sortieren (die dringendsten zuerst)
+    return items.sort((a, b) => a.date - b.date);
+  }, [user, calendarEvents, tasks, groups, helpers]);
+
+  // CHIRURGISCHER EINGRIFF: Versand und Stempel-Logik
+  const handleSendReminder = async (rem: any) => {
+    let url = '';
+    const text = rem.text;
+
+    if (rem.isDirect && rem.phone) {
+      // Nummern-Sanitäter: Entfernt Leerzeichen und formatiert zu +49
+      let phone = String(rem.phone).replace(/[^0-9+]/g, '');
+      if (phone.startsWith('0049')) phone = '+49' + phone.substring(4);
+      else if (phone.startsWith('0')) phone = '+49' + phone.substring(1);
+      
+      url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+    } else {
+      // Joker-Link (öffnet WhatsApp, User wählt Kontakt/Gruppe)
+      url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    }
+
+    // Öffnet WhatsApp
+    window.open(url, '_blank');
+
+    // In Firebase als erledigt/gesendet abstempeln
+    try {
+      if (rem.model === 'calendarEvent') {
+        await updateCalendarEvent({ ...rem.rawItem, reminderSentAt: Date.now() });
+      } else if (rem.model === 'task') {
+        await saveAgendaItem({ ...rem.rawItem, reminderSentAt: Date.now() });
+      }
+    } catch (err) {
+      console.error("Fehler beim Speichern des Zeitstempels:", err);
+    }
+  };
 
   const upcomingEvents = useMemo(() => {
     const startOfToday = new Date();
@@ -33,18 +162,14 @@ export const DashboardView: React.FC = () => {
   const openTasks = useMemo(() => {
     let filtered = tasks.filter((t) => t.status !== 'ERLEDIGT');
     
-    // CHIRURGISCHER EINGRIFF: Der Kanban-Staubsauger - Jetzt synchron mit TasksView
     filtered = filtered.filter((t) => {
-      if (!t.eventId) return true; // Globale Aufgabe ohne Event bleibt sichtbar
+      if (!t.eventId) return true; 
       const ev = events.find(e => e.id === t.eventId);
       if (!ev) return false; 
       
-      // Ist das Event abgeschlossen oder archiviert? Dann weg hier!
       if (ev.status === 'ABGESCHLOSSEN' || ev.isArchived) return false;
       
       if (ev.status === 'PLANUNG') {
-        // Geerbte/Geklonte Aufgaben (baseItemId vorhanden) IMMER zeigen.
-        // Neue Aufgaben (keine baseItemId) NUR zeigen, wenn veröffentlicht.
         if (!ev.isPublished && !t.baseItemId) return false;
       }
       return true; 
@@ -74,6 +199,52 @@ export const DashboardView: React.FC = () => {
           <p className="text-sm text-gray-500 mt-1">Hier ist der Überblick über deine Aufgaben und anstehenden Termine.</p>
         </div>
       </div>
+
+      {/* CHIRURGISCHER EINGRIFF: Die Kommando-Zentrale (nur sichtbar, wenn etwas fällig ist) */}
+      {pendingReminders.length > 0 && (
+        <div className="bg-green-50 rounded-xl shadow-sm border border-green-200 overflow-hidden flex flex-col animate-fade-in">
+          <div className="p-4 border-b border-green-200 bg-green-100 flex items-center justify-between">
+            <h2 className="text-lg font-bold text-green-900 flex items-center">
+              <MessageCircle className="w-5 h-5 mr-2 text-green-700" />
+              Fällige WhatsApp Erinnerungen
+            </h2>
+            <span className="bg-green-600 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
+              {pendingReminders.length} anstehend
+            </span>
+          </div>
+          <div className="p-4">
+            <div className="space-y-3">
+              {pendingReminders.map(rem => (
+                <div key={rem.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white border border-green-200 rounded-lg shadow-sm">
+                  <div className="mb-3 sm:mb-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-green-700 bg-green-100 px-2 py-0.5 rounded">
+                        {rem.type}
+                      </span>
+                      <span className="text-sm font-bold text-gray-900">{rem.title}</span>
+                    </div>
+                    <p className="text-xs text-gray-600 font-medium">
+                      Fällig: {new Date(rem.date).toLocaleDateString('de-DE')} 
+                      {rem.targetsNames ? ` • Empfänger: ${rem.targetsNames}` : ''}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1.5 italic bg-gray-50 p-2 rounded border border-gray-100">
+                      "{rem.text}"
+                    </p>
+                  </div>
+                  
+                  <button
+                    onClick={() => handleSendReminder(rem)}
+                    className="flex items-center justify-center px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-sm transition-colors shadow-sm whitespace-nowrap"
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    Senden & Erledigt
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
@@ -158,4 +329,4 @@ export const DashboardView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 156
+// Exakte Zeilenzahl: 301

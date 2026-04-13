@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import type { CalendarEvent } from '../../core/types/models';
-import { X, Save, AlertCircle, Globe, Trash2, Layers, Info, Plus } from 'lucide-react';
+import { X, Save, AlertCircle, Globe, Trash2, Layers, Info, Plus, MessageCircle } from 'lucide-react';
 
 interface Props {
   onClose: () => void;
@@ -10,7 +10,7 @@ interface Props {
 }
 
 export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent }) => {
-  const { addCalendarEvent, updateCalendarEvent, deleteCalendarEvent, deleteCalendarSeries } = useClubStore();
+  const { users, addCalendarEvent, updateCalendarEvent, deleteCalendarEvent, deleteCalendarSeries } = useClubStore();
   
   const initStart = existingEvent ? new Date(existingEvent.startTime) : new Date();
   const initEnd = existingEvent?.endTime ? new Date(existingEvent.endTime) : new Date(initStart.getTime() + 2 * 60 * 60 * 1000);
@@ -20,7 +20,6 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
   const fTime = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
   const [title, setTitle] = useState(existingEvent?.title || '');
-  // CHIRURGISCHER EINGRIFF: Neuer State für den Ort
   const [location, setLocation] = useState(existingEvent?.location || '');
   const [startDate, setStartDate] = useState(fDate(initStart));
   const [startTime, setStartTime] = useState(existingEvent ? fTime(initStart) : '18:00');
@@ -29,6 +28,10 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
   const [isAllDay, setIsAllDay] = useState(existingEvent?.isAllDay || false);
   const [color, setColor] = useState(existingEvent?.color || '#3b82f6');
   const [isPublic, setIsPublic] = useState(existingEvent?.isPublic ?? true);
+  
+  const [reminderSenderUserId, setReminderSenderUserId] = useState(existingEvent?.reminderSenderUserId || '');
+  const [reminderLeadDays, setReminderLeadDays] = useState(existingEvent?.reminderLeadDays?.toString() || '7');
+  const [reminderCustomText, setReminderCustomText] = useState(existingEvent?.reminderCustomText || '');
   
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -66,31 +69,38 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
       return;
     }
     
-    const eventData: CalendarEvent = {
+    // CHIRURGISCHER EINGRIFF: rawEventData ohne feste Typisierung, um den Filter anwenden zu können
+    const rawEventData: any = {
       id: existingEvent?.id || `calev-${Date.now()}`,
       schemaVersion: '1.0',
       title: title.trim(),
-      // CHIRURGISCHER EINGRIFF: Ort in die Datenbank schreiben
       location: location.trim(),
       startTime: startTimestamp,
       endTime: endTimestamp,
       isAllDay,
       color,
       isPublic,
+      eventType: 'TERMIN',
+      reminderSenderUserId: reminderSenderUserId || undefined,
+      reminderLeadDays: reminderSenderUserId ? parseInt(reminderLeadDays, 10) : undefined,
+      reminderCustomText: reminderSenderUserId ? reminderCustomText.trim() : undefined,
+      reminderSentAt: existingEvent?.reminderSentAt,
     };
 
     if (existingEvent?.seriesId) {
-      eventData.seriesId = existingEvent.seriesId;
+      rawEventData.seriesId = existingEvent.seriesId;
     }
 
+    // CHIRURGISCHER EINGRIFF: Entfernt alle undefined Felder für Firebase
+    const safeEventData = Object.fromEntries(Object.entries(rawEventData).filter(([_, v]) => v !== undefined)) as CalendarEvent;
+
     const result = existingEvent 
-      ? await updateCalendarEvent(eventData) 
-      : await addCalendarEvent(eventData);
+      ? await updateCalendarEvent(safeEventData) 
+      : await addCalendarEvent(safeEventData);
 
     if (result.success) {
       if (keepOpen) {
-        setTitle(''); // Titel leeren für den nächsten Termin
-        // Ort (location) bleibt absichtlich erhalten!
+        setTitle(''); 
         setIsSaving(false); 
       } else {
         onClose();
@@ -154,7 +164,6 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
             <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} disabled={isSaving} className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500" placeholder="z.B. Hallenputz" autoFocus />
           </div>
 
-          {/* CHIRURGISCHER EINGRIFF: Optionaler Ort */}
           <div className="mt-3">
             <label className="block text-sm font-medium text-gray-700 mb-1">Ort (Optional)</label>
             <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} disabled={isSaving} className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500" placeholder="z.B. Turnhalle Maisach" />
@@ -189,6 +198,60 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
                 <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} disabled={isSaving} className="w-full p-2 border border-gray-300 rounded" />
               </div>
             )}
+          </div>
+
+          <div className="mt-5 bg-green-50 border border-green-200 rounded-lg p-4">
+            <h3 className="text-sm font-bold text-green-800 mb-3 flex items-center">
+              <MessageCircle className="w-4 h-4 mr-2" />
+              WhatsApp Erinnerung (Optional)
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-green-800 mb-1">Wer verschickt die Erinnerung?</label>
+                <select 
+                  value={reminderSenderUserId} 
+                  onChange={(e) => setReminderSenderUserId(e.target.value)}
+                  disabled={isSaving}
+                  className="w-full p-2 border border-green-300 rounded focus:ring-green-500 focus:border-green-500 text-sm bg-white"
+                >
+                  <option value="">-- Niemand (Keine Erinnerung) --</option>
+                  {(users || []).map(u => (
+                    <option key={u.id} value={u.id}>{u.name} ({u.rolle})</option>
+                  ))}
+                </select>
+              </div>
+              
+              {reminderSenderUserId && (
+                <div className="space-y-4 pt-1">
+                  <div className="w-full md:w-1/3">
+                    <label className="block text-xs font-medium text-green-800 mb-1">Tage vorher?</label>
+                    <input 
+                      type="number" 
+                      min="1" 
+                      max="365"
+                      value={reminderLeadDays} 
+                      onChange={(e) => setReminderLeadDays(e.target.value)}
+                      disabled={isSaving}
+                      className="w-full p-2 border border-green-300 rounded focus:ring-green-500 focus:border-green-500 text-sm bg-white"
+                    />
+                  </div>
+                  <div className="w-full">
+                    <label className="block text-xs font-medium text-green-800 mb-1">Erinnerungstext</label>
+                    <textarea 
+                      value={reminderCustomText} 
+                      onChange={(e) => setReminderCustomText(e.target.value)}
+                      disabled={isSaving}
+                      rows={3}
+                      placeholder="Hallo, kurze Erinnerung an unseren Termin..."
+                      className="w-full p-2 border border-green-300 rounded focus:ring-green-500 focus:border-green-500 text-sm bg-white resize-y"
+                    />
+                  </div>
+                  <div className="w-full">
+                    <p className="text-xs text-green-700 leading-tight">Dieser Text wird am Stichtag fertig formatiert an WhatsApp übergeben. Die Telefonnummer oder Gruppe wird automatisch eingefügt.</p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex gap-4 border-t border-gray-100 pt-4 mt-4">
@@ -245,4 +308,4 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
     </div>
   );
 };
-// Exakte Zeilenzahl: 228
+// Exakte Zeilenzahl: 300

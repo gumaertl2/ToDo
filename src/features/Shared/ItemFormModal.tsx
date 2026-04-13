@@ -1,8 +1,8 @@
 // src/features/Shared/ItemFormModal.tsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import type { AgendaItem, ItemType, ItemStatus } from '../../core/types/models';
-import { X, Save, ChevronDown, ChevronRight, Copy } from 'lucide-react';
+import { X, Save, ChevronDown, ChevronRight, Copy, MessageCircle, Search } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -11,11 +11,12 @@ interface Props {
   existingItem?: Partial<AgendaItem>;
   isFixedType?: boolean;
   isReadOnly?: boolean;
-  onDurationPreview?: (val: number) => void; // CHIRURGISCHER EINGRIFF: Trigger für die Echtzeit-Simulation
+  onDurationPreview?: (val: number) => void; 
 }
 
 export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existingItem, isFixedType, isReadOnly = false, onDurationPreview }) => {
-  const { users, groups, events, saveAgendaItem } = useClubStore();
+  // CHIRURGISCHER EINGRIFF: helpers aus dem Store laden
+  const { users, groups, helpers = [], events, saveAgendaItem } = useClubStore();
   
   const parentEvent = existingItem?.eventId ? events.find(e => e.id === existingItem.eventId) : null;
   const isProtocolMode = parentEvent?.status === 'AKTIV' || parentEvent?.status === 'ABGESCHLOSSEN';
@@ -34,10 +35,16 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
   
   const [assigneeUserIds, setAssigneeUserIds] = useState<string[]>(existingItem?.assigneeUserIds || []);
   const [assigneeGroupIds, setAssigneeGroupIds] = useState<string[]>(existingItem?.assigneeGroupIds || []);
+  // CHIRURGISCHER EINGRIFF: Helfer State
+  const [assigneeHelperIds, setAssigneeHelperIds] = useState<string[]>(existingItem?.assigneeHelperIds || []);
 
   const [status, setStatus] = useState<ItemStatus>(existingItem?.status || 'OFFEN');
   const [progress, setProgress] = useState<number>(existingItem?.progress || 0);
   
+  // CHIRURGISCHER EINGRIFF: WhatsApp States (Nur für Aufgaben)
+  const [reminderSenderUserId, setReminderSenderUserId] = useState(existingItem?.reminderSenderUserId || '');
+  const [reminderLeadDays, setReminderLeadDays] = useState(existingItem?.reminderLeadDays?.toString() || '7');
+
   const [dueDateStr, setDueDateStr] = useState(
     existingItem?.dueDate 
       ? new Date(existingItem.dueDate).toISOString().substring(0,10) 
@@ -57,8 +64,41 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
   const [error, setError] = useState<string | null>(null);
 
   const [showAdvanced, setShowAdvanced] = useState(false);
+  
+  // CHIRURGISCHER EINGRIFF: Search States für das Smart-Dropdown
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
 
   const todayStr = new Date().toISOString().substring(0, 10);
+
+  // CHIRURGISCHER EINGRIFF: Intelligente Such-Logik
+  const filteredAssignees = useMemo(() => {
+    if (!searchTerm.trim()) return [];
+    const term = searchTerm.toLowerCase();
+    const res: { id: string; type: 'group'|'user'|'helper'; label: string; sub: string }[] = [];
+    
+    groups.forEach(g => {
+      if (!assigneeGroupIds.includes(g.id) && g.name.toLowerCase().includes(term)) {
+        res.push({ id: g.id, type: 'group', label: `🏢 ${g.name}`, sub: 'Vereinsgruppe' });
+      }
+    });
+    
+    users.forEach(u => {
+      if (!assigneeUserIds.includes(u.id) && u.name.toLowerCase().includes(term)) {
+        res.push({ id: u.id, type: 'user', label: `👤 ${u.name}`, sub: `App-Nutzer (${u.rolle})` });
+      }
+    });
+    
+    helpers.forEach(h => {
+      const matchName = h.name.toLowerCase().includes(term);
+      const matchAlias = (h.alias || '').toLowerCase().includes(term);
+      if (!assigneeHelperIds.includes(h.id) && (matchName || matchAlias)) {
+        res.push({ id: h.id, type: 'helper', label: `🤝 ${h.name}`, sub: h.alias ? `Alias: ${h.alias}` : 'Helfer (Extern)' });
+      }
+    });
+    
+    return res;
+  }, [searchTerm, groups, users, helpers, assigneeGroupIds, assigneeUserIds, assigneeHelperIds]);
 
   if (!isOpen) return null;
 
@@ -74,7 +114,7 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
       const payload: Partial<AgendaItem> = {
         type: 'VORLAGE', title: title.trim(), description: description.trim(),
         requestedBy: requestedBy.trim(), durationEstimate,
-        assigneeUserIds, assigneeGroupIds,
+        assigneeUserIds, assigneeGroupIds, assigneeHelperIds,
         mustBeDoneBeforeEvent, leadTimeValue, leadTimeUnit,
         isRoutine, routinePattern: isRoutine ? (routinePattern as any) : undefined, 
         routineEndDate: routineEndDateStr ? new Date(routineEndDateStr).getTime() : undefined,
@@ -99,7 +139,7 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
       const payload: Partial<AgendaItem> = {
         type, title: title.trim(), description: description.trim(),
         requestedBy: requestedBy.trim(), durationEstimate,
-        assigneeUserIds, assigneeGroupIds,
+        assigneeUserIds, assigneeGroupIds, assigneeHelperIds,
       };
 
       if (existingItem?.id) payload.id = existingItem.id;
@@ -115,6 +155,11 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
         payload.status = status;
         payload.progress = progress;
         if (dueDateStr && !isDueNextMeeting) payload.dueDate = new Date(dueDateStr).getTime();
+        
+        // CHIRURGISCHER EINGRIFF: WhatsApp Felder mitsenden
+        payload.reminderSenderUserId = reminderSenderUserId || undefined;
+        payload.reminderLeadDays = reminderSenderUserId ? parseInt(reminderLeadDays, 10) : undefined;
+        payload.reminderSentAt = existingItem?.reminderSentAt;
       }
 
       payload.isRoutine = isRoutine;
@@ -176,7 +221,6 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Dauer (Min)</label>
-              {/* CHIRURGISCHER EINGRIFF: Bei jeder Änderung der Dauer wird die Simulation im Hintergrund getriggert */}
               <input 
                 type="number" 
                 value={durationEstimate} 
@@ -195,20 +239,83 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
             </div>
           </div>
 
-          <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100">
-            <label className="block text-xs font-bold text-blue-800 mb-2">Verantwortliche {!isReadOnly && '(Klicken zum Zuweisen)'}</label>
-            <div className="flex flex-wrap gap-1.5">
-              {[...groups].sort((a, b) => a.name.localeCompare(b.name)).map(g => (
-                <button key={g.id} type="button" onClick={() => !isReadOnly && toggleArray(assigneeGroupIds, setAssigneeGroupIds, g.id)} className={`px-2 py-1 text-xs font-bold rounded-full border ${assigneeGroupIds.includes(g.id) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300'} ${!isReadOnly && !assigneeGroupIds.includes(g.id) ? 'hover:bg-gray-50' : ''} ${isReadOnly ? 'cursor-default opacity-90' : ''}`}>
-                  🏢 {g.name}
-                </button>
-              ))}
-              {[...users].sort((a, b) => a.name.localeCompare(b.name)).map(u => (
-                <button key={u.id} type="button" onClick={() => !isReadOnly && toggleArray(assigneeUserIds, setAssigneeUserIds, u.id)} className={`px-2 py-1 text-xs font-medium rounded-full border ${assigneeUserIds.includes(u.id) ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-300'} ${!isReadOnly && !assigneeUserIds.includes(u.id) ? 'hover:bg-gray-50' : ''} ${isReadOnly ? 'cursor-default opacity-90' : ''}`}>
-                  {u.name}
-                </button>
-              ))}
+          {/* CHIRURGISCHER EINGRIFF: Smart Dropdown für Zuweisungen */}
+          <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100">
+            <label className="block text-xs font-bold text-blue-800 mb-2">Verantwortliche (Gruppen, Mitglieder, Helfer)</label>
+            
+            <div className="flex flex-wrap gap-2 mb-3">
+              {assigneeGroupIds.map(id => {
+                const g = groups.find(x => x.id === id);
+                return g ? (
+                  <span key={`g-${id}`} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-600 text-white">
+                    🏢 {g.name}
+                    {!isReadOnly && <button onClick={() => setAssigneeGroupIds(prev => prev.filter(x => x !== id))} className="ml-1.5 hover:text-blue-200"><X className="w-3 h-3"/></button>}
+                  </span>
+                ) : null;
+              })}
+              {assigneeUserIds.map(id => {
+                const u = users.find(x => x.id === id);
+                return u ? (
+                  <span key={`u-${id}`} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-500 text-white">
+                    👤 {u.name}
+                    {!isReadOnly && <button onClick={() => setAssigneeUserIds(prev => prev.filter(x => x !== id))} className="ml-1.5 hover:text-blue-200"><X className="w-3 h-3"/></button>}
+                  </span>
+                ) : null;
+              })}
+              {assigneeHelperIds.map(id => {
+                const h = helpers.find(x => x.id === id);
+                return h ? (
+                  <span key={`h-${id}`} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-teal-600 text-white">
+                    🤝 {h.name}
+                    {!isReadOnly && <button onClick={() => setAssigneeHelperIds(prev => prev.filter(x => x !== id))} className="ml-1.5 hover:text-teal-200"><X className="w-3 h-3"/></button>}
+                  </span>
+                ) : null;
+              })}
+              {assigneeGroupIds.length === 0 && assigneeUserIds.length === 0 && assigneeHelperIds.length === 0 && (
+                <span className="text-xs text-blue-600/60 italic py-1">Niemand zugewiesen</span>
+              )}
             </div>
+
+            {!isReadOnly && (
+              <div className="relative">
+                <div className="flex items-center border border-blue-300 rounded bg-white px-2 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-shadow">
+                  <Search className="w-4 h-4 text-blue-400" />
+                  <input 
+                    type="text" 
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    onFocus={() => setIsSearchFocused(true)}
+                    onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                    className="w-full p-2 text-sm outline-none bg-transparent"
+                    placeholder="Tippe zum Suchen von Gruppen, Namen oder Alias..."
+                  />
+                </div>
+                
+                {isSearchFocused && searchTerm.trim() && (
+                  <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                    {filteredAssignees.length > 0 ? (
+                      filteredAssignees.map(a => (
+                        <button
+                          key={`${a.type}-${a.id}`}
+                          onClick={() => {
+                            if (a.type === 'group') setAssigneeGroupIds([...assigneeGroupIds, a.id]);
+                            if (a.type === 'user') setAssigneeUserIds([...assigneeUserIds, a.id]);
+                            if (a.type === 'helper') setAssigneeHelperIds([...assigneeHelperIds, a.id]);
+                            setSearchTerm('');
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-blue-50 border-b border-gray-50 last:border-0 flex items-center justify-between transition-colors"
+                        >
+                          <span className="text-sm font-bold text-gray-800">{a.label}</span>
+                          <span className="text-xs text-gray-400">{a.sub}</span>
+                        </button>
+                      ))
+                    ) : (
+                       <div className="px-4 py-3 text-sm text-gray-500 italic">Keine Treffer gefunden.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {type === 'BESCHLUSS' && (
@@ -273,6 +380,53 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
                      </div>
                    )}
                  </div>
+              </div>
+
+              {/* CHIRURGISCHER EINGRIFF: WhatsApp Erinnerung für Aufgaben */}
+              <div className="mt-4 bg-green-50/50 border border-green-200 rounded-lg p-4 space-y-4">
+                <div className="border-b border-green-200 pb-2 mb-2">
+                    <h3 className="text-sm font-bold text-green-900 flex items-center">
+                      <MessageCircle className="w-4 h-4 mr-2" />
+                      WhatsApp Erinnerung (Optional)
+                    </h3>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-green-800 mb-1">Wer verschickt die Erinnerung?</label>
+                    <select 
+                      value={reminderSenderUserId} 
+                      onChange={(e) => setReminderSenderUserId(e.target.value)}
+                      disabled={isReadOnly}
+                      className="w-full p-2 border border-green-300 rounded focus:ring-green-500 focus:border-green-500 text-sm bg-white"
+                    >
+                      <option value="">-- Niemand (Keine Erinnerung) --</option>
+                      {(users || []).map(u => (
+                        <option key={u.id} value={u.id}>{u.name} ({u.rolle})</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  {reminderSenderUserId && (
+                    <div>
+                      <label className="block text-xs font-bold text-green-800 mb-1">Tage vor Fälligkeit?</label>
+                      <input 
+                        type="number" 
+                        min="1" 
+                        max="365"
+                        value={reminderLeadDays} 
+                        onChange={(e) => setReminderLeadDays(e.target.value)}
+                        disabled={isReadOnly}
+                        className="w-full p-2 border border-green-300 rounded focus:ring-green-500 focus:border-green-500 text-sm bg-white"
+                      />
+                    </div>
+                  )}
+                </div>
+                {reminderSenderUserId && (
+                  <p className="text-xs text-green-700 leading-tight">
+                    Der Erinnerungstext wird am Stichtag automatisch aus dem Aufgaben-Titel und der Beschreibung generiert.
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -353,4 +507,4 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
     </div>
   );
 };
-// Exakte Zeilenzahl: 308
+// Exakte Zeilenzahl: 387

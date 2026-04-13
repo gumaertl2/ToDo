@@ -1,11 +1,12 @@
 // src/features/Layout/AppLayout.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
 import { Users, Calendar, ClipboardList, CheckSquare, LogOut, LayoutDashboard, BookOpen, CalendarDays, Pin, PinOff } from 'lucide-react';
 import { useClubStore } from '../../store/useClubStore';
 
 export const AppLayout: React.FC = () => {
-  const { logout, user, fetchUsersAndHelpers, fetchGroups } = useClubStore();
+  // CHIRURGISCHER EINGRIFF: Lade auch calendarEvents, tasks, fetchEvents und fetchTasks
+  const { logout, user, fetchUsersAndHelpers, fetchGroups, calendarEvents, tasks, fetchEvents, fetchTasks } = useClubStore();
 
   const [isPinned, setIsPinned] = useState(() => {
     const saved = localStorage.getItem('papatodo_sidebar_pinned');
@@ -18,10 +19,61 @@ export const AppLayout: React.FC = () => {
     localStorage.setItem('papatodo_sidebar_pinned', String(isPinned));
   }, [isPinned]);
 
+  // CHIRURGISCHER EINGRIFF: Hole events und tasks direkt beim Start, damit der Wecker global rechnet
   useEffect(() => {
     fetchUsersAndHelpers();
     fetchGroups();
-  }, [fetchUsersAndHelpers, fetchGroups]);
+    fetchEvents();
+    fetchTasks();
+  }, [fetchUsersAndHelpers, fetchGroups, fetchEvents, fetchTasks]);
+
+  // CHIRURGISCHER EINGRIFF: Globale Berechnung der fälligen WhatsApp-Erinnerungen
+  const pendingRemindersCount = useMemo(() => {
+    if (!user) return 0;
+    
+    let count = 0;
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+    if (calendarEvents) {
+      calendarEvents.forEach(ce => {
+        if (ce.reminderSenderUserId === user.id && !ce.reminderSentAt && ce.reminderLeadDays !== undefined) {
+          const eventStart = new Date(ce.startTime);
+          const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
+          const stichtag = eventDateStart - (ce.reminderLeadDays * MS_PER_DAY);
+          if (todayStart >= stichtag) count++;
+        }
+      });
+    }
+
+    if (tasks) {
+      tasks.forEach(t => {
+        if (t.reminderSenderUserId === user.id && !t.reminderSentAt && t.reminderLeadDays !== undefined && t.dueDate) {
+          const taskDue = new Date(t.dueDate);
+          const taskDateStart = new Date(taskDue.getFullYear(), taskDue.getMonth(), taskDue.getDate()).getTime();
+          const stichtag = taskDateStart - (t.reminderLeadDays * MS_PER_DAY);
+          if (todayStart >= stichtag) count++;
+        }
+      });
+    }
+
+    return count;
+  }, [user, calendarEvents, tasks]);
+
+  // CHIRURGISCHER EINGRIFF: App-Badge (Homescreen) aktualisieren
+  useEffect(() => {
+    if (pendingRemindersCount > 0) {
+      if ('setAppBadge' in navigator) {
+        // Ignoriere Fehler, falls die Plattform es nicht unterstützt (z.B. Desktop-Safari)
+        navigator.setAppBadge(pendingRemindersCount).catch(() => {});
+      }
+    } else {
+      if ('clearAppBadge' in navigator) {
+        navigator.clearAppBadge().catch(() => {});
+      }
+    }
+  }, [pendingRemindersCount]);
 
   const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -96,7 +148,15 @@ export const AppLayout: React.FC = () => {
                 }`
               }
             >
-              <item.icon className="w-5 h-5 shrink-0" />
+              {/* CHIRURGISCHER EINGRIFF: Roter Punkt am Dashboard-Icon in der Sidebar */}
+              <div className="relative shrink-0 flex items-center justify-center">
+                <item.icon className="w-5 h-5" />
+                {item.to === '/' && pendingRemindersCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold px-1 min-w-[16px] h-4 rounded-full flex items-center justify-center border border-white">
+                    {pendingRemindersCount}
+                  </span>
+                )}
+              </div>
               <span className={`ml-3 font-medium transition-all duration-300 overflow-hidden ${isExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
                 {item.label}
               </span>
@@ -135,7 +195,15 @@ export const AppLayout: React.FC = () => {
             title={item.label}
           >
             {({ isActive }) => (
-              <item.icon className="w-6 h-6" strokeWidth={isActive ? 2.5 : 2} />
+              <div className="relative flex items-center justify-center">
+                <item.icon className="w-6 h-6" strokeWidth={isActive ? 2.5 : 2} />
+                {/* CHIRURGISCHER EINGRIFF: Roter Punkt am Dashboard-Icon in der mobilen Ansicht */}
+                {item.to === '/' && pendingRemindersCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold px-1 min-w-[16px] h-4 rounded-full flex items-center justify-center border-2 border-white">
+                    {pendingRemindersCount}
+                  </span>
+                )}
+              </div>
             )}
           </NavLink>
         ))}
@@ -150,4 +218,4 @@ export const AppLayout: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 139
+// Exakte Zeilenzahl: 202

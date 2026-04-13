@@ -37,10 +37,11 @@ export interface Group extends BaseDocument {
 
 export interface Helper extends BaseDocument {
   name: string;
-  alias?: string; // CHIRURGISCHER EINGRIFF: Alias für die öffentliche Anzeige
+  alias: string; // CHIRURGISCHER EINGRIFF: Alias ist nun ein Pflichtfeld (kein ? mehr)
   bezug: string;
   email: string;
   telefon: string;
+  geburtsdatum?: string; 
   consentConfirmed: boolean;
   lastActivityAt: number;
   retentionExpiresAt: number;
@@ -52,11 +53,11 @@ export interface ClubEvent extends BaseDocument {
   location?: string;
   status: 'PLANUNG' | 'AKTIV' | 'ABGESCHLOSSEN';
   
-  eventType?: 'TERMIN' | 'DIENST'; // CHIRURGISCHER EINGRIFF: Klare Trennung
-  reminderSenderUserId?: string;   // CHIRURGISCHER EINGRIFF: Zuständiger für Erinnerung
-  reminderLeadDays?: number;       // CHIRURGISCHER EINGRIFF: Vorlaufzeit in Tagen
-  reminderSentAt?: number;         // CHIRURGISCHER EINGRIFF: Zeitstempel für Versand
-  reminderCustomText?: string;     // CHIRURGISCHER EINGRIFF: Individueller Text für WhatsApp
+  eventType?: 'TERMIN' | 'DIENST'; 
+  reminderSenderUserId?: string;   
+  reminderLeadDays?: number;       
+  reminderSentAt?: number;         
+  reminderCustomText?: string;     
   
   isPublished: boolean; 
   seriesId?: string;    
@@ -110,10 +111,10 @@ export interface AgendaItem extends BaseDocument {
   
   assigneeUserIds: string[];  
   assigneeGroupIds: string[]; 
-  assigneeHelperIds?: string[];    // CHIRURGISCHER EINGRIFF: Helfer für Aufgaben
-  reminderSenderUserId?: string;   // CHIRURGISCHER EINGRIFF: Zuständiger für Erinnerung
-  reminderLeadDays?: number;       // CHIRURGISCHER EINGRIFF: Vorlaufzeit in Tagen
-  reminderSentAt?: number;         // CHIRURGISCHER EINGRIFF: Zeitstempel für Versand
+  assigneeHelperIds?: string[];    
+  reminderSenderUserId?: string;   
+  reminderLeadDays?: number;       
+  reminderSentAt?: number;         
   
   comments: ItemComment[];
   checkliste: { id: string; text: string; isDone: boolean }[];
@@ -155,7 +156,7 @@ export interface CalendarSubscription extends BaseDocument {
   isActive: boolean;
   lastSyncedAt?: number;
   cachedEvents?: CachedIcsEvent[];
-  sortOrder?: number; // CHIRURGISCHER EINGRIFF: Neues Feld für die manuelle Reihenfolge
+  sortOrder?: number; 
 }
 
 export interface CalendarEvent extends BaseDocument {
@@ -167,6 +168,12 @@ export interface CalendarEvent extends BaseDocument {
   description?: string;
   color?: string;
   isPublic: boolean;
-  seriesId?: string; // CHIRURGISCHER EINGRIFF: Kennung für zusammenhängende Planungen
+  seriesId?: string; 
+  
+  eventType?: 'TERMIN' | 'DIENST'; 
+  reminderSenderUserId?: string;   
+  reminderLeadDays?: number;       
+  reminderSentAt?: number;         
+  reminderCustomText?: string;     
 }
-// Exakte Zeilenzahl: 173
+// Exakte Zeilenzahl: 181
