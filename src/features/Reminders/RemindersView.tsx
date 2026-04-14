@@ -1,8 +1,9 @@
-// 2026-04-14 14:40 - FIX: updateEvent importiert und Fehler korrigiert
+// 2026-04-14 16:00 - FEATURE: Klickbare Karten, Countdown & Snooze-Funktion (Erinnern in X Tagen)
 // src/features/Reminders/RemindersView.tsx
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import { MessageCircle, Send, Trash2, CheckCircle2 } from 'lucide-react';
+import { MessageCircle, Send, Trash2, CheckCircle2, Clock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom'; // CHIRURGISCHER EINGRIFF: Router Navigation
 
 const formatReminderText = (type: 'Event' | 'Task' | 'Sitzung', item: any, customText?: string) => {
   const baseText = customText ? customText : 'Hallo, hier ist eine kurze Erinnerung für dich:';
@@ -44,6 +45,7 @@ const formatReminderText = (type: 'Event' | 'Task' | 'Sitzung', item: any, custo
 };
 
 export const RemindersView: React.FC = () => {
+  const navigate = useNavigate();
   const { 
     events,
     calendarEvents, 
@@ -54,12 +56,15 @@ export const RemindersView: React.FC = () => {
     user, 
     saveAgendaItem,
     updateCalendarEvent,
-    updateEvent, // CHIRURGISCHER EINGRIFF: updateEvent aus dem Store importiert
+    updateEvent, 
     isEventsLoading,
     isUsersLoading
   } = useClubStore();
 
   const isDataLoading = isEventsLoading || isUsersLoading;
+
+  // CHIRURGISCHER EINGRIFF: State für das anpassbare "X" (Snooze-Tage)
+  const [snoozeDays, setSnoozeDays] = useState<Record<string, number>>({});
 
   const pendingReminders = useMemo(() => {
     if (!user) return [];
@@ -70,6 +75,7 @@ export const RemindersView: React.FC = () => {
 
     const items: any[] = [];
 
+    // 1. Kalender-Einträge (Termine / Dienste)
     if (calendarEvents) {
       calendarEvents.forEach(ce => {
         if (ce.reminderSenderUserId === user.id && !ce.reminderSentAt && ce.reminderLeadDays !== undefined) {
@@ -78,6 +84,7 @@ export const RemindersView: React.FC = () => {
           const stichtag = eventDateStart - (ce.reminderLeadDays * MS_PER_DAY);
           
           if (todayStart >= stichtag) {
+            const diffDays = Math.ceil((eventDateStart - todayStart) / MS_PER_DAY);
             let targetsNames = 'Manuelle Gruppenwahl';
             let isDirect = false;
             let phone = '';
@@ -114,6 +121,7 @@ export const RemindersView: React.FC = () => {
               isDirect, 
               phone,
               rawItem: ce,
+              diffDays, // CHIRURGISCHER EINGRIFF: Verbleibende Tage gespeichert
               model: 'calendarEvent'
             });
           }
@@ -121,6 +129,7 @@ export const RemindersView: React.FC = () => {
       });
     }
 
+    // 2. Aufgaben (Tasks)
     if (tasks) {
       tasks.forEach(t => {
         if (t.reminderSenderUserId === user.id && !t.reminderSentAt && t.reminderLeadDays !== undefined && t.dueDate) {
@@ -129,6 +138,7 @@ export const RemindersView: React.FC = () => {
           const stichtag = taskDateStart - (t.reminderLeadDays * MS_PER_DAY);
           
           if (todayStart >= stichtag) {
+            const diffDays = Math.ceil((taskDateStart - todayStart) / MS_PER_DAY);
             const targets: { name: string, phone?: string, isGroup: boolean }[] = [];
             
             t.assigneeGroupIds?.forEach(gId => {
@@ -156,6 +166,7 @@ export const RemindersView: React.FC = () => {
               isDirect,
               phone,
               rawItem: t,
+              diffDays,
               model: 'task'
             });
           }
@@ -163,6 +174,7 @@ export const RemindersView: React.FC = () => {
       });
     }
 
+    // 3. Sitzungen (Events)
     if (events) {
       events.forEach(ev => {
         if (ev.status !== 'ABGESCHLOSSEN' && ev.reminderSenderUserId === user.id && !ev.reminderSentAt && ev.reminderLeadDays !== undefined && ev.plannedStartTime) {
@@ -171,6 +183,7 @@ export const RemindersView: React.FC = () => {
           const stichtag = eventDateStart - (ev.reminderLeadDays * MS_PER_DAY);
           
           if (todayStart >= stichtag) {
+            const diffDays = Math.ceil((eventDateStart - todayStart) / MS_PER_DAY);
             const targets: { name: string, phone?: string, isGroup: boolean }[] = [];
             
             ev.participantGroupIds?.forEach(gId => {
@@ -198,6 +211,7 @@ export const RemindersView: React.FC = () => {
               isDirect,
               phone,
               rawItem: ev,
+              diffDays,
               model: 'event' 
             });
           }
@@ -208,36 +222,57 @@ export const RemindersView: React.FC = () => {
     return items.sort((a, b) => a.date - b.date);
   }, [user, calendarEvents, tasks, events, groups, helpers, users]);
 
-  const handleSendReminder = async (rem: any) => {
+  // Hilfsfunktion: WhatsApp öffnen
+  const openWhatsApp = (isDirect: boolean, phoneStr: string, text: string) => {
     let url = '';
-    const text = rem.text;
-
-    if (rem.isDirect && rem.phone) {
-      let phone = String(rem.phone).trim().replace(/[^0-9+]/g, '');
-      if (phone.startsWith('00')) {
-        phone = '+' + phone.substring(2);
-      } else if (phone.startsWith('0') && !phone.startsWith('00')) {
-        phone = '+49' + phone.substring(1);
-      }
-      
+    if (isDirect && phoneStr) {
+      let phone = String(phoneStr).trim().replace(/[^0-9+]/g, '');
+      if (phone.startsWith('00')) phone = '+' + phone.substring(2);
+      else if (phone.startsWith('0') && !phone.startsWith('00')) phone = '+49' + phone.substring(1);
       url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
     } else {
       url = `https://wa.me/?text=${encodeURIComponent(text)}`;
     }
-
     window.open(url, '_blank');
+  };
 
+  const handleSendReminder = async (rem: any) => {
+    openWhatsApp(rem.isDirect, rem.phone, rem.text);
     try {
       if (rem.model === 'calendarEvent') {
         await updateCalendarEvent({ ...rem.rawItem, reminderSentAt: Date.now() });
       } else if (rem.model === 'task') {
         await saveAgendaItem({ ...rem.rawItem, reminderSentAt: Date.now() });
       } else if (rem.model === 'event') {
-         // CHIRURGISCHER EINGRIFF: Jetzt speichern wir die Sitzung!
          await updateEvent({ ...rem.rawItem, reminderSentAt: Date.now() });
       }
     } catch (err) {
-      console.error("Fehler beim Speichern des Zeitstempels:", err);
+      console.error("Fehler beim Speichern:", err);
+    }
+  };
+
+  // CHIRURGISCHER EINGRIFF: Snooze-Logik
+  const handleSnoozeReminder = async (rem: any) => {
+    openWhatsApp(rem.isDirect, rem.phone, rem.text);
+    
+    // Ermitteln des X-Wertes (Standard: Verbleibende Tage / 2, mindestens 1)
+    const defaultX = Math.max(1, Math.floor(rem.diffDays / 2));
+    const xDays = snoozeDays[rem.id] !== undefined ? snoozeDays[rem.id] : defaultX;
+    
+    // Neue Vorlaufzeit berechnen (so dass es in X Tagen wieder auslöst)
+    const newLeadDays = Math.max(0, rem.diffDays - xDays);
+
+    try {
+      if (rem.model === 'calendarEvent') {
+        // WICHTIG: reminderSentAt muss "gelöscht" werden, damit es in X Tagen wieder greift
+        await updateCalendarEvent({ ...rem.rawItem, reminderLeadDays: newLeadDays, reminderSentAt: null });
+      } else if (rem.model === 'task') {
+        await saveAgendaItem({ ...rem.rawItem, reminderLeadDays: newLeadDays, reminderSentAt: null });
+      } else if (rem.model === 'event') {
+        await updateEvent({ ...rem.rawItem, reminderLeadDays: newLeadDays, reminderSentAt: null });
+      }
+    } catch (err) {
+      console.error("Fehler beim Snoozen:", err);
     }
   };
 
@@ -249,7 +284,6 @@ export const RemindersView: React.FC = () => {
       } else if (rem.model === 'task') {
         await saveAgendaItem({ ...rem.rawItem, reminderSentAt: Date.now() });
       } else if (rem.model === 'event') {
-         // CHIRURGISCHER EINGRIFF: Jetzt speichern wir das Verwerfen für die Sitzung!
          await updateEvent({ ...rem.rawItem, reminderSentAt: Date.now() });
       }
     } catch (err) {
@@ -288,56 +322,103 @@ export const RemindersView: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-4 overflow-y-auto pb-8">
-          {pendingReminders.map(rem => (
-            <div key={rem.id} className="bg-white border border-green-200 rounded-xl shadow-sm overflow-hidden flex flex-col md:flex-row md:items-stretch transition-all hover:border-green-300">
-              <div className="p-5 flex-1 border-b md:border-b-0 md:border-r border-gray-100">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${rem.type === 'Sitzung' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
-                      {rem.type}
-                    </span>
-                    <span className="text-base font-bold text-gray-900">{rem.title}</span>
+          {pendingReminders.map(rem => {
+            const defaultX = Math.max(1, Math.floor(rem.diffDays / 2));
+            const currentX = snoozeDays[rem.id] !== undefined ? snoozeDays[rem.id] : defaultX;
+
+            return (
+              <div key={rem.id} className="bg-white border border-green-200 rounded-xl shadow-sm overflow-hidden flex flex-col md:flex-row md:items-stretch transition-all hover:border-green-300">
+                {/* CHIRURGISCHER EINGRIFF: Klickbare Detail-Fläche zur Ursprungs-Navigation */}
+                <div 
+                  onClick={() => {
+                    if (rem.type === 'Sitzung') navigate(`/events/${rem.id}`);
+                    else if (rem.type === 'Aufgabe') navigate(`/todos`);
+                    else navigate(`/calendar`);
+                  }}
+                  className="p-5 flex-1 border-b md:border-b-0 md:border-r border-gray-100 cursor-pointer hover:bg-green-50/50 transition-colors"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${rem.type === 'Sitzung' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
+                        {rem.type}
+                      </span>
+                      <span className="text-base font-bold text-gray-900 group-hover:text-green-700 transition-colors">{rem.title}</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2 py-1 rounded border border-gray-200">
+                        Fällig: {new Date(rem.date).toLocaleDateString('de-DE')}
+                      </span>
+                      {/* CHIRURGISCHER EINGRIFF: Anzeige der verbleibenden Tage */}
+                      <span className={`text-xs font-bold mt-1.5 ${rem.diffDays === 0 ? 'text-orange-600' : rem.diffDays < 0 ? 'text-red-600' : 'text-blue-600'}`}>
+                        {rem.diffDays === 0 ? 'Heute fällig' : rem.diffDays > 0 ? `Noch ${rem.diffDays} Tage` : `Seit ${Math.abs(rem.diffDays)} Tagen überfällig`}
+                      </span>
+                    </div>
                   </div>
-                  <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                    Fällig: {new Date(rem.date).toLocaleDateString('de-DE')}
-                  </span>
+                  
+                  <div className="mb-3 flex items-center">
+                    <span className="text-sm text-gray-500 mr-2">Empfänger:</span>
+                    <span className={`text-sm font-bold ${rem.isDirect ? 'text-green-700' : 'text-blue-700'}`}>
+                      {rem.targetsNames}
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)]">
+                    <p className="text-sm text-gray-700 font-mono whitespace-pre-wrap">
+                      {rem.text}
+                    </p>
+                  </div>
                 </div>
                 
-                <div className="mb-3 flex items-center">
-                  <span className="text-sm text-gray-500 mr-2">Empfänger:</span>
-                  <span className={`text-sm font-bold ${rem.isDirect ? 'text-green-700' : 'text-blue-700'}`}>
-                    {rem.targetsNames}
-                  </span>
-                </div>
+                {/* Rechte Seitenleiste für die Aktionen */}
+                <div className="bg-gray-50 p-4 md:w-56 flex flex-col justify-center gap-3 shrink-0">
+                  <button
+                    onClick={() => handleSendReminder(rem)}
+                    className="flex items-center justify-center w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-sm transition-colors shadow-sm"
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    Senden & Erledigt
+                  </button>
+                  
+                  {/* CHIRURGISCHER EINGRIFF: Snooze Funktion (Senden & Erinnern in X Tagen) */}
+                  <div className="flex flex-col gap-2 border-t border-gray-200 pt-3">
+                    <div className="flex items-center justify-between text-xs text-gray-600 font-medium px-1">
+                      <span>Erneut erinnern in:</span>
+                      <div className="flex items-center">
+                        <input 
+                          type="number" 
+                          min="1" 
+                          className="w-12 p-1 border border-gray-300 rounded text-center text-xs font-bold focus:ring-blue-500"
+                          value={currentX}
+                          onChange={(e) => setSnoozeDays(prev => ({...prev, [rem.id]: Number(e.target.value)}))}
+                        />
+                        <span className="ml-1.5">Tagen</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleSnoozeReminder(rem)}
+                      className="flex items-center justify-center w-full px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg font-bold text-xs transition-colors shadow-sm"
+                    >
+                      <Clock className="w-3.5 h-3.5 mr-1.5" />
+                      Senden & Erinnern
+                    </button>
+                  </div>
 
-                <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
-                  <p className="text-sm text-gray-700 font-mono whitespace-pre-wrap">
-                    {rem.text}
-                  </p>
+                  <div className="border-t border-gray-200 pt-3">
+                    <button
+                      onClick={() => handleDismissReminder(rem)}
+                      className="flex items-center justify-center w-full px-4 py-2 text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 rounded-lg font-bold text-xs transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                      Nur Verwerfen
+                    </button>
+                  </div>
                 </div>
               </div>
-              
-              <div className="bg-gray-50 p-4 md:w-56 flex flex-col justify-center gap-3 shrink-0">
-                <button
-                  onClick={() => handleSendReminder(rem)}
-                  className="flex items-center justify-center w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-sm transition-colors shadow-sm"
-                >
-                  <Send className="w-4 h-4 mr-2" />
-                  Senden & Erledigt
-                </button>
-                <button
-                  onClick={() => handleDismissReminder(rem)}
-                  className="flex items-center justify-center w-full px-4 py-3 text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 rounded-lg font-bold text-sm transition-colors"
-                >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Verwerfen
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
   );
 };
-// --- END OF FILE 314 Zeilen ---
+// --- END OF FILE 381 Zeilen ---
