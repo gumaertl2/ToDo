@@ -1,4 +1,4 @@
-// 2026-04-14 13:30 - FIX: Erinnerungen ins eigene Modul verschoben, Banner eingefügt
+// 2026-04-14 17:00 - FIX: Zähler für WhatsApp-Erinnerungen synchronisiert (Sitzungen hinzugefügt)
 // src/features/Dashboard/DashboardView.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
@@ -30,7 +30,6 @@ export const DashboardView: React.FC = () => {
     fetchTasks();
   }, [fetchEvents, fetchTasks]);
 
-  // CHIRURGISCHER EINGRIFF: Nur noch Zähler für den Banner berechnen
   const pendingRemindersCount = useMemo(() => {
     if (!user) return 0;
     
@@ -61,8 +60,20 @@ export const DashboardView: React.FC = () => {
       });
     }
 
+    // CHIRURGISCHER EINGRIFF: Sitzungen (Events) zum Zähler hinzugefügt
+    if (events) {
+      events.forEach(ev => {
+        if (ev.status !== 'ABGESCHLOSSEN' && ev.reminderSenderUserId === user.id && !ev.reminderSentAt && ev.reminderLeadDays !== undefined && ev.plannedStartTime) {
+          const eventStart = new Date(ev.plannedStartTime);
+          const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
+          const stichtag = eventDateStart - (ev.reminderLeadDays * MS_PER_DAY);
+          if (todayStart >= stichtag) count++;
+        }
+      });
+    }
+
     return count;
-  }, [user, calendarEvents, tasks]);
+  }, [user, calendarEvents, tasks, events]); // CHIRURGISCHER EINGRIFF: events als Dependency
 
   const upcomingEvents = useMemo(() => {
     const startOfToday = new Date();
@@ -116,7 +127,6 @@ export const DashboardView: React.FC = () => {
         </div>
       </div>
 
-      {/* CHIRURGISCHER EINGRIFF: Kompakter Warn-Banner verlinkt auf neue Seite */}
       {pendingRemindersCount > 0 && (
         <div 
           onClick={() => navigate('/reminders')}
@@ -218,4 +228,4 @@ export const DashboardView: React.FC = () => {
     </div>
   );
 };
-// --- END OF FILE 221 Zeilen ---
+// --- END OF FILE 233 Zeilen ---
