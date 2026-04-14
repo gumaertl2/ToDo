@@ -3,7 +3,7 @@ import type { StateCreator } from 'zustand';
 import type { User, Helper, Group } from '../../core/types/models';
 import { DataProcessor } from '../../services/DataProcessor';
 import type { Result } from '../../core/types/shared';
-import { collection, getDocs, doc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 
 export interface UserSlice {
@@ -13,6 +13,7 @@ export interface UserSlice {
   isUsersLoading: boolean;
   fetchUsersAndHelpers: () => Promise<void>;
   addHelper: (helper: Helper) => Promise<Result<void>>;
+  addHelpersBulk: (helpersList: Helper[]) => Promise<Result<void>>;
   updateHelper: (helper: Helper) => Promise<Result<void>>;
   deleteHelper: (helperId: string) => Promise<Result<void>>;
   cleanupExpiredHelpers: () => Helper[];
@@ -55,6 +56,29 @@ export const createUserSlice: StateCreator<UserSlice, [], [], UserSlice> = (set,
       set((state) => ({ helpers: [...state.helpers, helper] }));
     }
     return result;
+  },
+  // CHIRURGISCHER EINGRIFF: Neue Funktion für den sicheren Massenimport (Bulk)
+  addHelpersBulk: async (helpersList: Helper[]) => {
+    try {
+      const batch = writeBatch(db);
+      helpersList.forEach(h => {
+        const ref = doc(db, 'helpers', h.id);
+        batch.set(ref, h);
+      });
+      await batch.commit();
+      
+      // Update lokalen Store (überschreiben vorhandener und anfügen neuer)
+      set((state) => {
+        const existingMap = new Map(state.helpers.map(h => [h.id, h]));
+        helpersList.forEach(h => existingMap.set(h.id, h));
+        return { helpers: Array.from(existingMap.values()) };
+      });
+      
+      return { success: true, data: undefined };
+    } catch (error) {
+      console.error("Fehler beim CSV-Import:", error);
+      return { success: false, error: error as Error };
+    }
   },
   updateHelper: async (helper) => {
     const result = await DataProcessor.saveDocument<Helper>('helpers', helper.id, helper);
@@ -133,3 +157,4 @@ export const createUserSlice: StateCreator<UserSlice, [], [], UserSlice> = (set,
     }
   }
 });
+// Exakte Zeilenzahl: 160

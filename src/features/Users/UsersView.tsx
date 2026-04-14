@@ -1,16 +1,16 @@
-// 2026-04-13 22:20 - FIX: Vercel Build Errors (Unused & Type Conversion)
+// 2026-04-14 13:20 - FEATURE: DSGVO-Button in die obere Aktionsleiste verschoben für mehr Platz
 // src/features/Users/UsersView.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-// CHIRURGISCHER EINGRIFF: Calendar entfernt
-import { Users, UserPlus, ShieldAlert, Trash2, Edit2, Tag, Clock, ArrowUpDown, Plus } from 'lucide-react';
+import { Users, UserPlus, ShieldAlert, Trash2, Edit2, Tag, Clock, ArrowUpDown, Plus, Upload } from 'lucide-react';
 import { HelperFormModal } from './HelperFormModal.tsx';
 import { UserFormModal } from './UserFormModal.tsx';
 import { GroupFormModal } from './GroupFormModal.tsx';
 import { ItemFormModal } from '../Shared/ItemFormModal.tsx';
+import { CsvImportModal } from './CsvImportModal.tsx';
 import type { Helper, User, Group, AgendaItem } from '../../core/types/models';
 
-type SortDirection = 'asc' | 'desc' | 'md-asc' | 'md-desc';
+type SortDirection = 'asc' | 'desc' | 'md-asc' | 'md-desc' | 'ln-asc' | 'ln-desc';
 
 const EditableCell: React.FC<{ 
   value: string; 
@@ -122,19 +122,19 @@ const QuickAddHelperRow: React.FC<{
 
   return (
     <tr className="bg-blue-50/30 border-t-2 border-blue-200 shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]">
-      <td className="px-6 py-3 whitespace-nowrap">
+      <td className="px-4 py-1.5 whitespace-nowrap">
         <input type="text" value={alias} onChange={e => {setAlias(e.target.value); setAliasModified(true);}} placeholder="Alias *" className="w-full p-1.5 text-sm border border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" />
       </td>
-      <td className="px-6 py-3 whitespace-nowrap">
+      <td className="px-4 py-1.5 whitespace-nowrap">
         <input type="text" value={name} onChange={e => handleNameChange(e.target.value)} placeholder="Neuer Name *" className="w-full p-1.5 text-sm border border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" />
       </td>
-      <td className="px-6 py-3 whitespace-nowrap">
+      <td className="px-4 py-1.5 whitespace-nowrap">
         <input type="text" value={bezug} onChange={e => setBezug(e.target.value)} placeholder="Freitext" className="w-full p-1.5 text-sm border border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" />
       </td>
-      <td className="px-6 py-3 whitespace-nowrap">
+      <td className="px-4 py-1.5 whitespace-nowrap">
         <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="E-Mail" className="w-full p-1.5 text-sm border border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" />
       </td>
-      <td className="px-6 py-3 whitespace-nowrap">
+      <td className="px-4 py-1.5 whitespace-nowrap">
         <input 
           type={isDateFocused || geburtsdatum ? "date" : "text"}
           onFocus={() => setIsDateFocused(true)}
@@ -144,10 +144,10 @@ const QuickAddHelperRow: React.FC<{
           className="w-full p-1.5 text-sm border border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" 
         />
       </td>
-      <td className="px-6 py-3 whitespace-nowrap">
+      <td className="px-4 py-1.5 whitespace-nowrap">
         <input type="tel" value={telefon} onChange={e => setTelefon(e.target.value)} placeholder="Telefon" className="w-full p-1.5 text-sm border border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" />
       </td>
-      <td className="px-6 py-3 whitespace-nowrap text-right">
+      <td className="px-4 py-1.5 whitespace-nowrap text-right">
         <div className="flex flex-col items-end gap-1.5">
           <label className="flex items-center text-[10px] text-gray-600 font-medium cursor-pointer" title="DSGVO Zustimmung erforderlich">
             <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} className="mr-1.5 w-3 h-3 text-blue-600 rounded border-gray-300 focus:ring-blue-500" /> 
@@ -167,11 +167,11 @@ const QuickAddHelperRow: React.FC<{
 };
 
 export const UsersView: React.FC = () => {
-  // CHIRURGISCHER EINGRIFF: user aus Destrukturierung entfernt
   const { users, helpers, groups, events, tasks, fetchUsersAndHelpers, fetchTemplatesAndRoutines, fetchEvents, fetchTasks, saveAgendaItem, cleanupExpiredHelpers, addHelper, deleteHelper, updateHelper, deleteUser, deleteGroup, isUsersLoading } = useClubStore();
   
   const [activeTab, setActiveTab] = useState<'vorstand' | 'helfer' | 'rollen'>('vorstand');
   const [isHelperModalOpen, setIsHelperModalOpen] = useState(false);
+  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
   const [editingHelper, setEditingHelper] = useState<Helper | undefined>(undefined);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | undefined>(undefined);
@@ -198,13 +198,15 @@ export const UsersView: React.FC = () => {
     setSortConfig(prev => {
       if (prev.key === key) {
         if (key === 'geburtsdatum') {
-          const nextMap: Record<SortDirection, SortDirection> = {
-            'asc': 'desc',
-            'desc': 'md-asc',
-            'md-asc': 'md-desc',
-            'md-desc': 'asc'
-          };
-          return { key, direction: nextMap[prev.direction] };
+          if (prev.direction === 'asc') return { key, direction: 'desc' };
+          if (prev.direction === 'desc') return { key, direction: 'md-asc' };
+          if (prev.direction === 'md-asc') return { key, direction: 'md-desc' };
+          return { key, direction: 'asc' };
+        } else if (key === 'name') {
+          if (prev.direction === 'asc') return { key, direction: 'desc' };
+          if (prev.direction === 'desc') return { key, direction: 'ln-asc' };
+          if (prev.direction === 'ln-asc') return { key, direction: 'ln-desc' };
+          return { key, direction: 'asc' };
         } else {
           return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
         }
@@ -230,6 +232,24 @@ export const UsersView: React.FC = () => {
           if (mdA > mdB) return sortConfig.direction === 'md-asc' ? 1 : -1;
           return 0;
         }
+      }
+
+      if (sortConfig.key === 'name' && sortConfig.direction.startsWith('ln-')) {
+        const getLastName = (n: string) => {
+          const parts = n.trim().split(' ');
+          return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : n.trim().toLowerCase();
+        };
+        const lnA = getLastName(valA.toString());
+        const lnB = getLastName(valB.toString());
+
+        if (lnA < lnB) return sortConfig.direction === 'ln-asc' ? -1 : 1;
+        if (lnA > lnB) return sortConfig.direction === 'ln-asc' ? 1 : -1;
+        
+        const fnA = valA.toString().toLowerCase();
+        const fnB = valB.toString().toLowerCase();
+        if (fnA < fnB) return sortConfig.direction === 'ln-asc' ? -1 : 1;
+        if (fnA > fnB) return sortConfig.direction === 'ln-asc' ? 1 : -1;
+        return 0;
       }
 
       const aVal = valA.toString().toLowerCase();
@@ -289,7 +309,6 @@ export const UsersView: React.FC = () => {
       retentionExpiresAt: now + oneYear,
       ...data
     };
-    // CHIRURGISCHER EINGRIFF: as unknown as hinzugefügt, um TS2352 zu beheben
     const safeHelper = Object.fromEntries(Object.entries(rawHelper).filter(([_, v]) => v !== undefined)) as unknown as Helper;
     await addHelper(safeHelper);
   };
@@ -315,8 +334,6 @@ export const UsersView: React.FC = () => {
     }
   };
   
-  // CHIRURGISCHER EINGRIFF: Ungenutzte Funktion handleSafeDeleteUser entfernt
-
   const handleSafeDeleteGroup = async (g: Group) => {
     if (window.confirm(`Möchtest du die Rolle "${g.name}" wirklich löschen?`)) {
       if (g.id) await deleteGroup(g.id);
@@ -345,39 +362,44 @@ export const UsersView: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-4 sm:mb-0">User & Gruppen</h1>
-        <div className="flex gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2 sm:mb-0">User & Gruppen</h1>
+        {/* CHIRURGISCHER EINGRIFF: flex-wrap und justify-end hinzugefügt, DSGVO-Button nach links */}
+        <div className="flex flex-wrap gap-2 sm:gap-3 justify-end">
           {activeTab === 'helfer' && (
-            <button onClick={() => openHelperEditor()} className="flex items-center px-4 py-2 bg-blue-600 text-white font-medium rounded-lg shadow hover:bg-blue-700 transition">
-              <UserPlus className="w-5 h-5 mr-2" /> Helfer anlegen
-            </button>
+            <>
+              {isAdmin && !showExpired && (
+                <button onClick={handleCheckGDPR} className="flex items-center px-3 py-1.5 text-sm bg-yellow-100 text-yellow-800 font-bold rounded-lg shadow-sm hover:bg-yellow-200 transition">
+                  <ShieldAlert className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">DSGVO prüfen</span>
+                </button>
+              )}
+              <button onClick={() => setIsCsvModalOpen(true)} className="flex items-center px-3 py-1.5 text-sm bg-white text-gray-700 font-bold border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 transition">
+                <Upload className="w-4 h-4 mr-2 text-blue-600" /> CSV Import
+              </button>
+              <button onClick={() => openHelperEditor()} className="flex items-center px-3 py-1.5 text-sm bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 transition">
+                <UserPlus className="w-4 h-4 mr-2" /> Helfer anlegen
+              </button>
+            </>
           )}
-          {activeTab === 'vorstand' && <button onClick={() => openUserEditor()} className="flex items-center px-4 py-2 bg-blue-600 text-white font-medium rounded-lg shadow hover:bg-blue-700 transition"><UserPlus className="w-5 h-5 mr-2" /> Vorstand anlegen</button>}
+          {activeTab === 'vorstand' && <button onClick={() => openUserEditor()} className="flex items-center px-3 py-1.5 text-sm bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 transition"><UserPlus className="w-4 h-4 mr-2" /> Vorstand anlegen</button>}
           {activeTab === 'rollen' && (
             <>
-              <button onClick={toggleAllGroups} className="flex items-center justify-center w-10 h-10 bg-white text-gray-700 border border-gray-300 font-mono font-bold text-lg rounded-lg hover:bg-gray-50 shadow-sm transition-colors" title="Alle Daueraufgaben ein-/ausblenden">+/-</button>
-              <button onClick={() => openGroupEditor()} className="flex items-center px-4 py-2 bg-blue-600 text-white font-medium rounded-lg shadow hover:bg-blue-700 transition"><Tag className="w-5 h-5 mr-2" /> Rolle anlegen</button>
+              <button onClick={toggleAllGroups} className="flex items-center justify-center w-8 h-8 bg-white text-gray-700 border border-gray-300 font-mono font-bold text-sm rounded-lg hover:bg-gray-50 shadow-sm transition-colors" title="Alle Daueraufgaben ein-/ausblenden">+/-</button>
+              <button onClick={() => openGroupEditor()} className="flex items-center px-3 py-1.5 text-sm bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 transition"><Tag className="w-4 h-4 mr-2" /> Rolle anlegen</button>
             </>
           )}
         </div>
       </div>
 
-      <div className="flex border-b border-gray-200 mb-6 overflow-x-auto">
+      <div className="flex border-b border-gray-200 mb-3 overflow-x-auto">
         {['vorstand', 'helfer', 'rollen'].map(tab => (
-          <button key={tab} onClick={() => { setActiveTab(tab as any); setShowExpired(false); }} className={`py-3 px-6 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === tab ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+          <button key={tab} onClick={() => { setActiveTab(tab as any); setShowExpired(false); }} className={`py-2 px-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === tab ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
             {tab.charAt(0).toUpperCase() + tab.slice(1).replace('vorstand', 'Vorstände').replace('helfer', 'Externe Helfer').replace('rollen', 'Rollen & Ämter')}
           </button>
         ))}
       </div>
 
-      {activeTab === 'helfer' && isAdmin && !showExpired && (
-        <div className="mb-6 flex gap-3">
-          <button onClick={handleCheckGDPR} className="flex items-center px-4 py-2 bg-yellow-100 text-yellow-800 font-medium rounded-lg hover:bg-yellow-200 transition">
-            <ShieldAlert className="w-5 h-5 mr-2" /> DSGVO-Bereinigung prüfen
-          </button>
-        </div>
-      )}
+      {/* CHIRURGISCHER EINGRIFF: Alter DSGVO-Block entfernt */}
 
       {showExpired && isAdmin ? (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 mb-6">
@@ -389,7 +411,7 @@ export const UsersView: React.FC = () => {
             <div className="space-y-3">
               {expiredHelpers.map((h) => (
                 <div key={h.id} className="flex justify-between items-center bg-white p-3 rounded shadow-sm border border-yellow-100">
-                  <div><div className="font-medium text-gray-900">{h.name}</div><div className="text-sm text-gray-500">Letzte Aktivität: {new Date(h.lastActivityAt || 0).toLocaleDateString()}</div></div>
+                  <div><div className="font-bold text-gray-900">{h.name}</div><div className="text-sm text-gray-500">Letzte Aktivität: {new Date(h.lastActivityAt || 0).toLocaleDateString()}</div></div>
                   <button onClick={() => handleSafeDeleteHelper(h)} className="p-2 text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-5 h-5" /></button>
                 </div>
               ))}
@@ -398,7 +420,7 @@ export const UsersView: React.FC = () => {
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex-1 overflow-hidden flex flex-col">
-          {isUsersLoading ? <div className="p-8 text-center text-gray-500 animate-pulse">Lade Daten...</div> : (
+          {isUsersLoading ? <div className="p-8 text-center text-gray-500 animate-pulse font-bold">Lade Daten...</div> : (
             <div className="divide-y divide-gray-200 flex-1 overflow-y-auto">
               {activeTab === 'vorstand' && users.length === 0 && <div className="p-8 text-center text-gray-500">Keine Vorstände gefunden.</div>}
               
@@ -406,7 +428,7 @@ export const UsersView: React.FC = () => {
                 <div key={u.id} className="p-4 hover:bg-gray-50 flex items-center justify-between transition-colors">
                   <div className="flex items-center">
                     <div className="bg-blue-100 p-3 rounded-full text-blue-600 mr-4"><Users className="w-6 h-6" /></div>
-                    <div><h3 className="font-semibold text-gray-900">{u.name}</h3><span className="text-xs font-medium text-gray-500">{u.amt} · {u.rolle}</span></div>
+                    <div><h3 className="font-bold text-gray-900">{u.name}</h3><span className="text-xs font-bold text-gray-500">{u.amt} · {u.rolle}</span></div>
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => openUserEditor(u)} className="text-gray-400 hover:text-blue-600 p-2"><Edit2 className="w-5 h-5" /></button>
@@ -422,13 +444,13 @@ export const UsersView: React.FC = () => {
                       <tr>
                         {[
                           { k: 'alias', l: 'ALIAS (Kalender)' },
-                          { k: 'name', l: 'Name (Vorname Nachname)' },
+                          { k: 'name', l: 'Name' },
                           { k: 'bezug', l: 'Freitext' },
                           { k: 'email', l: 'E-Mail' },
                           { k: 'geburtsdatum', l: 'Geburtstag' },
                           { k: 'telefon', l: 'Telefon / WhatsApp' }
                         ].map(col => (
-                          <th key={col.k} onClick={() => handleSort(col.k as any)} className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors">
+                          <th key={col.k} onClick={() => handleSort(col.k as any)} className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors">
                             <div className="flex items-center gap-1">
                               {col.l} 
                               {col.k === 'geburtsdatum' && sortConfig.key === col.k && (
@@ -436,23 +458,28 @@ export const UsersView: React.FC = () => {
                                   {sortConfig.direction.startsWith('md-') ? 'Tag/Monat' : 'Alter'}
                                 </span>
                               )}
+                              {col.k === 'name' && sortConfig.key === col.k && (
+                                <span className="text-[9px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded ml-1">
+                                  {sortConfig.direction.startsWith('ln-') ? 'Nachname' : 'Vorname'}
+                                </span>
+                              )}
                               <ArrowUpDown className={`w-3 h-3 ${sortConfig.key === col.k ? 'text-blue-600' : 'text-gray-300'}`} />
                             </div>
                           </th>
                         ))}
-                        <th className="px-6 py-3"></th>
+                        <th className="px-4 py-2"></th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {sortedHelpers.map(h => (
                         <tr key={h.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-3 whitespace-nowrap"><EditableCell value={h.alias} onSave={val => handleInlineUpdateHelper(h, 'alias', val)} placeholder="Pflichtfeld" className="font-bold text-blue-700" /></td>
-                          <td className="px-6 py-3 whitespace-nowrap"><EditableCell value={h.name} onSave={val => handleInlineUpdateHelper(h, 'name', val)} placeholder="Vorname Nachname" /></td>
-                          <td className="px-6 py-3 whitespace-nowrap"><EditableCell value={h.bezug || ''} onSave={val => handleInlineUpdateHelper(h, 'bezug', val)} placeholder="--" /></td>
-                          <td className="px-6 py-3 whitespace-nowrap"><EditableCell value={h.email || ''} type="email" onSave={val => handleInlineUpdateHelper(h, 'email', val)} placeholder="--" /></td>
-                          <td className="px-6 py-3 whitespace-nowrap"><EditableCell value={h.geburtsdatum || ''} type="date" onSave={val => handleInlineUpdateHelper(h, 'geburtsdatum', val)} placeholder="--" /></td>
-                          <td className="px-6 py-3 whitespace-nowrap"><EditableCell value={h.telefon || ''} type="tel" onSave={val => handleInlineUpdateHelper(h, 'telefon', val)} className="font-mono text-green-700" placeholder="--" /></td>
-                          <td className="px-6 py-3 whitespace-nowrap text-right text-xs font-medium">
+                          <td className="px-4 py-1.5 whitespace-nowrap"><EditableCell value={h.alias} onSave={val => handleInlineUpdateHelper(h, 'alias', val)} placeholder="Pflichtfeld" className="font-bold text-blue-700" /></td>
+                          <td className="px-4 py-1.5 whitespace-nowrap"><EditableCell value={h.name} onSave={val => handleInlineUpdateHelper(h, 'name', val)} placeholder="Vorname Nachname" /></td>
+                          <td className="px-4 py-1.5 whitespace-nowrap"><EditableCell value={h.bezug || ''} onSave={val => handleInlineUpdateHelper(h, 'bezug', val)} placeholder="--" /></td>
+                          <td className="px-4 py-1.5 whitespace-nowrap"><EditableCell value={h.email || ''} type="email" onSave={val => handleInlineUpdateHelper(h, 'email', val)} placeholder="--" /></td>
+                          <td className="px-4 py-1.5 whitespace-nowrap"><EditableCell value={h.geburtsdatum || ''} type="date" onSave={val => handleInlineUpdateHelper(h, 'geburtsdatum', val)} placeholder="--" /></td>
+                          <td className="px-4 py-1.5 whitespace-nowrap"><EditableCell value={h.telefon || ''} type="tel" onSave={val => handleInlineUpdateHelper(h, 'telefon', val)} className="font-mono text-green-700" placeholder="--" /></td>
+                          <td className="px-4 py-1.5 whitespace-nowrap text-right text-xs font-medium">
                             <div className="flex items-center gap-2 justify-end">
                               <button onClick={() => openHelperEditor(h)} className="text-gray-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50" title="Bearbeiten"><Edit2 className="w-4 h-4" /></button>
                               <button onClick={() => handleSafeDeleteHelper(h)} className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50" title="Löschen"><Trash2 className="w-4 h-4" /></button>
@@ -475,7 +502,7 @@ export const UsersView: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
                         <div className="bg-purple-100 p-3 rounded-lg text-purple-600 mr-4"><Tag className="w-6 h-6" /></div>
-                        <div><h3 className="font-semibold text-gray-900">{g.name}</h3>{g.description && <p className="text-sm text-gray-500">{g.description}</p>}</div>
+                        <div><h3 className="font-bold text-gray-900">{g.name}</h3>{g.description && <p className="text-sm text-gray-500">{g.description}</p>}</div>
                       </div>
                       <div className="flex items-center gap-2">
                         {groupRoutines.length > 0 && <button onClick={() => toggleGroupExpanded(g.id)} className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-200 rounded text-lg font-mono font-bold leading-none transition-colors">{isExpanded ? '-' : '+'}</button>}
@@ -514,7 +541,8 @@ export const UsersView: React.FC = () => {
       {isUserModalOpen && <UserFormModal onClose={() => setIsUserModalOpen(false)} existingUser={editingUser} />}
       {isGroupModalOpen && <GroupFormModal onClose={() => setIsGroupModalOpen(false)} existingGroup={editingGroup} />}
       {isTaskModalOpen && editingTask && <ItemFormModal isOpen={isTaskModalOpen} existingItem={editingTask} onClose={() => setIsTaskModalOpen(false)} onSave={async (data) => { await saveAgendaItem(data); fetchTasks(); setIsTaskModalOpen(false); }} />}
+      {isCsvModalOpen && <CsvImportModal onClose={() => setIsCsvModalOpen(false)} />}
     </div>
   );
 };
-// --- END OF FILE 439 Zeilen ---
+// --- END OF FILE 548 Zeilen ---
