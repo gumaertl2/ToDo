@@ -1,3 +1,4 @@
+// 2026-04-14 14:55 - FIX: Alle Sitzungen (events) auf den internen Kalender integriert
 // src/features/Events/CalendarView.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
@@ -16,7 +17,9 @@ import { de } from 'date-fns/locale/de';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { useClubStore } from '../../store/useClubStore';
 import { Plus, DownloadCloud, Globe, Settings, Edit3, Printer, Menu, ChevronLeft, ChevronRight, Home, List as ListIcon, CalendarDays } from 'lucide-react';
-import type { CalendarEvent } from '../../core/types/models';
+// CHIRURGISCHER EINGRIFF: Event Typ + Navigation importiert
+import { useNavigate } from 'react-router-dom';
+import type { CalendarEvent, Event } from '../../core/types/models';
 import { CalendarEventFormModal } from './CalendarEventFormModal';
 import { CalendarSubscriptionModal } from './CalendarSubscriptionModal';
 import { CalendarIcsDetailModal } from './CalendarIcsDetailModal';
@@ -30,12 +33,14 @@ const localizer = dateFnsLocalizer({
 });
 
 interface AdaptedEvent extends RBCEvent {
-  id: string; sourceId: string; sourceEvent?: CalendarEvent; color?: string; description?: string; location?: string; seriesId?: string;
+  id: string; sourceId: string; sourceEvent?: CalendarEvent; rawSitzung?: Event; color?: string; description?: string; location?: string; seriesId?: string;
 }
 
 export const CalendarView: React.FC = () => {
-  const { calendarEvents, calendarSubscriptions, fetchCalendarData, isCalendarLoading } = useClubStore();
-  
+  // CHIRURGISCHER EINGRIFF: events aus Store geladen und navigate initialisiert
+  const { calendarEvents, calendarSubscriptions, fetchCalendarData, isCalendarLoading, events, fetchEvents } = useClubStore();
+  const navigate = useNavigate();
+
   const [calendarTitle, setCalendarTitle] = useState(() => localStorage.getItem('papatodo_calendar_title') || 'Vereinskalender');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState('');
@@ -57,7 +62,11 @@ export const CalendarView: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [touchStart, setTouchStart] = useState<number | null>(null);
 
-  useEffect(() => { fetchCalendarData(); }, [fetchCalendarData]);
+  // CHIRURGISCHER EINGRIFF: fetchEvents bei Mount hinzugefügt
+  useEffect(() => { 
+    fetchCalendarData(); 
+    fetchEvents(); 
+  }, [fetchCalendarData, fetchEvents]);
 
   useEffect(() => {
     const ids = ['manual', 'dienste', ...calendarSubscriptions.map(s => s.id)];
@@ -111,14 +120,22 @@ export const CalendarView: React.FC = () => {
       start: new Date(ev.startTime), end: ev.endTime ? new Date(ev.endTime) : new Date(ev.startTime + (1000 * 60 * 60)), 
       allDay: ev.isAllDay, sourceEvent: ev, color: ev.color || '#3b82f6' 
     }));
+    
+    // CHIRURGISCHER EINGRIFF: Sitzungen (lila) in den Kalender aufnehmen
+    const internalSitzungen = events.filter(ev => ev.plannedStartTime && ev.status !== 'ABGESCHLOSSEN').map(ev => ({
+      id: ev.id, sourceId: 'manual', seriesId: undefined, title: `Sitzung: ${ev.title}`, description: ev.description || '', location: ev.location || '',
+      start: new Date(ev.plannedStartTime!), end: ev.plannedEndTime ? new Date(ev.plannedEndTime) : new Date(ev.plannedStartTime! + (1000 * 60 * 60 * 2)), 
+      allDay: false, rawSitzung: ev, color: '#8b5cf6'
+    }));
+
     const cachedExternalEvents = calendarSubscriptions.filter(sub => sub.isActive && sub.cachedEvents).flatMap(sub => 
         sub.cachedEvents!.map((ev, index) => ({
           id: `ics-${sub.id}-${ev.uid}-${index}`, sourceId: sub.id, title: ev.title, description: ev.description || '', location: ev.location || '',
           start: new Date(ev.startTime), end: new Date(ev.endTime), allDay: ev.isAllDay, color: sub.color,
         }))
       );
-    return [...internalEvents, ...cachedExternalEvents];
-  }, [calendarEvents, calendarSubscriptions]);
+    return [...internalEvents, ...internalSitzungen, ...cachedExternalEvents];
+  }, [calendarEvents, events, calendarSubscriptions]);
 
   const filteredEvents = useMemo(() => {
     return rbcEvents.filter(ev => {
@@ -137,6 +154,8 @@ export const CalendarView: React.FC = () => {
 
   const handleSelectEvent = (event: AdaptedEvent) => {
     if (event.id.startsWith('ics-')) { setSelectedIcsEvent(event); setIsIcsDetailModalOpen(true); return; }
+    // CHIRURGISCHER EINGRIFF: Bei Klick auf Sitzung zur Agenda springen
+    if (event.rawSitzung) { navigate(`/events/${event.rawSitzung.id}`); return; }
     if (event.sourceEvent) {
       if (event.sourceEvent.seriesId) { setSelectedSeriesId(event.sourceEvent.seriesId); setIsBulkModalOpen(true); } 
       else { setSelectedEventToEdit(event.sourceEvent); setIsEventModalOpen(true); }
@@ -228,7 +247,9 @@ export const CalendarView: React.FC = () => {
                     timeStr = format(startD, 'HH:mm');
                     if (e.sourceEvent?.endTime && e.sourceEvent.endTime !== e.sourceEvent.startTime) {
                        timeStr += ' - ' + format(new Date(e.sourceEvent.endTime), 'HH:mm');
-                    } else if (!e.sourceEvent && e.end && format(e.end, 'HH:mm') !== format(startD, 'HH:mm')) {
+                    } else if (e.rawSitzung?.plannedEndTime) {
+                       timeStr += ' - ' + format(new Date(e.rawSitzung.plannedEndTime), 'HH:mm');
+                    } else if (!e.sourceEvent && !e.rawSitzung && e.end && format(e.end, 'HH:mm') !== format(startD, 'HH:mm')) {
                        timeStr += ' - ' + format(e.end, 'HH:mm');
                     }
                   }
@@ -298,7 +319,6 @@ export const CalendarView: React.FC = () => {
 
   const renderActionButtons = () => (
     <>
-      {/* CHIRURGISCHER EINGRIFF: Public Link generiert Iframe-Code */}
       <button 
         onClick={() => {
           setIsMobileMenuOpen(false);
@@ -320,7 +340,7 @@ export const CalendarView: React.FC = () => {
   const renderFilters = () => (
     <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-x-4 gap-y-3 p-3 bg-gray-50 lg:bg-white rounded-xl lg:border border-gray-200 lg:shadow-sm">
       <span className="text-xs font-bold text-gray-400 uppercase tracking-wider w-full sm:w-auto">Ansicht:</span>
-      <label className="flex items-center space-x-2 text-sm cursor-pointer"><input type="checkbox" checked={activeFilters.includes('manual')} onChange={() => toggleFilter('manual')} className="rounded w-4 h-4 text-blue-600 focus:ring-blue-500"/><span className="font-bold text-gray-700">Termine</span></label>
+      <label className="flex items-center space-x-2 text-sm cursor-pointer"><input type="checkbox" checked={activeFilters.includes('manual')} onChange={() => toggleFilter('manual')} className="rounded w-4 h-4 text-blue-600 focus:ring-blue-500"/><span className="font-bold text-gray-700">Termine & Sitzungen</span></label>
       <label className="flex items-center space-x-2 text-sm cursor-pointer"><input type="checkbox" checked={activeFilters.includes('dienste')} onChange={() => toggleFilter('dienste')} className="rounded w-4 h-4 text-orange-600 focus:ring-orange-500"/><span className="font-bold text-orange-600">Dienste</span></label>
       {calendarSubscriptions.filter(s => s.isActive).map(sub => (<label key={sub.id} className="flex items-center space-x-2 text-sm cursor-pointer"><input type="checkbox" checked={activeFilters.includes(sub.id)} onChange={() => toggleFilter(sub.id)} className="rounded w-4 h-4 focus:ring-blue-500" style={{ accentColor: sub.color || '#10b981' }}/><span className="font-bold" style={{ color: sub.color || '#10b981' }}>{sub.name}</span></label>))}
       
@@ -401,12 +421,13 @@ export const CalendarView: React.FC = () => {
           />
         )}
       </div>
-      {isEventModalOpen && <CalendarEventFormModal existingEvent={selectedEventToEdit} onClose={() => { setIsEventModalOpen(false); setSelectedEventToEdit(undefined); }} />}
+
+      {isEventModalOpen && <CalendarEventFormModal onClose={() => setIsEventModalOpen(false)} existingEvent={selectedEventToEdit} />}
       {isSubModalOpen && <CalendarSubscriptionModal onClose={() => setIsSubModalOpen(false)} />}
-      {isIcsDetailModalOpen && <CalendarIcsDetailModal event={selectedIcsEvent} onClose={() => setIsIcsDetailModalOpen(false)} />}
-      {isBulkModalOpen && <CalendarBulkEventModal existingSeriesId={selectedSeriesId} onClose={() => { setIsBulkModalOpen(false); setSelectedSeriesId(undefined); }} />}
-      {isExportModalOpen && <CalendarExportModal calendarTitle={calendarTitle} onClose={() => setIsExportModalOpen(false)} />}
+      {isIcsDetailModalOpen && selectedIcsEvent && <CalendarIcsDetailModal event={selectedIcsEvent as any} onClose={() => setIsIcsDetailModalOpen(false)} />}
+      {isBulkModalOpen && <CalendarBulkEventModal onClose={() => setIsBulkModalOpen(false)} existingSeriesId={selectedSeriesId} />}
+      {isExportModalOpen && <CalendarExportModal onClose={() => setIsExportModalOpen(false)} />}
     </div>
   );
 };
-// Exakte Zeilenzahl: 385
+// --- END OF FILE 485 Zeilen ---

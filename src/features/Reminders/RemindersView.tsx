@@ -1,4 +1,4 @@
-// 2026-04-14 14:30 - FEATURE: Sitzungen (Events) im WhatsApp-Erinnerungs-Dashboard integriert
+// 2026-04-14 14:40 - FIX: updateEvent importiert und Fehler korrigiert
 // src/features/Reminders/RemindersView.tsx
 import React, { useMemo } from 'react';
 import { useClubStore } from '../../store/useClubStore';
@@ -8,7 +8,6 @@ const formatReminderText = (type: 'Event' | 'Task' | 'Sitzung', item: any, custo
   const baseText = customText ? customText : 'Hallo, hier ist eine kurze Erinnerung für dich:';
   const details: string[] = [];
 
-  // CHIRURGISCHER EINGRIFF: Formatierer unterscheidet nun auch 'Sitzung'
   if (type === 'Event' || type === 'Sitzung') {
     const start = new Date(item.startTime || item.plannedStartTime);
     const dateStr = start.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -55,7 +54,7 @@ export const RemindersView: React.FC = () => {
     user, 
     saveAgendaItem,
     updateCalendarEvent,
-    // Annahme: saveEvent oder updateEvent existiert im Store, um Sitzungen zu updaten
+    updateEvent, // CHIRURGISCHER EINGRIFF: updateEvent aus dem Store importiert
     isEventsLoading,
     isUsersLoading
   } = useClubStore();
@@ -71,7 +70,6 @@ export const RemindersView: React.FC = () => {
 
     const items: any[] = [];
 
-    // 1. Kalender-Einträge (Termine / Dienste)
     if (calendarEvents) {
       calendarEvents.forEach(ce => {
         if (ce.reminderSenderUserId === user.id && !ce.reminderSentAt && ce.reminderLeadDays !== undefined) {
@@ -123,7 +121,6 @@ export const RemindersView: React.FC = () => {
       });
     }
 
-    // 2. Aufgaben (Tasks)
     if (tasks) {
       tasks.forEach(t => {
         if (t.reminderSenderUserId === user.id && !t.reminderSentAt && t.reminderLeadDays !== undefined && t.dueDate) {
@@ -166,7 +163,6 @@ export const RemindersView: React.FC = () => {
       });
     }
 
-    // CHIRURGISCHER EINGRIFF: 3. Sitzungen (Events)
     if (events) {
       events.forEach(ev => {
         if (ev.status !== 'ABGESCHLOSSEN' && ev.reminderSenderUserId === user.id && !ev.reminderSentAt && ev.reminderLeadDays !== undefined && ev.plannedStartTime) {
@@ -175,7 +171,6 @@ export const RemindersView: React.FC = () => {
           const stichtag = eventDateStart - (ev.reminderLeadDays * MS_PER_DAY);
           
           if (todayStart >= stichtag) {
-            // Empfänger für Sitzungen zusammenbauen
             const targets: { name: string, phone?: string, isGroup: boolean }[] = [];
             
             ev.participantGroupIds?.forEach(gId => {
@@ -203,7 +198,7 @@ export const RemindersView: React.FC = () => {
               isDirect,
               phone,
               rawItem: ev,
-              model: 'event' // Unterscheidung für den Save-Handler
+              model: 'event' 
             });
           }
         }
@@ -238,11 +233,8 @@ export const RemindersView: React.FC = () => {
       } else if (rem.model === 'task') {
         await saveAgendaItem({ ...rem.rawItem, reminderSentAt: Date.now() });
       } else if (rem.model === 'event') {
-         // Wir haben im aktuellen Scope keinen Zugriff auf saveEvent aus dem useClubStore, 
-         // da es in der Destrukturierung fehlt. Normalerweise würden wir hier updateEvent/saveEvent aufrufen.
-         // Um das Protokoll nicht zu verletzen (wir wissen nicht wie updateEvent im Store heißt),
-         // setzen wir es als TODO für dich oder belassen es als Fallback.
-         console.log("Sitzung (Event) Zeitstempel muss gespeichert werden.", rem.rawItem);
+         // CHIRURGISCHER EINGRIFF: Jetzt speichern wir die Sitzung!
+         await updateEvent({ ...rem.rawItem, reminderSentAt: Date.now() });
       }
     } catch (err) {
       console.error("Fehler beim Speichern des Zeitstempels:", err);
@@ -257,7 +249,8 @@ export const RemindersView: React.FC = () => {
       } else if (rem.model === 'task') {
         await saveAgendaItem({ ...rem.rawItem, reminderSentAt: Date.now() });
       } else if (rem.model === 'event') {
-         console.log("Sitzung (Event) Zeitstempel muss verwerfen gespeichert werden.", rem.rawItem);
+         // CHIRURGISCHER EINGRIFF: Jetzt speichern wir das Verwerfen für die Sitzung!
+         await updateEvent({ ...rem.rawItem, reminderSentAt: Date.now() });
       }
     } catch (err) {
       console.error("Fehler beim Verwerfen:", err);
@@ -347,4 +340,4 @@ export const RemindersView: React.FC = () => {
     </div>
   );
 };
-// --- END OF FILE 317 Zeilen ---
+// --- END OF FILE 314 Zeilen ---

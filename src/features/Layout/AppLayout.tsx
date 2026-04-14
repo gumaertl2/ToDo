@@ -1,4 +1,4 @@
-// 2026-04-14 13:40 - FIX: Globaler Reload-Schutz für alle benötigten Daten (inkl. CalendarEvents)
+// 2026-04-14 14:50 - FIX: Sequenzielle Lade-Reihenfolge gegen Safari Connection-Drops
 // src/features/Layout/AppLayout.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
@@ -6,7 +6,6 @@ import { Users, Calendar, ClipboardList, CheckSquare, LogOut, LayoutDashboard, B
 import { useClubStore } from '../../store/useClubStore';
 
 export const AppLayout: React.FC = () => {
-  // CHIRURGISCHER EINGRIFF: fetchCalendarEvents ergänzt
   const { logout, user, fetchUsersAndHelpers, fetchGroups, calendarEvents, tasks, fetchEvents, fetchTasks, fetchCalendarEvents } = useClubStore();
 
   const [isPinned, setIsPinned] = useState(() => {
@@ -20,13 +19,16 @@ export const AppLayout: React.FC = () => {
     localStorage.setItem('papatodo_sidebar_pinned', String(isPinned));
   }, [isPinned]);
 
-  // CHIRURGISCHER EINGRIFF: Alle Fetch-Calls bei App-Start aufrufen (falls vorhanden)
+  // CHIRURGISCHER EINGRIFF: Nacheinander laden (await), um Safari-Verbindungsstau zu verhindern
   useEffect(() => {
-    if (fetchUsersAndHelpers) fetchUsersAndHelpers();
-    if (fetchGroups) fetchGroups();
-    if (fetchEvents) fetchEvents();
-    if (fetchTasks) fetchTasks();
-    if (fetchCalendarEvents) fetchCalendarEvents();
+    const initApp = async () => {
+      if (fetchUsersAndHelpers) await fetchUsersAndHelpers();
+      if (fetchGroups) await fetchGroups();
+      if (fetchEvents) await fetchEvents();
+      if (fetchTasks) await fetchTasks();
+      if (fetchCalendarEvents) await fetchCalendarEvents();
+    };
+    initApp();
   }, [fetchUsersAndHelpers, fetchGroups, fetchEvents, fetchTasks, fetchCalendarEvents]);
 
   const pendingRemindersCount = useMemo(() => {
@@ -216,4 +218,4 @@ export const AppLayout: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 206
+// --- END OF FILE 209 Zeilen ---

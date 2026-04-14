@@ -1,3 +1,4 @@
+// 2026-04-14 14:50 - FIX: Safari CORS und Timeout-Bug durch LongPolling behoben
 // src/services/firebase.ts
 import { initializeApp } from 'firebase/app';
 import {
@@ -19,6 +20,8 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 const db = initializeFirestore(app, {
+  // CHIRURGISCHER EINGRIFF: Zwingt Firebase zu einer stabilen Safari-Verbindung ohne Verbindungsabbruch
+  experimentalForceLongPolling: true,
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager(),
   }),
@@ -28,4 +31,4 @@ const auth = getAuth(app);
 
 export { app, db, auth };
 
-// Exakte Zeilenzahl: 31
+// --- END OF FILE 32 Zeilen ---

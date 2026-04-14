@@ -1,3 +1,4 @@
+// 2026-04-14 14:55 - FIX: Öffentliche Sitzungen (isPublished) auf Homepage integriert
 // src/features/Events/PublicCalendarEmbed.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
@@ -17,7 +18,8 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Printer, Menu, ChevronLeft, ChevronRight, Home, List as ListIcon, CalendarDays, MapPin, Clock, Info, X } from 'lucide-react';
-import type { CalendarEvent, CalendarSubscription } from '../../core/types/models';
+// CHIRURGISCHER EINGRIFF: Event (Sitzung) Type importiert
+import type { CalendarEvent, CalendarSubscription, Event } from '../../core/types/models';
 
 const locales = { 'de': de };
 
@@ -26,11 +28,12 @@ const localizer = dateFnsLocalizer({
 });
 
 interface AdaptedEvent extends RBCEvent {
-  id: string; sourceId: string; sourceEvent?: CalendarEvent; color?: string; description?: string; location?: string; seriesId?: string;
+  id: string; sourceId: string; sourceEvent?: CalendarEvent; rawSitzung?: Event; color?: string; description?: string; location?: string; seriesId?: string;
 }
 
 export const PublicCalendarEmbed: React.FC = () => {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [sitzungen, setSitzungen] = useState<Event[]>([]); // CHIRURGISCHER EINGRIFF: State für Sitzungen
   const [calendarSubscriptions, setCalendarSubscriptions] = useState<CalendarSubscription[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -55,13 +58,18 @@ export const PublicCalendarEmbed: React.FC = () => {
         const loadedEvents = eventsSnap.docs.map(doc => ({ ...doc.data(), id: doc.id } as CalendarEvent));
         setCalendarEvents(loadedEvents);
 
-        // 2. Hole Kalender Abos und sortiere sie wie in der Haupt-App
+        // 2. Hole öffentliche Sitzungen (isPublished)
+        const sitzQ = query(collection(db, 'events'), where('isPublished', '==', true));
+        const sitzSnap = await getDocs(sitzQ);
+        const loadedSitzungen = sitzSnap.docs.map(doc => ({ ...doc.data(), id: doc.id } as Event));
+        setSitzungen(loadedSitzungen);
+
+        // 3. Hole Kalender Abos und sortiere sie
         const subsSnap = await getDocs(collection(db, 'calendar_subscriptions'));
         const loadedSubs = subsSnap.docs.map(doc => ({ ...doc.data(), id: doc.id } as CalendarSubscription));
         const sortedSubs = loadedSubs.sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
         setCalendarSubscriptions(sortedSubs);
 
-        // Setze Standard-Filter mit der korrekt sortierten Reihenfolge
         const ids = ['manual', 'dienste', ...sortedSubs.map(s => s.id)];
         setActiveFilters(ids);
       } catch (err) {
@@ -114,14 +122,22 @@ export const PublicCalendarEmbed: React.FC = () => {
       start: new Date(ev.startTime), end: ev.endTime ? new Date(ev.endTime) : new Date(ev.startTime + (1000 * 60 * 60)), 
       allDay: ev.isAllDay, sourceEvent: ev, color: ev.color || '#3b82f6' 
     }));
+    
+    // CHIRURGISCHER EINGRIFF: Sitzungen (lila) in den Kalender aufnehmen
+    const publicSitzungen = sitzungen.filter(ev => ev.plannedStartTime && ev.status !== 'ABGESCHLOSSEN').map(ev => ({
+      id: ev.id, sourceId: 'manual', seriesId: undefined, title: `Sitzung: ${ev.title}`, description: ev.description || '', location: ev.location || '',
+      start: new Date(ev.plannedStartTime!), end: ev.plannedEndTime ? new Date(ev.plannedEndTime) : new Date(ev.plannedStartTime! + (1000 * 60 * 60 * 2)), 
+      allDay: false, rawSitzung: ev, color: '#8b5cf6' 
+    }));
+
     const cachedExternalEvents = calendarSubscriptions.filter(sub => sub.isActive && sub.cachedEvents).flatMap(sub => 
         sub.cachedEvents!.map((ev, index) => ({
           id: `ics-${sub.id}-${ev.uid}-${index}`, sourceId: sub.id, title: ev.title, description: ev.description || '', location: ev.location || '',
           start: new Date(ev.startTime), end: new Date(ev.endTime), allDay: ev.isAllDay, color: sub.color,
         }))
       );
-    return [...internalEvents, ...cachedExternalEvents];
-  }, [calendarEvents, calendarSubscriptions]);
+    return [...internalEvents, ...publicSitzungen, ...cachedExternalEvents];
+  }, [calendarEvents, sitzungen, calendarSubscriptions]);
 
   const filteredEvents = useMemo(() => {
     return rbcEvents.filter(ev => {
@@ -227,7 +243,9 @@ export const PublicCalendarEmbed: React.FC = () => {
                     timeStr = format(startD, 'HH:mm');
                     if (e.sourceEvent?.endTime && e.sourceEvent.endTime !== e.sourceEvent.startTime) {
                        timeStr += ' - ' + format(new Date(e.sourceEvent.endTime), 'HH:mm');
-                    } else if (!e.sourceEvent && e.end && format(e.end, 'HH:mm') !== format(startD, 'HH:mm')) {
+                    } else if (e.rawSitzung?.plannedEndTime) {
+                       timeStr += ' - ' + format(new Date(e.rawSitzung.plannedEndTime), 'HH:mm');
+                    } else if (!e.sourceEvent && !e.rawSitzung && e.end && format(e.end, 'HH:mm') !== format(startD, 'HH:mm')) {
                        timeStr += ' - ' + format(e.end, 'HH:mm');
                     }
                   }
@@ -297,7 +315,7 @@ export const PublicCalendarEmbed: React.FC = () => {
   const renderFilters = () => (
     <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-x-4 gap-y-3 p-3 bg-gray-50 lg:bg-white rounded-xl lg:border border-gray-200 lg:shadow-sm">
       <span className="text-xs font-bold text-gray-400 uppercase tracking-wider w-full sm:w-auto">Ansicht:</span>
-      <label className="flex items-center space-x-2 text-sm cursor-pointer"><input type="checkbox" checked={activeFilters.includes('manual')} onChange={() => toggleFilter('manual')} className="rounded w-4 h-4 text-blue-600 focus:ring-blue-500"/><span className="font-bold text-gray-700">Termine</span></label>
+      <label className="flex items-center space-x-2 text-sm cursor-pointer"><input type="checkbox" checked={activeFilters.includes('manual')} onChange={() => toggleFilter('manual')} className="rounded w-4 h-4 text-blue-600 focus:ring-blue-500"/><span className="font-bold text-gray-700">Termine & Sitzungen</span></label>
       <label className="flex items-center space-x-2 text-sm cursor-pointer"><input type="checkbox" checked={activeFilters.includes('dienste')} onChange={() => toggleFilter('dienste')} className="rounded w-4 h-4 text-orange-600 focus:ring-orange-500"/><span className="font-bold text-orange-600">Dienste</span></label>
       {calendarSubscriptions.filter(s => s.isActive).map(sub => (<label key={sub.id} className="flex items-center space-x-2 text-sm cursor-pointer"><input type="checkbox" checked={activeFilters.includes(sub.id)} onChange={() => toggleFilter(sub.id)} className="rounded w-4 h-4 focus:ring-blue-500" style={{ accentColor: sub.color || '#10b981' }}/><span className="font-bold" style={{ color: sub.color || '#10b981' }}>{sub.name}</span></label>))}
       
@@ -425,9 +443,15 @@ export const PublicCalendarEmbed: React.FC = () => {
               {selectedEventToView.description && (
                 <div className="flex items-start text-gray-700 bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
                   <Info className="w-5 h-5 mr-3 text-gray-400 shrink-0 mt-0.5" />
-                  <p className="text-sm whitespace-pre-wrap">{selectedEventToView.description}</p>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed">{selectedEventToView.description}</p>
                 </div>
               )}
+            </div>
+            
+            <div className="p-4 border-t border-gray-200 bg-white flex justify-end">
+              <button onClick={() => setSelectedEventToView(null)} className="px-6 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold rounded-lg transition-colors">
+                Schließen
+              </button>
             </div>
           </div>
         </div>
@@ -435,4 +459,4 @@ export const PublicCalendarEmbed: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 388
+// --- END OF FILE 428 Zeilen ---
