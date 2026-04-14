@@ -1,4 +1,4 @@
-// 2026-04-14 14:55 - FIX: Alle Sitzungen (events) auf den internen Kalender integriert
+// 2026-04-14 16:30 - FIX: calendarTitle in Export-Modal gepatcht (Vercel Fix)
 // src/features/Events/CalendarView.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
@@ -17,7 +17,6 @@ import { de } from 'date-fns/locale/de';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { useClubStore } from '../../store/useClubStore';
 import { Plus, DownloadCloud, Globe, Settings, Edit3, Printer, Menu, ChevronLeft, ChevronRight, Home, List as ListIcon, CalendarDays } from 'lucide-react';
-// CHIRURGISCHER EINGRIFF: Event Typ + Navigation importiert
 import { useNavigate } from 'react-router-dom';
 import type { CalendarEvent, Event } from '../../core/types/models';
 import { CalendarEventFormModal } from './CalendarEventFormModal';
@@ -37,7 +36,6 @@ interface AdaptedEvent extends RBCEvent {
 }
 
 export const CalendarView: React.FC = () => {
-  // CHIRURGISCHER EINGRIFF: events aus Store geladen und navigate initialisiert
   const { calendarEvents, calendarSubscriptions, fetchCalendarData, isCalendarLoading, events, fetchEvents } = useClubStore();
   const navigate = useNavigate();
 
@@ -62,7 +60,6 @@ export const CalendarView: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [touchStart, setTouchStart] = useState<number | null>(null);
 
-  // CHIRURGISCHER EINGRIFF: fetchEvents bei Mount hinzugefügt
   useEffect(() => { 
     fetchCalendarData(); 
     fetchEvents(); 
@@ -121,7 +118,6 @@ export const CalendarView: React.FC = () => {
       allDay: ev.isAllDay, sourceEvent: ev, color: ev.color || '#3b82f6' 
     }));
     
-    // CHIRURGISCHER EINGRIFF: Sitzungen (lila) in den Kalender aufnehmen
     const internalSitzungen = events.filter(ev => ev.plannedStartTime && ev.status !== 'ABGESCHLOSSEN').map(ev => ({
       id: ev.id, sourceId: 'manual', seriesId: undefined, title: `Sitzung: ${ev.title}`, description: ev.description || '', location: ev.location || '',
       start: new Date(ev.plannedStartTime!), end: ev.plannedEndTime ? new Date(ev.plannedEndTime) : new Date(ev.plannedStartTime! + (1000 * 60 * 60 * 2)), 
@@ -154,7 +150,6 @@ export const CalendarView: React.FC = () => {
 
   const handleSelectEvent = (event: AdaptedEvent) => {
     if (event.id.startsWith('ics-')) { setSelectedIcsEvent(event); setIsIcsDetailModalOpen(true); return; }
-    // CHIRURGISCHER EINGRIFF: Bei Klick auf Sitzung zur Agenda springen
     if (event.rawSitzung) { navigate(`/events/${event.rawSitzung.id}`); return; }
     if (event.sourceEvent) {
       if (event.sourceEvent.seriesId) { setSelectedSeriesId(event.sourceEvent.seriesId); setIsBulkModalOpen(true); } 
@@ -426,8 +421,9 @@ export const CalendarView: React.FC = () => {
       {isSubModalOpen && <CalendarSubscriptionModal onClose={() => setIsSubModalOpen(false)} />}
       {isIcsDetailModalOpen && selectedIcsEvent && <CalendarIcsDetailModal event={selectedIcsEvent as any} onClose={() => setIsIcsDetailModalOpen(false)} />}
       {isBulkModalOpen && <CalendarBulkEventModal onClose={() => setIsBulkModalOpen(false)} existingSeriesId={selectedSeriesId} />}
-      {isExportModalOpen && <CalendarExportModal onClose={() => setIsExportModalOpen(false)} />}
+      {/* CHIRURGISCHER EINGRIFF: calendarTitle an ExportModal übergeben */}
+      {isExportModalOpen && <CalendarExportModal onClose={() => setIsExportModalOpen(false)} calendarTitle={calendarTitle} />}
     </div>
   );
 };
-// --- END OF FILE 485 Zeilen ---
+// --- END OF FILE 486 Zeilen ---

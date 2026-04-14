@@ -1,4 +1,4 @@
-// 2026-04-14 14:50 - FIX: Sequenzielle Lade-Reihenfolge gegen Safari Connection-Drops
+// 2026-04-14 16:30 - FIX: Store-Funktion fetchCalendarData korrigiert
 // src/features/Layout/AppLayout.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
@@ -6,7 +6,8 @@ import { Users, Calendar, ClipboardList, CheckSquare, LogOut, LayoutDashboard, B
 import { useClubStore } from '../../store/useClubStore';
 
 export const AppLayout: React.FC = () => {
-  const { logout, user, fetchUsersAndHelpers, fetchGroups, calendarEvents, tasks, fetchEvents, fetchTasks, fetchCalendarEvents } = useClubStore();
+  // CHIRURGISCHER EINGRIFF: fetchCalendarEvents zu fetchCalendarData korrigiert
+  const { logout, user, fetchUsersAndHelpers, fetchGroups, calendarEvents, tasks, fetchEvents, fetchTasks, fetchCalendarData } = useClubStore();
 
   const [isPinned, setIsPinned] = useState(() => {
     const saved = localStorage.getItem('papatodo_sidebar_pinned');
@@ -19,17 +20,17 @@ export const AppLayout: React.FC = () => {
     localStorage.setItem('papatodo_sidebar_pinned', String(isPinned));
   }, [isPinned]);
 
-  // CHIRURGISCHER EINGRIFF: Nacheinander laden (await), um Safari-Verbindungsstau zu verhindern
   useEffect(() => {
     const initApp = async () => {
       if (fetchUsersAndHelpers) await fetchUsersAndHelpers();
       if (fetchGroups) await fetchGroups();
       if (fetchEvents) await fetchEvents();
       if (fetchTasks) await fetchTasks();
-      if (fetchCalendarEvents) await fetchCalendarEvents();
+      // CHIRURGISCHER EINGRIFF: fetchCalendarData
+      if (fetchCalendarData) await fetchCalendarData();
     };
     initApp();
-  }, [fetchUsersAndHelpers, fetchGroups, fetchEvents, fetchTasks, fetchCalendarEvents]);
+  }, [fetchUsersAndHelpers, fetchGroups, fetchEvents, fetchTasks, fetchCalendarData]);
 
   const pendingRemindersCount = useMemo(() => {
     if (!user) return 0;
@@ -218,4 +219,4 @@ export const AppLayout: React.FC = () => {
     </div>
   );
 };
-// --- END OF FILE 209 Zeilen ---
+// --- END OF FILE 206 Zeilen ---

@@ -1,9 +1,13 @@
-// 2026-04-14 16:00 - FEATURE: Klickbare Karten, Countdown & Snooze-Funktion (Erinnern in X Tagen)
+// 2026-04-14 16:45 - FIX: Benutzerdefinierter Erinnerungstext für Sitzungen (CustomText Parameter)
 // src/features/Reminders/RemindersView.tsx
 import React, { useMemo, useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import { MessageCircle, Send, Trash2, CheckCircle2, Clock } from 'lucide-react';
-import { useNavigate } from 'react-router-dom'; // CHIRURGISCHER EINGRIFF: Router Navigation
+import { useNavigate } from 'react-router-dom';
+import { ItemFormModal } from '../Shared/ItemFormModal';
+import { CalendarEventFormModal } from '../Events/CalendarEventFormModal';
+import { CalendarBulkEventModal } from '../Events/CalendarBulkEventModal';
+import type { Task, CalendarEvent } from '../../core/types/models';
 
 const formatReminderText = (type: 'Event' | 'Task' | 'Sitzung', item: any, customText?: string) => {
   const baseText = customText ? customText : 'Hallo, hier ist eine kurze Erinnerung für dich:';
@@ -58,13 +62,17 @@ export const RemindersView: React.FC = () => {
     updateCalendarEvent,
     updateEvent, 
     isEventsLoading,
-    isUsersLoading
+    isUsersLoading,
+    fetchTasks
   } = useClubStore();
 
   const isDataLoading = isEventsLoading || isUsersLoading;
 
-  // CHIRURGISCHER EINGRIFF: State für das anpassbare "X" (Snooze-Tage)
   const [snoozeDays, setSnoozeDays] = useState<Record<string, number>>({});
+  
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editingCalendarEvent, setEditingCalendarEvent] = useState<CalendarEvent | null>(null);
+  const [editingSeriesId, setEditingSeriesId] = useState<string | null>(null);
 
   const pendingReminders = useMemo(() => {
     if (!user) return [];
@@ -75,7 +83,6 @@ export const RemindersView: React.FC = () => {
 
     const items: any[] = [];
 
-    // 1. Kalender-Einträge (Termine / Dienste)
     if (calendarEvents) {
       calendarEvents.forEach(ce => {
         if (ce.reminderSenderUserId === user.id && !ce.reminderSentAt && ce.reminderLeadDays !== undefined) {
@@ -121,7 +128,7 @@ export const RemindersView: React.FC = () => {
               isDirect, 
               phone,
               rawItem: ce,
-              diffDays, // CHIRURGISCHER EINGRIFF: Verbleibende Tage gespeichert
+              diffDays,
               model: 'calendarEvent'
             });
           }
@@ -129,7 +136,6 @@ export const RemindersView: React.FC = () => {
       });
     }
 
-    // 2. Aufgaben (Tasks)
     if (tasks) {
       tasks.forEach(t => {
         if (t.reminderSenderUserId === user.id && !t.reminderSentAt && t.reminderLeadDays !== undefined && t.dueDate) {
@@ -174,7 +180,6 @@ export const RemindersView: React.FC = () => {
       });
     }
 
-    // 3. Sitzungen (Events)
     if (events) {
       events.forEach(ev => {
         if (ev.status !== 'ABGESCHLOSSEN' && ev.reminderSenderUserId === user.id && !ev.reminderSentAt && ev.reminderLeadDays !== undefined && ev.plannedStartTime) {
@@ -199,7 +204,8 @@ export const RemindersView: React.FC = () => {
             const isDirect = targets.length === 1 && !targets[0].isGroup && !!targets[0].phone;
             const phone = isDirect ? targets[0].phone : '';
 
-            const fullText = formatReminderText('Sitzung', ev);
+            // CHIRURGISCHER EINGRIFF: Custom-Text Parameter ev.reminderCustomText hinzugefügt
+            const fullText = formatReminderText('Sitzung', ev, ev.reminderCustomText);
 
             items.push({
               id: ev.id,
@@ -222,7 +228,6 @@ export const RemindersView: React.FC = () => {
     return items.sort((a, b) => a.date - b.date);
   }, [user, calendarEvents, tasks, events, groups, helpers, users]);
 
-  // Hilfsfunktion: WhatsApp öffnen
   const openWhatsApp = (isDirect: boolean, phoneStr: string, text: string) => {
     let url = '';
     if (isDirect && phoneStr) {
@@ -251,20 +256,14 @@ export const RemindersView: React.FC = () => {
     }
   };
 
-  // CHIRURGISCHER EINGRIFF: Snooze-Logik
   const handleSnoozeReminder = async (rem: any) => {
     openWhatsApp(rem.isDirect, rem.phone, rem.text);
-    
-    // Ermitteln des X-Wertes (Standard: Verbleibende Tage / 2, mindestens 1)
     const defaultX = Math.max(1, Math.floor(rem.diffDays / 2));
     const xDays = snoozeDays[rem.id] !== undefined ? snoozeDays[rem.id] : defaultX;
-    
-    // Neue Vorlaufzeit berechnen (so dass es in X Tagen wieder auslöst)
     const newLeadDays = Math.max(0, rem.diffDays - xDays);
 
     try {
       if (rem.model === 'calendarEvent') {
-        // WICHTIG: reminderSentAt muss "gelöscht" werden, damit es in X Tagen wieder greift
         await updateCalendarEvent({ ...rem.rawItem, reminderLeadDays: newLeadDays, reminderSentAt: null });
       } else if (rem.model === 'task') {
         await saveAgendaItem({ ...rem.rawItem, reminderLeadDays: newLeadDays, reminderSentAt: null });
@@ -328,12 +327,14 @@ export const RemindersView: React.FC = () => {
 
             return (
               <div key={rem.id} className="bg-white border border-green-200 rounded-xl shadow-sm overflow-hidden flex flex-col md:flex-row md:items-stretch transition-all hover:border-green-300">
-                {/* CHIRURGISCHER EINGRIFF: Klickbare Detail-Fläche zur Ursprungs-Navigation */}
                 <div 
                   onClick={() => {
                     if (rem.type === 'Sitzung') navigate(`/events/${rem.id}`);
-                    else if (rem.type === 'Aufgabe') navigate(`/todos`);
-                    else navigate(`/calendar`);
+                    else if (rem.type === 'Aufgabe') setEditingTask(rem.rawItem);
+                    else {
+                      if (rem.rawItem.seriesId) setEditingSeriesId(rem.rawItem.seriesId);
+                      else setEditingCalendarEvent(rem.rawItem);
+                    }
                   }}
                   className="p-5 flex-1 border-b md:border-b-0 md:border-r border-gray-100 cursor-pointer hover:bg-green-50/50 transition-colors"
                 >
@@ -348,7 +349,6 @@ export const RemindersView: React.FC = () => {
                       <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2 py-1 rounded border border-gray-200">
                         Fällig: {new Date(rem.date).toLocaleDateString('de-DE')}
                       </span>
-                      {/* CHIRURGISCHER EINGRIFF: Anzeige der verbleibenden Tage */}
                       <span className={`text-xs font-bold mt-1.5 ${rem.diffDays === 0 ? 'text-orange-600' : rem.diffDays < 0 ? 'text-red-600' : 'text-blue-600'}`}>
                         {rem.diffDays === 0 ? 'Heute fällig' : rem.diffDays > 0 ? `Noch ${rem.diffDays} Tage` : `Seit ${Math.abs(rem.diffDays)} Tagen überfällig`}
                       </span>
@@ -369,7 +369,6 @@ export const RemindersView: React.FC = () => {
                   </div>
                 </div>
                 
-                {/* Rechte Seitenleiste für die Aktionen */}
                 <div className="bg-gray-50 p-4 md:w-56 flex flex-col justify-center gap-3 shrink-0">
                   <button
                     onClick={() => handleSendReminder(rem)}
@@ -379,7 +378,6 @@ export const RemindersView: React.FC = () => {
                     Senden & Erledigt
                   </button>
                   
-                  {/* CHIRURGISCHER EINGRIFF: Snooze Funktion (Senden & Erinnern in X Tagen) */}
                   <div className="flex flex-col gap-2 border-t border-gray-200 pt-3">
                     <div className="flex items-center justify-between text-xs text-gray-600 font-medium px-1">
                       <span>Erneut erinnern in:</span>
@@ -418,7 +416,32 @@ export const RemindersView: React.FC = () => {
           })}
         </div>
       )}
+
+      {editingTask && (
+        <ItemFormModal
+          isOpen={true}
+          existingItem={editingTask}
+          onClose={() => setEditingTask(null)}
+          onSave={async (data) => {
+            await saveAgendaItem(data);
+            if (fetchTasks) fetchTasks();
+            setEditingTask(null);
+          }}
+        />
+      )}
+      {editingCalendarEvent && (
+        <CalendarEventFormModal
+          onClose={() => setEditingCalendarEvent(null)}
+          existingEvent={editingCalendarEvent}
+        />
+      )}
+      {editingSeriesId && (
+        <CalendarBulkEventModal
+          onClose={() => setEditingSeriesId(null)}
+          existingSeriesId={editingSeriesId}
+        />
+      )}
     </div>
   );
 };
-// --- END OF FILE 381 Zeilen ---
+// --- END OF FILE 418 Zeilen ---
