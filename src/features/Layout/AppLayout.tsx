@@ -1,12 +1,13 @@
+// 2026-04-14 13:40 - FIX: Globaler Reload-Schutz für alle benötigten Daten (inkl. CalendarEvents)
 // src/features/Layout/AppLayout.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { Users, Calendar, ClipboardList, CheckSquare, LogOut, LayoutDashboard, BookOpen, CalendarDays, Pin, PinOff } from 'lucide-react';
+import { Users, Calendar, ClipboardList, CheckSquare, LogOut, LayoutDashboard, BookOpen, CalendarDays, Pin, PinOff, MessageCircle } from 'lucide-react';
 import { useClubStore } from '../../store/useClubStore';
 
 export const AppLayout: React.FC = () => {
-  // CHIRURGISCHER EINGRIFF: Lade auch calendarEvents, tasks, fetchEvents und fetchTasks
-  const { logout, user, fetchUsersAndHelpers, fetchGroups, calendarEvents, tasks, fetchEvents, fetchTasks } = useClubStore();
+  // CHIRURGISCHER EINGRIFF: fetchCalendarEvents ergänzt
+  const { logout, user, fetchUsersAndHelpers, fetchGroups, calendarEvents, tasks, fetchEvents, fetchTasks, fetchCalendarEvents } = useClubStore();
 
   const [isPinned, setIsPinned] = useState(() => {
     const saved = localStorage.getItem('papatodo_sidebar_pinned');
@@ -19,15 +20,15 @@ export const AppLayout: React.FC = () => {
     localStorage.setItem('papatodo_sidebar_pinned', String(isPinned));
   }, [isPinned]);
 
-  // CHIRURGISCHER EINGRIFF: Hole events und tasks direkt beim Start, damit der Wecker global rechnet
+  // CHIRURGISCHER EINGRIFF: Alle Fetch-Calls bei App-Start aufrufen (falls vorhanden)
   useEffect(() => {
-    fetchUsersAndHelpers();
-    fetchGroups();
-    fetchEvents();
-    fetchTasks();
-  }, [fetchUsersAndHelpers, fetchGroups, fetchEvents, fetchTasks]);
+    if (fetchUsersAndHelpers) fetchUsersAndHelpers();
+    if (fetchGroups) fetchGroups();
+    if (fetchEvents) fetchEvents();
+    if (fetchTasks) fetchTasks();
+    if (fetchCalendarEvents) fetchCalendarEvents();
+  }, [fetchUsersAndHelpers, fetchGroups, fetchEvents, fetchTasks, fetchCalendarEvents]);
 
-  // CHIRURGISCHER EINGRIFF: Globale Berechnung der fälligen WhatsApp-Erinnerungen
   const pendingRemindersCount = useMemo(() => {
     if (!user) return 0;
     
@@ -61,11 +62,9 @@ export const AppLayout: React.FC = () => {
     return count;
   }, [user, calendarEvents, tasks]);
 
-  // CHIRURGISCHER EINGRIFF: App-Badge (Homescreen) aktualisieren
   useEffect(() => {
     if (pendingRemindersCount > 0) {
       if ('setAppBadge' in navigator) {
-        // Ignoriere Fehler, falls die Plattform es nicht unterstützt (z.B. Desktop-Safari)
         navigator.setAppBadge(pendingRemindersCount).catch(() => {});
       }
     } else {
@@ -82,6 +81,7 @@ export const AppLayout: React.FC = () => {
     { to: '/events', icon: Calendar, label: 'Projekte & Sitzungen' },
     { to: '/templates', icon: ClipboardList, label: 'Vorlagen & Routinen' },
     { to: '/todos', icon: CheckSquare, label: 'Meine ToDos' },
+    { to: '/reminders', icon: MessageCircle, label: 'Erinnerungen' },
     { to: '/help', icon: BookOpen, label: 'Handbuch & Hilfe' },
   ];
 
@@ -102,8 +102,8 @@ export const AppLayout: React.FC = () => {
     const touchEnd = e.changedTouches[0].clientX;
     const diff = sidebarTouchStart - touchEnd;
     
-    if (diff > 50) setIsPinned(false); // Wisch nach links: Zuklappen
-    if (diff < -50) setIsPinned(true); // Wisch nach rechts: Aufklappen
+    if (diff > 50) setIsPinned(false); 
+    if (diff < -50) setIsPinned(true); 
     
     setSidebarTouchStart(null);
   };
@@ -148,10 +148,9 @@ export const AppLayout: React.FC = () => {
                 }`
               }
             >
-              {/* CHIRURGISCHER EINGRIFF: Roter Punkt am Dashboard-Icon in der Sidebar */}
               <div className="relative shrink-0 flex items-center justify-center">
                 <item.icon className="w-5 h-5" />
-                {item.to === '/' && pendingRemindersCount > 0 && (
+                {item.to === '/reminders' && pendingRemindersCount > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold px-1 min-w-[16px] h-4 rounded-full flex items-center justify-center border border-white">
                     {pendingRemindersCount}
                   </span>
@@ -182,13 +181,13 @@ export const AppLayout: React.FC = () => {
         <Outlet />
       </main>
 
-      <nav className="lg:hidden shrink-0 w-full bg-white border-t border-gray-200 flex justify-around items-center px-1 py-2 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-50 print:!hidden">
+      <nav className="lg:hidden shrink-0 w-full bg-white border-t border-gray-200 flex justify-around items-center px-1 py-2 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-50 print:!hidden overflow-x-auto">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             className={({ isActive }) =>
-              `flex items-center justify-center p-2.5 rounded-xl transition-colors ${
+              `flex items-center justify-center p-2.5 rounded-xl transition-colors shrink-0 ${
                 isActive ? 'text-blue-600 bg-blue-50' : 'text-gray-500 hover:bg-gray-50'
               }`
             }
@@ -197,8 +196,7 @@ export const AppLayout: React.FC = () => {
             {({ isActive }) => (
               <div className="relative flex items-center justify-center">
                 <item.icon className="w-6 h-6" strokeWidth={isActive ? 2.5 : 2} />
-                {/* CHIRURGISCHER EINGRIFF: Roter Punkt am Dashboard-Icon in der mobilen Ansicht */}
-                {item.to === '/' && pendingRemindersCount > 0 && (
+                {item.to === '/reminders' && pendingRemindersCount > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold px-1 min-w-[16px] h-4 rounded-full flex items-center justify-center border-2 border-white">
                     {pendingRemindersCount}
                   </span>
@@ -209,7 +207,7 @@ export const AppLayout: React.FC = () => {
         ))}
         <button
           onClick={() => logout()}
-          className="flex items-center justify-center p-2.5 text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+          className="flex items-center justify-center p-2.5 text-red-500 hover:bg-red-50 rounded-xl transition-colors shrink-0"
           title="Abmelden"
         >
           <LogOut className="w-6 h-6" strokeWidth={2} />
@@ -218,4 +216,4 @@ export const AppLayout: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 202
+// Exakte Zeilenzahl: 206

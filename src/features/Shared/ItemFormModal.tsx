@@ -1,3 +1,4 @@
+// 2026-04-14 13:55 - FEATURE: Getrennte Zuweisungs-Felder (Intern/Extern) mit sofortiger Komplettliste
 // src/features/Shared/ItemFormModal.tsx
 import React, { useState, useMemo } from 'react';
 import { useClubStore } from '../../store/useClubStore';
@@ -15,7 +16,6 @@ interface Props {
 }
 
 export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existingItem, isFixedType, isReadOnly = false, onDurationPreview }) => {
-  // CHIRURGISCHER EINGRIFF: helpers aus dem Store laden
   const { users, groups, helpers = [], events, saveAgendaItem } = useClubStore();
   
   const parentEvent = existingItem?.eventId ? events.find(e => e.id === existingItem.eventId) : null;
@@ -35,13 +35,11 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
   
   const [assigneeUserIds, setAssigneeUserIds] = useState<string[]>(existingItem?.assigneeUserIds || []);
   const [assigneeGroupIds, setAssigneeGroupIds] = useState<string[]>(existingItem?.assigneeGroupIds || []);
-  // CHIRURGISCHER EINGRIFF: Helfer State
   const [assigneeHelperIds, setAssigneeHelperIds] = useState<string[]>(existingItem?.assigneeHelperIds || []);
 
   const [status, setStatus] = useState<ItemStatus>(existingItem?.status || 'OFFEN');
   const [progress, setProgress] = useState<number>(existingItem?.progress || 0);
   
-  // CHIRURGISCHER EINGRIFF: WhatsApp States (Nur für Aufgaben)
   const [reminderSenderUserId, setReminderSenderUserId] = useState(existingItem?.reminderSenderUserId || '');
   const [reminderLeadDays, setReminderLeadDays] = useState(existingItem?.reminderLeadDays?.toString() || '7');
 
@@ -65,29 +63,39 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
 
   const [showAdvanced, setShowAdvanced] = useState(false);
   
-  // CHIRURGISCHER EINGRIFF: Search States für das Smart-Dropdown
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  // CHIRURGISCHER EINGRIFF: Getrennte Such-States für Intern und Extern
+  const [internalSearchTerm, setInternalSearchTerm] = useState('');
+  const [isInternalFocused, setIsInternalFocused] = useState(false);
+
+  const [externalSearchTerm, setExternalSearchTerm] = useState('');
+  const [isExternalFocused, setIsExternalFocused] = useState(false);
 
   const todayStr = new Date().toISOString().substring(0, 10);
 
-  // CHIRURGISCHER EINGRIFF: Intelligente Such-Logik
-  const filteredAssignees = useMemo(() => {
-    if (!searchTerm.trim()) return [];
-    const term = searchTerm.toLowerCase();
-    const res: { id: string; type: 'group'|'user'|'helper'; label: string; sub: string }[] = [];
+  // CHIRURGISCHER EINGRIFF: Gefilterte Liste für App-Nutzer und Rollen (Intern)
+  const filteredInternal = useMemo(() => {
+    const term = internalSearchTerm.toLowerCase();
+    const res: { id: string; type: 'group'|'user'; label: string; sub: string }[] = [];
     
     groups.forEach(g => {
       if (!assigneeGroupIds.includes(g.id) && g.name.toLowerCase().includes(term)) {
-        res.push({ id: g.id, type: 'group', label: `🏢 ${g.name}`, sub: 'Vereinsgruppe' });
+        res.push({ id: g.id, type: 'group', label: `🏢 ${g.name}`, sub: 'Rolle / Amt' });
       }
     });
     
     users.forEach(u => {
       if (!assigneeUserIds.includes(u.id) && u.name.toLowerCase().includes(term)) {
-        res.push({ id: u.id, type: 'user', label: `👤 ${u.name}`, sub: `App-Nutzer (${u.rolle})` });
+        res.push({ id: u.id, type: 'user', label: `👤 ${u.name}`, sub: `Nutzer (${u.rolle})` });
       }
     });
+    
+    return res;
+  }, [internalSearchTerm, groups, users, assigneeGroupIds, assigneeUserIds]);
+
+  // CHIRURGISCHER EINGRIFF: Gefilterte Liste für Helfer (Extern)
+  const filteredExternal = useMemo(() => {
+    const term = externalSearchTerm.toLowerCase();
+    const res: { id: string; type: 'helper'; label: string; sub: string }[] = [];
     
     helpers.forEach(h => {
       const matchName = h.name.toLowerCase().includes(term);
@@ -98,7 +106,7 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
     });
     
     return res;
-  }, [searchTerm, groups, users, helpers, assigneeGroupIds, assigneeUserIds, assigneeHelperIds]);
+  }, [externalSearchTerm, helpers, assigneeHelperIds]);
 
   if (!isOpen) return null;
 
@@ -156,7 +164,6 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
         payload.progress = progress;
         if (dueDateStr && !isDueNextMeeting) payload.dueDate = new Date(dueDateStr).getTime();
         
-        // CHIRURGISCHER EINGRIFF: WhatsApp Felder mitsenden
         payload.reminderSenderUserId = reminderSenderUserId || undefined;
         payload.reminderLeadDays = reminderSenderUserId ? parseInt(reminderLeadDays, 10) : undefined;
         payload.reminderSentAt = existingItem?.reminderSentAt;
@@ -239,9 +246,9 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
             </div>
           </div>
 
-          {/* CHIRURGISCHER EINGRIFF: Smart Dropdown für Zuweisungen */}
+          {/* CHIRURGISCHER EINGRIFF: Box 1 (App-Nutzer & Rollen) */}
           <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100">
-            <label className="block text-xs font-bold text-blue-800 mb-2">Verantwortliche (Gruppen, Mitglieder, Helfer)</label>
+            <label className="block text-xs font-bold text-blue-800 mb-2">Zuständige App-Nutzer & Rollen</label>
             
             <div className="flex flex-wrap gap-2 mb-3">
               {assigneeGroupIds.map(id => {
@@ -262,16 +269,7 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
                   </span>
                 ) : null;
               })}
-              {assigneeHelperIds.map(id => {
-                const h = helpers.find(x => x.id === id);
-                return h ? (
-                  <span key={`h-${id}`} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-teal-600 text-white">
-                    🤝 {h.name}
-                    {!isReadOnly && <button onClick={() => setAssigneeHelperIds(prev => prev.filter(x => x !== id))} className="ml-1.5 hover:text-teal-200"><X className="w-3 h-3"/></button>}
-                  </span>
-                ) : null;
-              })}
-              {assigneeGroupIds.length === 0 && assigneeUserIds.length === 0 && assigneeHelperIds.length === 0 && (
+              {assigneeGroupIds.length === 0 && assigneeUserIds.length === 0 && (
                 <span className="text-xs text-blue-600/60 italic py-1">Niemand zugewiesen</span>
               )}
             </div>
@@ -282,26 +280,26 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
                   <Search className="w-4 h-4 text-blue-400" />
                   <input 
                     type="text" 
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    onFocus={() => setIsSearchFocused(true)}
-                    onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                    value={internalSearchTerm}
+                    onChange={e => setInternalSearchTerm(e.target.value)}
+                    onFocus={() => setIsInternalFocused(true)}
+                    onBlur={() => setTimeout(() => setIsInternalFocused(false), 200)}
                     className="w-full p-2 text-sm outline-none bg-transparent"
-                    placeholder="Tippe zum Suchen von Gruppen, Namen oder Alias..."
+                    placeholder="Rolle oder Nutzer auswählen..."
                   />
+                  <ChevronDown className="w-4 h-4 text-blue-400 cursor-pointer" onClick={() => setIsInternalFocused(!isInternalFocused)} />
                 </div>
                 
-                {isSearchFocused && searchTerm.trim() && (
+                {isInternalFocused && (
                   <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
-                    {filteredAssignees.length > 0 ? (
-                      filteredAssignees.map(a => (
+                    {filteredInternal.length > 0 ? (
+                      filteredInternal.map(a => (
                         <button
                           key={`${a.type}-${a.id}`}
                           onClick={() => {
                             if (a.type === 'group') setAssigneeGroupIds([...assigneeGroupIds, a.id]);
                             if (a.type === 'user') setAssigneeUserIds([...assigneeUserIds, a.id]);
-                            if (a.type === 'helper') setAssigneeHelperIds([...assigneeHelperIds, a.id]);
-                            setSearchTerm('');
+                            setInternalSearchTerm('');
                           }}
                           className="w-full text-left px-4 py-2 hover:bg-blue-50 border-b border-gray-50 last:border-0 flex items-center justify-between transition-colors"
                         >
@@ -310,7 +308,67 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
                         </button>
                       ))
                     ) : (
-                       <div className="px-4 py-3 text-sm text-gray-500 italic">Keine Treffer gefunden.</div>
+                       <div className="px-4 py-3 text-sm text-gray-500 italic">Alle zugewiesen oder keine Treffer.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* CHIRURGISCHER EINGRIFF: Box 2 (Externe Helfer) */}
+          <div className="bg-teal-50/50 p-4 rounded-lg border border-teal-100">
+            <label className="block text-xs font-bold text-teal-800 mb-2">Zuständige Helfer (Extern)</label>
+            
+            <div className="flex flex-wrap gap-2 mb-3">
+              {assigneeHelperIds.map(id => {
+                const h = helpers.find(x => x.id === id);
+                return h ? (
+                  <span key={`h-${id}`} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-teal-600 text-white">
+                    🤝 {h.name}
+                    {!isReadOnly && <button onClick={() => setAssigneeHelperIds(prev => prev.filter(x => x !== id))} className="ml-1.5 hover:text-teal-200"><X className="w-3 h-3"/></button>}
+                  </span>
+                ) : null;
+              })}
+              {assigneeHelperIds.length === 0 && (
+                <span className="text-xs text-teal-600/60 italic py-1">Niemand zugewiesen</span>
+              )}
+            </div>
+
+            {!isReadOnly && (
+              <div className="relative">
+                <div className="flex items-center border border-teal-300 rounded bg-white px-2 focus-within:ring-2 focus-within:ring-teal-500 focus-within:border-teal-500 transition-shadow">
+                  <Search className="w-4 h-4 text-teal-400" />
+                  <input 
+                    type="text" 
+                    value={externalSearchTerm}
+                    onChange={e => setExternalSearchTerm(e.target.value)}
+                    onFocus={() => setIsExternalFocused(true)}
+                    onBlur={() => setTimeout(() => setIsExternalFocused(false), 200)}
+                    className="w-full p-2 text-sm outline-none bg-transparent"
+                    placeholder="Helfer auswählen..."
+                  />
+                  <ChevronDown className="w-4 h-4 text-teal-400 cursor-pointer" onClick={() => setIsExternalFocused(!isExternalFocused)} />
+                </div>
+                
+                {isExternalFocused && (
+                  <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                    {filteredExternal.length > 0 ? (
+                      filteredExternal.map(a => (
+                        <button
+                          key={`${a.type}-${a.id}`}
+                          onClick={() => {
+                            if (a.type === 'helper') setAssigneeHelperIds([...assigneeHelperIds, a.id]);
+                            setExternalSearchTerm('');
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-teal-50 border-b border-gray-50 last:border-0 flex items-center justify-between transition-colors"
+                        >
+                          <span className="text-sm font-bold text-gray-800">{a.label}</span>
+                          <span className="text-xs text-gray-400">{a.sub}</span>
+                        </button>
+                      ))
+                    ) : (
+                       <div className="px-4 py-3 text-sm text-gray-500 italic">Alle zugewiesen oder keine Treffer.</div>
                     )}
                   </div>
                 )}
@@ -382,7 +440,6 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
                  </div>
               </div>
 
-              {/* CHIRURGISCHER EINGRIFF: WhatsApp Erinnerung für Aufgaben */}
               <div className="mt-4 bg-green-50/50 border border-green-200 rounded-lg p-4 space-y-4">
                 <div className="border-b border-green-200 pb-2 mb-2">
                     <h3 className="text-sm font-bold text-green-900 flex items-center">
@@ -507,4 +564,4 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
     </div>
   );
 };
-// Exakte Zeilenzahl: 387
+// --- END OF FILE 423 Zeilen ---

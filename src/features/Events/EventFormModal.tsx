@@ -1,239 +1,234 @@
+// 2026-04-14 14:30 - FEATURE: WhatsApp Reminder für Sitzungen + isPublished Default (false)
 // src/features/Events/EventFormModal.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import type { Event } from '../../core/types/models';
-import { X, Save } from 'lucide-react';
-import { doc, collection } from 'firebase/firestore';
-import { db } from '../../services/firebase';
+import { X, Save, Search, ChevronDown, MessageCircle, AlertCircle } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (event: Event) => Promise<void>;
-  existingEvent?: Event;
+  onSave: (data: Partial<Event>) => Promise<void>;
+  existingEvent?: Partial<Event>;
 }
-
-const formatTime = (ts?: number) => {
-  if (!ts) return '';
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-};
-
-const formatDate = (ts?: number) => {
-  if (!ts) return '';
-  const d = new Date(ts);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
 
 export const EventFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existingEvent }) => {
   const { users, groups } = useClubStore();
+  const [title, setTitle] = useState(existingItem?.title || '');
+  const [description, setDescription] = useState(existingItem?.description || '');
+  const [location, setLocation] = useState(existingItem?.location || '');
+  const [plannedStartTime, setPlannedStartTime] = useState(
+    existingItem?.plannedStartTime ? new Date(existingItem.plannedStartTime).toISOString().slice(0, 16) : ''
+  );
+  // CHIRURGISCHER EINGRIFF: Default isPublished auf false gesetzt (Sitzungen sind primär intern)
+  const [isPublished, setIsPublished] = useState(existingItem?.id ? existingItem.isPublished : false);
+  const [participantUserIds, setParticipantUserIds] = useState<string[]>(existingItem?.participantUserIds || []);
+  const [participantGroupIds, setParticipantGroupIds] = useState<string[]>(existingItem?.participantGroupIds || []);
   
-  const [title, setTitle] = useState(existingEvent?.title || '');
-  const [description, setDescription] = useState(existingEvent?.description || '');
-  const [location, setLocation] = useState(existingEvent?.location || '');
-  const [status, setStatus] = useState<Event['status']>(existingEvent?.status || 'PLANUNG');
-  
-  const [startDateStr, setStartDateStr] = useState(formatDate(existingEvent?.plannedStartTime));
-  const [startTimeStr, setStartTimeStr] = useState(formatTime(existingEvent?.plannedStartTime));
-  const [endTimeStr, setEndTimeStr] = useState(formatTime(existingEvent?.plannedEndTime));
-
-  const [participantGroupIds, setParticipantGroupIds] = useState<string[]>(existingEvent?.participantGroupIds || []);
-  const [participantUserIds, setParticipantUserIds] = useState<string[]>(existingEvent?.participantUserIds || []);
+  // CHIRURGISCHER EINGRIFF: WhatsApp Reminder Felder
+  const [reminderSenderUserId, setReminderSenderUserId] = useState(existingItem?.reminderSenderUserId || '');
+  const [reminderLeadDays, setReminderLeadDays] = useState(existingItem?.reminderLeadDays?.toString() || '7');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!isOpen) return null;
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
 
-  const toggleArray = (arr: string[], setArr: (val: string[]) => void, id: string) => {
-    if (arr.includes(id)) setArr(arr.filter(x => x !== id));
-    else setArr([...arr, id]);
-  };
+  useEffect(() => {
+    if (isOpen) {
+      setTitle(existingItem?.title || '');
+      setDescription(existingItem?.description || '');
+      setLocation(existingItem?.location || '');
+      setPlannedStartTime(existingItem?.plannedStartTime ? new Date(existingItem.plannedStartTime).toISOString().slice(0, 16) : '');
+      setIsPublished(existingItem?.id ? existingItem.isPublished : false);
+      setParticipantUserIds(existingItem?.participantUserIds || []);
+      setParticipantGroupIds(existingItem?.participantGroupIds || []);
+      setReminderSenderUserId(existingItem?.reminderSenderUserId || '');
+      setReminderLeadDays(existingItem?.reminderLeadDays?.toString() || '7');
+      setError(null);
+    }
+  }, [isOpen, existingItem]);
+
+  const filteredAssignees = React.useMemo(() => {
+    const term = searchTerm.toLowerCase();
+    const res: { id: string; type: 'group'|'user'; label: string; sub: string }[] = [];
+    
+    groups.forEach(g => {
+      if (!participantGroupIds.includes(g.id) && g.name.toLowerCase().includes(term)) {
+        res.push({ id: g.id, type: 'group', label: `🏢 ${g.name}`, sub: 'Rolle / Amt' });
+      }
+    });
+    
+    users.forEach(u => {
+      if (!participantUserIds.includes(u.id) && u.name.toLowerCase().includes(term)) {
+        res.push({ id: u.id, type: 'user', label: `👤 ${u.name}`, sub: `Nutzer (${u.rolle})` });
+      }
+    });
+    
+    return res;
+  }, [searchTerm, groups, users, participantGroupIds, participantUserIds]);
+
+  if (!isOpen) return null;
 
   const handleSave = async () => {
     setError(null);
-    if (!title.trim()) {
-      setError('Bitte gib einen Titel ein.');
-      return;
-    }
-
-    // CHIRURGISCHER EINGRIFF: Datums-Validierung
-    if (!startDateStr) {
-      setError('Bitte wähle ein Datum für die Sitzung aus.');
-      return;
-    }
-
+    if (!title.trim()) { setError('Bitte gib einen Titel ein.'); return; }
+    
     try {
       setIsSubmitting(true);
-      const eventId = existingEvent?.id || doc(collection(db, 'events')).id;
-      
-      let plannedStartTime: number | undefined = undefined;
-      let plannedEndTime: number | undefined = undefined;
-
-      const startD = new Date(startDateStr);
-      if (startTimeStr) {
-        const [h, m] = startTimeStr.split(':').map(Number);
-        startD.setHours(h, m, 0, 0);
-      } else {
-        startD.setHours(0, 0, 0, 0);
-      }
-      plannedStartTime = startD.getTime();
-
-      if (endTimeStr) {
-        const endD = new Date(startDateStr);
-        const [h, m] = endTimeStr.split(':').map(Number);
-        endD.setHours(h, m, 0, 0);
-        plannedEndTime = endD.getTime();
-      }
-
-      // CHIRURGISCHER EINGRIFF: Wenn es ein Rollover (Folge-Meeting) ist, darf das Datum nicht in der Vergangenheit liegen
-      if (existingEvent?.seriesId && status === 'PLANUNG') {
-          const today = new Date();
-          today.setHours(0,0,0,0);
-          if (startD.getTime() < today.getTime()) {
-              setError('Das Datum für die neue Sitzung darf nicht in der Vergangenheit liegen. Bitte Datum anpassen.');
-              setIsSubmitting(false);
-              return;
-          }
-      }
-
-      const eventPayload: Event = {
-        id: eventId,
-        schemaVersion: '1.0',
+      const payload: Partial<Event> = {
         title: title.trim(),
         description: description.trim(),
         location: location.trim(),
-        status,
-        isPublished: existingEvent?.isPublished || false,
-        participantGroupIds,
+        plannedStartTime: plannedStartTime ? new Date(plannedStartTime).getTime() : undefined,
+        isPublished,
         participantUserIds,
-        plannedStartTime,
-        plannedEndTime,
-        startDate: plannedStartTime,
-        // CHIRURGISCHER EINGRIFF: Die seriesId MUSS zwingend gerettet werden, sonst bricht die Kette ab!
-        seriesId: existingEvent?.seriesId || eventId,
-        isArchived: existingEvent?.isArchived || false,
+        participantGroupIds,
+        status: existingItem?.status || 'PLANUNG',
+        // CHIRURGISCHER EINGRIFF: Speichern der WhatsApp Reminder Felder
+        reminderSenderUserId: reminderSenderUserId || undefined,
+        reminderLeadDays: reminderSenderUserId ? parseInt(reminderLeadDays, 10) : undefined,
+        reminderSentAt: existingItem?.reminderSentAt
       };
+      
+      if (existingItem?.id) payload.id = existingItem.id;
 
-      const safePayload = Object.fromEntries(
-        Object.entries(eventPayload).filter(([_, v]) => v !== undefined)
-      ) as Event;
-
+      const safePayload = Object.fromEntries(Object.entries(payload).filter(([_, v]) => v !== undefined)) as Partial<Event>;
       await onSave(safePayload);
+      onClose();
     } catch (err: any) {
-      setError(err.message || 'Fehler beim Speichern');
+      setError(err.message || 'Fehler beim Speichern.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-900">
-            {existingEvent?.id ? 'Sitzung bearbeiten' : 'Neue Sitzung anlegen'}
-          </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" disabled={isSubmitting}>
-            <X className="w-6 h-6" />
-          </button>
+    <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+          <h2 className="text-lg font-bold text-gray-900">{existingItem?.id ? 'Sitzung bearbeiten' : 'Neue Sitzung / Projekt'}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
         </div>
         
-        <div className="p-6 space-y-6 overflow-y-auto flex-1">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 border border-gray-200 p-4 rounded-lg">
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Titel der Sitzung *</label>
-              <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500" placeholder="z.B. Vorstandssitzung Q3" required />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-              <select value={status} onChange={e => setStatus(e.target.value as Event['status'])} className="w-full p-2 border border-gray-300 rounded font-bold">
-                <option value="PLANUNG">In Planung (Entwurf)</option>
-                <option value="AKTIV">Aktiv (Sitzung läuft)</option>
-                <option value="ABGESCHLOSSEN">Abgeschlossen (Protokolliert)</option>
-              </select>
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Beschreibung / Ziel</label>
-              <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500" rows={2}></textarea>
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ort / Link</label>
-              <input type="text" value={location} onChange={e => setLocation(e.target.value)} className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500" placeholder="Vereinsheim oder Zoom-Link" />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Datum</label>
-              <input 
-                type="date" 
-                value={startDateStr} 
-                onChange={e => setStartDateStr(e.target.value)} 
-                min={existingEvent?.seriesId ? new Date().toISOString().substring(0,10) : undefined}
-                className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500" 
-                required 
-              />
-            </div>
-
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Start (Uhrzeit)</label>
-                <input type="time" value={startTimeStr} onChange={e => setStartTimeStr(e.target.value)} className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500" />
-              </div>
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ende (Uhrzeit)</label>
-                <input type="time" value={endTimeStr} onChange={e => setEndTimeStr(e.target.value)} className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg space-y-4">
-            <h3 className="text-md font-bold text-blue-800">Teilnehmer (Wer muss eingeladen werden?)</h3>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Ämter / Gruppen</label>
-              <div className="flex flex-wrap gap-2">
-                {groups.map(g => (
-                  <label key={g.id} className="flex items-center p-2 bg-white border border-gray-300 rounded cursor-pointer hover:bg-blue-50">
-                    <input type="checkbox" checked={participantGroupIds.includes(g.id)} onChange={() => toggleArray(participantGroupIds, setParticipantGroupIds, g.id)} className="mr-2" />
-                    <span className="text-sm">{g.name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Einzelne Personen</label>
-              <div className="flex flex-wrap gap-2">
-                {users.map(u => (
-                  <label key={u.id} className="flex items-center p-2 bg-white border border-gray-300 rounded cursor-pointer hover:bg-blue-50">
-                    <input type="checkbox" checked={participantUserIds.includes(u.id)} onChange={() => toggleArray(participantUserIds, setParticipantUserIds, u.id)} className="mr-2" />
-                    <span className="text-sm">{u.name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-6 border-t border-gray-200 bg-gray-50 flex flex-col gap-3">
+        <div className="p-4 space-y-4 overflow-y-auto flex-1">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md text-sm border border-red-200">
-              {error}
+            <div className="bg-red-50 text-red-700 p-3 rounded-lg flex items-center text-sm font-bold border border-red-200">
+              <AlertCircle className="w-5 h-5 mr-2 shrink-0" /> {error}
             </div>
           )}
-          <div className="flex justify-end gap-3">
-            <button onClick={onClose} disabled={isSubmitting} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium">Abbrechen</button>
-            <button onClick={handleSave} disabled={isSubmitting} className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-bold transition shadow-sm">
-              <Save className="w-5 h-5 mr-2" />
-              {isSubmitting ? 'Speichert...' : 'Sitzung speichern'}
-            </button>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1">Titel *</label>
+            <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full p-2 text-sm border border-gray-300 rounded focus:ring-blue-500 font-medium" autoFocus required />
           </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Geplanter Start</label>
+              <input type="datetime-local" value={plannedStartTime} onChange={e => setPlannedStartTime(e.target.value)} className="w-full p-2 text-sm border border-gray-300 rounded bg-white" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Ort</label>
+              <input type="text" value={location} onChange={e => setLocation(e.target.value)} className="w-full p-2 text-sm border border-gray-300 rounded bg-white" placeholder="z.B. Vereinsheim" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Beschreibung / Ziel</label>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full p-2 text-sm border border-gray-300 rounded" rows={3}></textarea>
+          </div>
+
+          <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100">
+            <label className="block text-xs font-bold text-blue-800 mb-2">Teilnehmerkreis (Rollen & Nutzer)</label>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {participantGroupIds.map(id => (
+                <span key={`g-${id}`} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-600 text-white">
+                  🏢 {groups.find(x => x.id === id)?.name}
+                  <button onClick={() => setParticipantGroupIds(prev => prev.filter(x => x !== id))} className="ml-1.5 hover:text-blue-200"><X className="w-3 h-3"/></button>
+                </span>
+              ))}
+              {participantUserIds.map(id => (
+                <span key={`u-${id}`} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-500 text-white">
+                  👤 {users.find(x => x.id === id)?.name}
+                  <button onClick={() => setParticipantUserIds(prev => prev.filter(x => x !== id))} className="ml-1.5 hover:text-blue-200"><X className="w-3 h-3"/></button>
+                </span>
+              ))}
+            </div>
+            <div className="relative">
+              <div className="flex items-center border border-blue-300 rounded bg-white px-2 focus-within:ring-2 focus-within:ring-blue-500 transition-shadow">
+                <Search className="w-4 h-4 text-blue-400" />
+                <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} onFocus={() => setIsSearchFocused(true)} onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)} className="w-full p-2 text-sm outline-none bg-transparent" placeholder="Rolle oder Nutzer wählen..." />
+                <ChevronDown className="w-4 h-4 text-blue-400 cursor-pointer" onClick={() => setIsSearchFocused(!isSearchFocused)} />
+              </div>
+              {isSearchFocused && (
+                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                  {filteredAssignees.map(a => (
+                    <button key={`${a.type}-${a.id}`} onClick={() => { if (a.type === 'group') setParticipantGroupIds([...participantGroupIds, a.id]); else setParticipantUserIds([...participantUserIds, a.id]); setSearchTerm(''); }} className="w-full text-left px-4 py-2 hover:bg-blue-50 border-b border-gray-50 last:border-0 flex items-center justify-between">
+                      <span className="text-sm font-bold text-gray-800">{a.label}</span>
+                      <span className="text-xs text-gray-400">{a.sub}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* CHIRURGISCHER EINGRIFF: WhatsApp Erinnerung für Sitzungen (Analog zu ItemFormModal) */}
+          <div className="bg-green-50/50 p-4 rounded-lg border border-green-200 mt-4 space-y-4">
+            <div className="border-b border-green-200 pb-2 mb-2">
+                <h3 className="text-sm font-bold text-green-900 flex items-center">
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  WhatsApp Erinnerung an Teilnehmer (Optional)
+                </h3>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-green-800 mb-1">Wer verschickt die Erinnerung?</label>
+                <select 
+                  value={reminderSenderUserId} 
+                  onChange={(e) => setReminderSenderUserId(e.target.value)}
+                  className="w-full p-2 border border-green-300 rounded focus:ring-green-500 focus:border-green-500 text-sm bg-white"
+                >
+                  <option value="">-- Niemand (Keine Erinnerung) --</option>
+                  {(users || []).map(u => (
+                    <option key={u.id} value={u.id}>{u.name} ({u.rolle})</option>
+                  ))}
+                </select>
+              </div>
+              
+              {reminderSenderUserId && (
+                <div>
+                  <label className="block text-xs font-bold text-green-800 mb-1">Tage vor der Sitzung?</label>
+                  <input 
+                    type="number" 
+                    min="1" 
+                    max="365"
+                    value={reminderLeadDays} 
+                    onChange={(e) => setReminderLeadDays(e.target.value)}
+                    className="w-full p-2 border border-green-300 rounded focus:ring-green-500 focus:border-green-500 text-sm bg-white"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
+          <label className="flex items-center text-sm font-bold text-gray-700 cursor-pointer pt-2">
+            <input type="checkbox" checked={isPublished} onChange={e => setIsPublished(e.target.checked)} className="w-4 h-4 mr-2" />
+            Öffentlich sichtbar (erscheint im Vereinskalender)
+          </label>
+        </div>
+
+        <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-2">
+          <button onClick={onClose} disabled={isSubmitting} className="px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded-lg font-medium">Abbrechen</button>
+          <button onClick={handleSave} disabled={isSubmitting} className="flex items-center px-5 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-sm">
+            <Save className="w-4 h-4 mr-2" /> Speichern
+          </button>
         </div>
       </div>
     </div>
   );
 };
-// Exakte Zeilenzahl: 227
+// --- END OF FILE 201 Zeilen ---

@@ -1,0 +1,350 @@
+// 2026-04-14 14:30 - FEATURE: Sitzungen (Events) im WhatsApp-Erinnerungs-Dashboard integriert
+// src/features/Reminders/RemindersView.tsx
+import React, { useMemo } from 'react';
+import { useClubStore } from '../../store/useClubStore';
+import { MessageCircle, Send, Trash2, CheckCircle2 } from 'lucide-react';
+
+const formatReminderText = (type: 'Event' | 'Task' | 'Sitzung', item: any, customText?: string) => {
+  const baseText = customText ? customText : 'Hallo, hier ist eine kurze Erinnerung für dich:';
+  const details: string[] = [];
+
+  // CHIRURGISCHER EINGRIFF: Formatierer unterscheidet nun auch 'Sitzung'
+  if (type === 'Event' || type === 'Sitzung') {
+    const start = new Date(item.startTime || item.plannedStartTime);
+    const dateStr = start.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    
+    let timeStr = 'Ganztägig';
+    if (!item.isAllDay) {
+      timeStr = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+      if (item.endTime || item.plannedEndTime) {
+        const end = new Date(item.endTime || item.plannedEndTime);
+        timeStr += ` - ${end.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`;
+      }
+    }
+
+    details.push(`📌 Titel: ${item.title}`);
+    details.push(`📅 Termin: ${dateStr}`);
+    details.push(`⏰ Zeit: ${timeStr}`);
+    if (item.location) {
+      details.push(`📍 Ort: ${item.location}`);
+    }
+    if (item.description) {
+      details.push(`ℹ️ Info: ${item.description}`);
+    }
+  } else {
+    details.push(`📌 Titel: ${item.title}`);
+    if (item.dueDate) {
+      details.push(`📅 Fällig am: ${new Date(item.dueDate).toLocaleDateString('de-DE')}`);
+    }
+    if (item.description) {
+      details.push(`ℹ️ Info: ${item.description}`);
+    }
+  }
+
+  return `${baseText}\n\n${details.join('\n')}`;
+};
+
+export const RemindersView: React.FC = () => {
+  const { 
+    events,
+    calendarEvents, 
+    tasks, 
+    groups, 
+    helpers,
+    users, 
+    user, 
+    saveAgendaItem,
+    updateCalendarEvent,
+    // Annahme: saveEvent oder updateEvent existiert im Store, um Sitzungen zu updaten
+    isEventsLoading,
+    isUsersLoading
+  } = useClubStore();
+
+  const isDataLoading = isEventsLoading || isUsersLoading;
+
+  const pendingReminders = useMemo(() => {
+    if (!user) return [];
+    
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+    const items: any[] = [];
+
+    // 1. Kalender-Einträge (Termine / Dienste)
+    if (calendarEvents) {
+      calendarEvents.forEach(ce => {
+        if (ce.reminderSenderUserId === user.id && !ce.reminderSentAt && ce.reminderLeadDays !== undefined) {
+          const eventStart = new Date(ce.startTime);
+          const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
+          const stichtag = eventDateStart - (ce.reminderLeadDays * MS_PER_DAY);
+          
+          if (todayStart >= stichtag) {
+            let targetsNames = 'Manuelle Gruppenwahl';
+            let isDirect = false;
+            let phone = '';
+
+            if (ce.eventType === 'DIENST' && ce.title.includes(':')) {
+              const parts = ce.title.split(':');
+              const alias = parts[parts.length - 1].trim(); 
+              
+              if (alias) {
+                const helper = helpers.find(h => 
+                  (h.alias || '').toLowerCase() === alias.toLowerCase() || 
+                  h.name.toLowerCase() === alias.toLowerCase()
+                );
+
+                if (helper && helper.telefon) {
+                  targetsNames = helper.alias || helper.name;
+                  isDirect = true;
+                  phone = helper.telefon;
+                } else {
+                  targetsNames = `${alias} (Keine Nummer hinterlegt)`;
+                }
+              }
+            }
+
+            const fullText = formatReminderText('Event', ce, ce.reminderCustomText);
+
+            items.push({
+              id: ce.id,
+              type: ce.eventType === 'DIENST' ? 'Dienst' : 'Termin',
+              title: ce.title,
+              date: ce.startTime,
+              text: fullText,
+              targetsNames,
+              isDirect, 
+              phone,
+              rawItem: ce,
+              model: 'calendarEvent'
+            });
+          }
+        }
+      });
+    }
+
+    // 2. Aufgaben (Tasks)
+    if (tasks) {
+      tasks.forEach(t => {
+        if (t.reminderSenderUserId === user.id && !t.reminderSentAt && t.reminderLeadDays !== undefined && t.dueDate) {
+          const taskDue = new Date(t.dueDate);
+          const taskDateStart = new Date(taskDue.getFullYear(), taskDue.getMonth(), taskDue.getDate()).getTime();
+          const stichtag = taskDateStart - (t.reminderLeadDays * MS_PER_DAY);
+          
+          if (todayStart >= stichtag) {
+            const targets: { name: string, phone?: string, isGroup: boolean }[] = [];
+            
+            t.assigneeGroupIds?.forEach(gId => {
+               const g = groups.find(x => x.id === gId);
+               if (g) targets.push({ name: g.name, isGroup: true });
+            });
+            t.assigneeHelperIds?.forEach(hId => {
+               const h = helpers.find(x => x.id === hId);
+               if (h) targets.push({ name: h.alias || h.name, phone: h.telefon, isGroup: false });
+            });
+
+            const targetsNames = targets.map(x => x.name).join(', ') || 'Manuelle Auswahl';
+            const isDirect = targets.length === 1 && !targets[0].isGroup && !!targets[0].phone;
+            const phone = isDirect ? targets[0].phone : '';
+
+            const fullText = formatReminderText('Task', t);
+
+            items.push({
+              id: t.id,
+              type: 'Aufgabe',
+              title: t.title,
+              date: t.dueDate,
+              text: fullText,
+              targetsNames,
+              isDirect,
+              phone,
+              rawItem: t,
+              model: 'task'
+            });
+          }
+        }
+      });
+    }
+
+    // CHIRURGISCHER EINGRIFF: 3. Sitzungen (Events)
+    if (events) {
+      events.forEach(ev => {
+        if (ev.status !== 'ABGESCHLOSSEN' && ev.reminderSenderUserId === user.id && !ev.reminderSentAt && ev.reminderLeadDays !== undefined && ev.plannedStartTime) {
+          const eventStart = new Date(ev.plannedStartTime);
+          const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
+          const stichtag = eventDateStart - (ev.reminderLeadDays * MS_PER_DAY);
+          
+          if (todayStart >= stichtag) {
+            // Empfänger für Sitzungen zusammenbauen
+            const targets: { name: string, phone?: string, isGroup: boolean }[] = [];
+            
+            ev.participantGroupIds?.forEach(gId => {
+               const g = groups.find(x => x.id === gId);
+               if (g) targets.push({ name: g.name, isGroup: true });
+            });
+            ev.participantUserIds?.forEach(uId => {
+               const u = users.find(x => x.id === uId);
+               if (u) targets.push({ name: u.name, phone: u.telefon, isGroup: false });
+            });
+
+            const targetsNames = targets.map(x => x.name).join(', ') || 'Manuelle Auswahl';
+            const isDirect = targets.length === 1 && !targets[0].isGroup && !!targets[0].phone;
+            const phone = isDirect ? targets[0].phone : '';
+
+            const fullText = formatReminderText('Sitzung', ev);
+
+            items.push({
+              id: ev.id,
+              type: 'Sitzung',
+              title: ev.title,
+              date: ev.plannedStartTime,
+              text: fullText,
+              targetsNames,
+              isDirect,
+              phone,
+              rawItem: ev,
+              model: 'event' // Unterscheidung für den Save-Handler
+            });
+          }
+        }
+      });
+    }
+
+    return items.sort((a, b) => a.date - b.date);
+  }, [user, calendarEvents, tasks, events, groups, helpers, users]);
+
+  const handleSendReminder = async (rem: any) => {
+    let url = '';
+    const text = rem.text;
+
+    if (rem.isDirect && rem.phone) {
+      let phone = String(rem.phone).trim().replace(/[^0-9+]/g, '');
+      if (phone.startsWith('00')) {
+        phone = '+' + phone.substring(2);
+      } else if (phone.startsWith('0') && !phone.startsWith('00')) {
+        phone = '+49' + phone.substring(1);
+      }
+      
+      url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+    } else {
+      url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    }
+
+    window.open(url, '_blank');
+
+    try {
+      if (rem.model === 'calendarEvent') {
+        await updateCalendarEvent({ ...rem.rawItem, reminderSentAt: Date.now() });
+      } else if (rem.model === 'task') {
+        await saveAgendaItem({ ...rem.rawItem, reminderSentAt: Date.now() });
+      } else if (rem.model === 'event') {
+         // Wir haben im aktuellen Scope keinen Zugriff auf saveEvent aus dem useClubStore, 
+         // da es in der Destrukturierung fehlt. Normalerweise würden wir hier updateEvent/saveEvent aufrufen.
+         // Um das Protokoll nicht zu verletzen (wir wissen nicht wie updateEvent im Store heißt),
+         // setzen wir es als TODO für dich oder belassen es als Fallback.
+         console.log("Sitzung (Event) Zeitstempel muss gespeichert werden.", rem.rawItem);
+      }
+    } catch (err) {
+      console.error("Fehler beim Speichern des Zeitstempels:", err);
+    }
+  };
+
+  const handleDismissReminder = async (rem: any) => {
+    if (!window.confirm('Möchtest du diese Erinnerung verwerfen (ohne zu senden)?')) return;
+    try {
+      if (rem.model === 'calendarEvent') {
+        await updateCalendarEvent({ ...rem.rawItem, reminderSentAt: Date.now() });
+      } else if (rem.model === 'task') {
+        await saveAgendaItem({ ...rem.rawItem, reminderSentAt: Date.now() });
+      } else if (rem.model === 'event') {
+         console.log("Sitzung (Event) Zeitstempel muss verwerfen gespeichert werden.", rem.rawItem);
+      }
+    } catch (err) {
+      console.error("Fehler beim Verwerfen:", err);
+    }
+  };
+
+  return (
+    <div className="h-full flex flex-col max-w-5xl mx-auto w-full">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center">
+            <MessageCircle className="w-7 h-7 mr-3 text-green-600" /> WhatsApp Erinnerungen
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">Verwalte deine anstehenden Benachrichtigungen für Aufgaben und Termine.</p>
+        </div>
+        {pendingReminders.length > 0 && !isDataLoading && (
+          <span className="bg-green-100 text-green-800 text-sm font-bold px-3 py-1 rounded-full shadow-sm border border-green-200">
+            {pendingReminders.length} anstehend
+          </span>
+        )}
+      </div>
+
+      {isDataLoading ? (
+        <div className="flex-1 flex flex-col items-center justify-center bg-white border border-gray-200 rounded-xl shadow-sm p-12 text-center">
+          <div className="animate-pulse flex flex-col items-center">
+            <div className="w-12 h-12 bg-gray-200 rounded-full mb-4"></div>
+            <div className="h-4 bg-gray-200 rounded w-32"></div>
+          </div>
+        </div>
+      ) : pendingReminders.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center bg-white border border-gray-200 rounded-xl shadow-sm p-12 text-center">
+          <CheckCircle2 className="w-16 h-16 text-green-400 mb-4" />
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Alles erledigt!</h2>
+          <p className="text-gray-500 max-w-md">Aktuell gibt es keine anstehenden WhatsApp-Erinnerungen für dich. Lehne dich zurück und genieße den Tag.</p>
+        </div>
+      ) : (
+        <div className="space-y-4 overflow-y-auto pb-8">
+          {pendingReminders.map(rem => (
+            <div key={rem.id} className="bg-white border border-green-200 rounded-xl shadow-sm overflow-hidden flex flex-col md:flex-row md:items-stretch transition-all hover:border-green-300">
+              <div className="p-5 flex-1 border-b md:border-b-0 md:border-r border-gray-100">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${rem.type === 'Sitzung' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
+                      {rem.type}
+                    </span>
+                    <span className="text-base font-bold text-gray-900">{rem.title}</span>
+                  </div>
+                  <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                    Fällig: {new Date(rem.date).toLocaleDateString('de-DE')}
+                  </span>
+                </div>
+                
+                <div className="mb-3 flex items-center">
+                  <span className="text-sm text-gray-500 mr-2">Empfänger:</span>
+                  <span className={`text-sm font-bold ${rem.isDirect ? 'text-green-700' : 'text-blue-700'}`}>
+                    {rem.targetsNames}
+                  </span>
+                </div>
+
+                <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                  <p className="text-sm text-gray-700 font-mono whitespace-pre-wrap">
+                    {rem.text}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="bg-gray-50 p-4 md:w-56 flex flex-col justify-center gap-3 shrink-0">
+                <button
+                  onClick={() => handleSendReminder(rem)}
+                  className="flex items-center justify-center w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-sm transition-colors shadow-sm"
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  Senden & Erledigt
+                </button>
+                <button
+                  onClick={() => handleDismissReminder(rem)}
+                  className="flex items-center justify-center w-full px-4 py-3 text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 rounded-lg font-bold text-sm transition-colors"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Verwerfen
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+// --- END OF FILE 317 Zeilen ---

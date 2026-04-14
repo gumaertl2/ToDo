@@ -1,3 +1,4 @@
+// 2026-04-14 14:20 - FIX: Vollständige Datei gemäß Protokoll
 // src/core/types/models.ts
 
 export interface BaseDocument {
@@ -37,7 +38,7 @@ export interface Group extends BaseDocument {
 
 export interface Helper extends BaseDocument {
   name: string;
-  alias: string; // CHIRURGISCHER EINGRIFF: Alias ist nun ein Pflichtfeld (kein ? mehr)
+  alias: string;
   bezug: string;
   email: string;
   telefon: string;
@@ -176,4 +177,4 @@ export interface CalendarEvent extends BaseDocument {
   reminderSentAt?: number;         
   reminderCustomText?: string;     
 }
-// Exakte Zeilenzahl: 181
+// --- END OF FILE 180 Zeilen ---
