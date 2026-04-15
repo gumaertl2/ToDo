@@ -1,16 +1,33 @@
-// 2026-04-14 20:00 - FIX: In-App Handbuch mit neuen Features (WhatsApp, ICS, Schloss) synchronisiert
+// 2026-04-14 21:15 - FIX: Entfernung des toten Links zur HANDBUCH.md (Single Source of Truth im UI)
 // src/features/Help/HelpView.tsx
 import React, { useState } from 'react';
-import { BookOpen, Target, Rocket, Calendar, ListTodo, ShieldCheck, ChevronDown, ChevronUp, Layers, Printer, Smartphone, MessageCircle } from 'lucide-react';
+import { BookOpen, Target, Rocket, Calendar, ListTodo, ShieldCheck, ChevronDown, ChevronUp, Layers, Printer, Smartphone, MessageCircle, FileText, ArrowLeft } from 'lucide-react';
 
 export const HelpView: React.FC = () => {
   const [openSection, setOpenSection] = useState<string | null>('vision');
+  const [isReadMode, setIsReadMode] = useState<boolean>(false);
 
   const toggleSection = (id: string) => {
     setOpenSection(openSection === id ? null : id);
   };
 
   const AccordionItem = ({ id, title, icon: Icon, children }: any) => {
+    if (isReadMode) {
+      return (
+        <div className="mb-10 print:mb-8 break-inside-avoid-page">
+          <div className="flex items-center mb-4">
+            <div className="bg-blue-100 p-2 rounded-lg text-blue-600 mr-4 shrink-0 print:border print:border-gray-300 print:bg-white">
+              <Icon className="w-6 h-6" />
+            </div>
+            <h2 className="text-xl md:text-2xl font-bold text-gray-900">{title}</h2>
+          </div>
+          <div className="prose prose-blue max-w-none text-gray-700 print:text-black leading-relaxed">
+            {children}
+          </div>
+        </div>
+      );
+    }
+
     const isOpen = openSection === id;
     return (
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm mb-4 overflow-hidden transition-all">
@@ -36,9 +53,27 @@ export const HelpView: React.FC = () => {
   };
 
   return (
-    <div className="h-full flex flex-col max-w-4xl mx-auto w-full pb-safe">
-      <div className="flex items-center mb-8 px-2 md:px-0">
-        <div className="bg-blue-600 p-3 rounded-xl text-white mr-4 shadow-lg shrink-0">
+    <div className={`flex flex-col max-w-4xl mx-auto w-full pb-safe ${isReadMode ? 'h-auto print:block' : 'h-full'}`}>
+      
+      {isReadMode && (
+        <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-gray-200 p-4 mb-6 flex justify-between items-center shadow-sm print:hidden rounded-b-xl mx-2 md:mx-0">
+          <button 
+            onClick={() => setIsReadMode(false)} 
+            className="flex items-center text-gray-600 hover:text-blue-700 transition-colors font-bold px-2 py-1 rounded-lg hover:bg-blue-50"
+          >
+            <ArrowLeft className="w-5 h-5 mr-2" /> Zurück
+          </button>
+          <button 
+            onClick={() => window.print()} 
+            className="flex items-center px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+          >
+            <Printer className="w-4 h-4 mr-2" /> Drucken
+          </button>
+        </div>
+      )}
+
+      <div className={`flex items-center px-2 md:px-0 ${isReadMode ? 'mb-10 mt-2' : 'mb-8'}`}>
+        <div className="bg-blue-600 p-3 rounded-xl text-white mr-4 shadow-lg shrink-0 print:border print:border-gray-800 print:bg-white print:text-gray-900">
           <BookOpen className="w-8 h-8" />
         </div>
         <div>
@@ -47,7 +82,8 @@ export const HelpView: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-2 md:px-0 pb-10 custom-scrollbar">
+      <div className={`flex-1 px-2 md:px-0 pb-10 custom-scrollbar ${isReadMode ? 'overflow-visible print:block' : 'overflow-y-auto'}`}>
+        
         <AccordionItem id="vision" title="Teil 1: Worum geht es bei PapaToDo?" icon={Target}>
           <p className="font-medium text-lg mb-4">Jeder Verein lebt vom Engagement seiner Mitglieder. Aber seien wir ehrlich: Die Vorstandsarbeit kann manchmal ganz schön mühsam sein.</p>
           <p className="mb-3">Bei jedem Verein gibt es immer wiederkehrende Routinetätigkeiten und spezielle Einmalaufgaben. Normalerweise läuft das so ab: Diese Aufgaben werden in Besprechungen verteilt und am Ende in einem langen Protokoll dokumentiert. Jeder bekommt dieses Protokoll zugeschickt, muss mühsam seine eigenen Aufgaben heraussuchen und notieren.</p>
@@ -67,19 +103,19 @@ export const HelpView: React.FC = () => {
           <p className="mb-6">Du übernimmst ein neues Amt oder bist neu im System? Keine Panik, in drei Schritten bist du voll einsatzbereit:</p>
           
           <div className="space-y-6">
-            <div className="bg-white p-4 rounded-lg border border-blue-100 shadow-sm">
-              <h4 className="font-bold text-blue-800 text-lg flex items-center"><span className="bg-blue-100 text-blue-800 rounded-full w-6 h-6 flex items-center justify-center mr-2 text-sm shrink-0">1</span> Entdecke dein Cockpit (Das Dashboard)</h4>
+            <div className="bg-white p-4 rounded-lg border border-blue-100 shadow-sm print:shadow-none print:border-gray-300">
+              <h4 className="font-bold text-blue-800 text-lg flex items-center"><span className="bg-blue-100 text-blue-800 rounded-full w-6 h-6 flex items-center justify-center mr-2 text-sm shrink-0 print:border print:border-gray-400">1</span> Entdecke dein Cockpit (Das Dashboard)</h4>
               <p className="mt-2 text-sm text-gray-600 leading-relaxed">Sobald du dich einloggst, siehst du dein Dashboard. Hier zeigt dir die App sofort an, was <em>für dich</em> brennt. Fällige Aufgaben leuchten auf und du hast direkten Zugriff auf die nächsten anstehenden Sitzungen deines Vereins.<br/>
               <strong className="text-green-700">Neu:</strong> Ein grüner Warn-Banner ganz oben zeigt dir sofort an, ob du heute noch WhatsApp-Erinnerungen verschicken musst!</p>
             </div>
             
-            <div className="bg-white p-4 rounded-lg border border-blue-100 shadow-sm">
-              <h4 className="font-bold text-blue-800 text-lg flex items-center"><span className="bg-blue-100 text-blue-800 rounded-full w-6 h-6 flex items-center justify-center mr-2 text-sm shrink-0">2</span> Kenne deine Pflichten (Stellenbeschreibung)</h4>
+            <div className="bg-white p-4 rounded-lg border border-blue-100 shadow-sm print:shadow-none print:border-gray-300">
+              <h4 className="font-bold text-blue-800 text-lg flex items-center"><span className="bg-blue-100 text-blue-800 rounded-full w-6 h-6 flex items-center justify-center mr-2 text-sm shrink-0 print:border print:border-gray-400">2</span> Kenne deine Pflichten (Stellenbeschreibung)</h4>
               <p className="mt-2 text-sm text-gray-600 leading-relaxed">Gehe im Menü auf <strong>"User & Gruppen"</strong> und wechsle in den Reiter <strong>"Rollen & Ämter"</strong>. Klicke bei deinem Amt auf das kleine <code>+/-</code> Symbol. Hier öffnet sich deine persönliche, automatisch erstellte Stellenbeschreibung. Du siehst genau, welche Daueraufgaben das ganze Jahr über bei dir liegen (z. B. "↻ Monatlicher Platz-Check") und kannst offene Aufgaben direkt anklicken und bearbeiten.</p>
             </div>
 
-            <div className="bg-white p-4 rounded-lg border border-blue-100 shadow-sm">
-              <h4 className="font-bold text-blue-800 text-lg flex items-center"><span className="bg-blue-100 text-blue-800 rounded-full w-6 h-6 flex items-center justify-center mr-2 text-sm shrink-0">3</span> Schiebe deine Aufgaben (Kanban-Board)</h4>
+            <div className="bg-white p-4 rounded-lg border border-blue-100 shadow-sm print:shadow-none print:border-gray-300">
+              <h4 className="font-bold text-blue-800 text-lg flex items-center"><span className="bg-blue-100 text-blue-800 rounded-full w-6 h-6 flex items-center justify-center mr-2 text-sm shrink-0 print:border print:border-gray-400">3</span> Schiebe deine Aufgaben (Kanban-Board)</h4>
               <p className="mt-2 text-sm text-gray-600 leading-relaxed">Unter <strong>"Meine ToDos"</strong> findest du dein visuelles Aufgaben-Board. <br/>
               • Eine Aufgabe aus der letzten Sitzung ist neu? Sie steht links unter <em>OFFEN</em>.<br/>
               • Du fängst an daran zu arbeiten? Ziehe die Karte einfach mit der Maus in die Mitte auf <em>IN ARBEIT</em>.<br/>
@@ -120,7 +156,7 @@ export const HelpView: React.FC = () => {
               <h4 className="font-bold text-gray-900 flex items-center text-base"><Printer className="w-5 h-5 mr-2 text-blue-600 shrink-0" />Wie kann ich drucken oder exportieren?</h4>
               <p className="mt-2 text-sm leading-relaxed">Klicke in der Menüleiste auf <strong>"Export / Druck"</strong>. Es öffnet sich der Profi-Dialog: Wähle hier exakt aus, ob du nur Termine, nur Dienste oder beides exportieren möchtest. Stelle den gewünschten Zeitraum ein (z. B. das 2. Halbjahr) und lade die Daten entweder als ICS-Datei für dein Handy/Outlook herunter, oder drucke eine tintensparende, saubere A4-Liste für das schwarze Brett aus.</p>
             </div>
-            <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg">
+            <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg print:border-none print:p-0 print:bg-transparent">
               <h4 className="font-bold text-gray-900 flex items-center text-base"><Calendar className="w-5 h-5 mr-2 text-blue-600 shrink-0" />Wie binde ich externe Kalender ein (ICS-Abos & Dateien)?</h4>
               <p className="mt-2 text-sm leading-relaxed">Ihr habt einen Verbandsspielplan oder einen externen Müllkalender? Klicke im Kalender auf <strong>"Abos"</strong>. Du hast hier zwei Möglichkeiten:</p>
               <ol className="list-decimal pl-5 mt-2 text-sm space-y-1">
@@ -202,8 +238,26 @@ export const HelpView: React.FC = () => {
             <p className="mt-2 text-sm leading-relaxed">Da externe Helfer oft nur für ein bestimmtes Fest aushelfen, speichert die App abgelaufene Helfer-Profile. Gehe als Admin im Bereich "Externe Helfer" auf den gelben Button <strong>"DSGVO-Bereinigung prüfen"</strong>. Die App zeigt dir alle "Karteileichen" an, die du mit einem Klick sicher und datenschutzkonform aus dem System löschen kannst.</p>
           </div>
         </AccordionItem>
+
+        {/* CHIRURGISCHER EINGRIFF: Lese-Modus Button statt totem Link */}
+        {!isReadMode && (
+          <div className="mt-8 p-6 bg-blue-50/50 border border-blue-100 rounded-xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm print:hidden">
+            <div>
+              <h4 className="text-lg font-bold text-blue-900">Das komplette Handbuch lesen</h4>
+              <p className="text-sm text-blue-800 mt-1">Öffnet das Handbuch als fortlaufenden Text zum Drucken oder Scrollen.</p>
+            </div>
+            <button 
+              onClick={() => setIsReadMode(true)}
+              className="flex items-center justify-center px-4 py-2.5 bg-white border border-blue-200 text-blue-700 font-bold rounded-lg hover:bg-blue-50 transition-colors shadow-sm shrink-0 w-full md:w-auto"
+            >
+              <FileText className="w-5 h-5 mr-2" />
+              Lese- & Druckmodus öffnen
+            </button>
+          </div>
+        )}
+
       </div>
     </div>
   );
 };
-// --- END OF FILE 208 Zeilen ---
+// --- END OF FILE 258 Zeilen ---
