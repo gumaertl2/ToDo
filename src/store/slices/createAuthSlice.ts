@@ -1,4 +1,4 @@
-// 2026-04-15 19:40 - FEATURE: Sauberes Beenden aller Live-Syncs beim Logout (Memory Leak Schutz)
+// 2026-04-15 19:50 - FIX: Typisierungsfehler (TS2353) beim globalen Store-Reset behoben
 // src/store/slices/createAuthSlice.ts
 import type { StateCreator } from 'zustand';
 import type { User } from '../../core/types/models';
@@ -97,7 +97,6 @@ export const createAuthSlice: StateCreator<AuthSlice, [], [], AuthSlice> = (set,
     }
   },
   logout: async () => {
-    // CHIRURGISCHER EINGRIFF: Alle aktiven Live-Syncs vor dem Logout kappen!
     const store = get() as any;
     if (store.unsubTasks) store.unsubTasks();
     if (store.unsubEvents) store.unsubEvents();
@@ -112,8 +111,8 @@ export const createAuthSlice: StateCreator<AuthSlice, [], [], AuthSlice> = (set,
 
     await signOut(auth);
     
-    // Kompletten Zustand zurücksetzen
-    set({ 
+    // CHIRURGISCHER EINGRIFF: TypeScript Boundary aufheben, um den kompletten Store sicher zu leeren
+    (set as any)({ 
       user: null, 
       isAuthenticated: false,
       tasks: [],
