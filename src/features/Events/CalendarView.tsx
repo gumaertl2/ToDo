@@ -1,4 +1,4 @@
-// 2026-04-14 17:30 - FEATURE: Dynamischer Farbkontrast & Schloss-Icon (🔒) für interne Termine
+// 2026-04-15 20:15 - FEATURE: Vergangene Termine standardmäßig ausgeblendet (Heutiger Tag immer oben)
 // src/features/Events/CalendarView.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
@@ -31,7 +31,6 @@ const localizer = dateFnsLocalizer({
   format, parse, startOfWeek: (date: Date) => startOfWeek(date, { weekStartsOn: 1 }), getDay, locales,
 });
 
-// CHIRURGISCHER EINGRIFF: Kontrast-Berechnung für lesbare Schrift auf hellen Farben
 const getContrastYIQ = (hexcolor?: string) => {
   if (!hexcolor || !hexcolor.startsWith('#')) return 'white';
   const hex = hexcolor.replace('#', '');
@@ -46,9 +45,8 @@ const getContrastYIQ = (hexcolor?: string) => {
     g = parseInt(hex.slice(2, 4), 16);
     b = parseInt(hex.slice(4, 6), 16);
   }
-  // YIQ Formel zur Bestimmung der wahrgenommenen Helligkeit
   const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
-  return (yiq >= 128) ? '#1f2937' : 'white'; // Bei hellen Farben dunkles Grau (gray-800)
+  return (yiq >= 128) ? '#1f2937' : 'white'; 
 };
 
 interface AdaptedEvent extends RBCEvent {
@@ -65,6 +63,9 @@ export const CalendarView: React.FC = () => {
 
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [hideEmptyDays, setHideEmptyDays] = useState(true);
+  
+  // CHIRURGISCHER EINGRIFF: Neuer State für die Historie
+  const [showPastEvents, setShowPastEvents] = useState(false);
 
   const [currentView, setCurrentView] = useState<'month' | 'week' | 'day' | 'agenda' | 'termine' | 'dienste'>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -132,10 +133,9 @@ export const CalendarView: React.FC = () => {
   };
 
   const rbcEvents: AdaptedEvent[] = useMemo(() => {
-    // CHIRURGISCHER EINGRIFF: Schloss-Icon (🔒) für nicht-öffentliche Termine & Sitzungen
     const internalEvents = calendarEvents.map(ev => ({
       id: ev.id, sourceId: 'manual', seriesId: ev.seriesId, 
-      title: ev.isPublic ? ev.title : `🔒 ${ev.title}`, // Schloss für interne Termine
+      title: ev.isPublic ? ev.title : `🔒 ${ev.title}`,
       description: ev.description || '', location: ev.location || '',
       start: new Date(ev.startTime), end: ev.endTime ? new Date(ev.endTime) : new Date(ev.startTime + (1000 * 60 * 60)), 
       allDay: ev.isAllDay, sourceEvent: ev, color: ev.color || '#3b82f6' 
@@ -143,7 +143,7 @@ export const CalendarView: React.FC = () => {
     
     const internalSitzungen = events.filter(ev => ev.plannedStartTime && ev.status !== 'ABGESCHLOSSEN').map(ev => ({
       id: ev.id, sourceId: 'manual', seriesId: undefined, 
-      title: ev.isPublished ? `Sitzung: ${ev.title}` : `🔒 Sitzung: ${ev.title}`, // Schloss für interne Sitzungen
+      title: ev.isPublished ? `Sitzung: ${ev.title}` : `🔒 Sitzung: ${ev.title}`,
       description: ev.description || '', location: ev.location || '',
       start: new Date(ev.plannedStartTime!), end: ev.plannedEndTime ? new Date(ev.plannedEndTime) : new Date(ev.plannedStartTime! + (1000 * 60 * 60 * 2)), 
       allDay: false, rawSitzung: ev, color: '#8b5cf6'
@@ -159,11 +159,25 @@ export const CalendarView: React.FC = () => {
   }, [calendarEvents, events, calendarSubscriptions]);
 
   const filteredEvents = useMemo(() => {
+    const todayStart = startOfDay(new Date()).getTime();
+
     return rbcEvents.filter(ev => {
+      // CHIRURGISCHER EINGRIFF: Filter für alte Termine
+      if (!showPastEvents) {
+        let exclusiveEnd = ev.end || ev.start!;
+        if (ev.allDay && exclusiveEnd.getTime() > ev.start!.getTime()) {
+          exclusiveEnd = new Date(exclusiveEnd.getTime() - 1000);
+        }
+        // Wenn der Termin vor heute 00:00 Uhr endete -> Ausblenden
+        if (exclusiveEnd.getTime() < todayStart) {
+          return false;
+        }
+      }
+
       if (ev.sourceId === 'manual') return ev.seriesId ? activeFilters.includes('dienste') : activeFilters.includes('manual');
       return activeFilters.includes(ev.sourceId);
     });
-  }, [rbcEvents, activeFilters]);
+  }, [rbcEvents, activeFilters, showPastEvents]);
 
   const displayEvents = useMemo(() => {
     if (currentView === 'termine') return filteredEvents.filter(e => e.sourceId === 'manual' && !e.seriesId);
@@ -171,7 +185,6 @@ export const CalendarView: React.FC = () => {
     return filteredEvents;
   }, [filteredEvents, currentView]);
 
-  // CHIRURGISCHER EINGRIFF: Schriftfarbe über getContrastYIQ dynamisch berechnen
   const eventStyleGetter = (event: AdaptedEvent) => ({ 
     style: { 
       backgroundColor: event.color || '#3b82f6', 
@@ -381,14 +394,19 @@ export const CalendarView: React.FC = () => {
       <label className="flex items-center space-x-2 text-sm cursor-pointer"><input type="checkbox" checked={activeFilters.includes('dienste')} onChange={() => toggleFilter('dienste')} className="rounded w-4 h-4 text-orange-600 focus:ring-orange-500"/><span className="font-bold text-orange-600">Dienste</span></label>
       {calendarSubscriptions.filter(s => s.isActive).map(sub => (<label key={sub.id} className="flex items-center space-x-2 text-sm cursor-pointer"><input type="checkbox" checked={activeFilters.includes(sub.id)} onChange={() => toggleFilter(sub.id)} className="rounded w-4 h-4 focus:ring-blue-500" style={{ accentColor: sub.color || '#10b981' }}/><span className="font-bold" style={{ color: sub.color || '#10b981' }}>{sub.name}</span></label>))}
       
+      <div className="hidden sm:block flex-1 min-w-[10px]"></div>
+      
+      {/* CHIRURGISCHER EINGRIFF: Neuer Schalter für die Historie */}
+      <label className="flex items-center space-x-2 text-sm cursor-pointer sm:border-l border-gray-200 sm:pl-4 mt-2 sm:mt-0 w-full sm:w-auto">
+        <input type="checkbox" checked={showPastEvents} onChange={(e) => setShowPastEvents(e.target.checked)} className="rounded w-4 h-4 text-purple-600 focus:ring-purple-500"/>
+        <span className="text-gray-600 font-bold">Historie einblenden</span>
+      </label>
+
       {['agenda', 'termine', 'dienste'].includes(currentView) && (
-        <>
-          <div className="hidden sm:block flex-1 min-w-[10px]"></div>
-          <label className="flex items-center space-x-2 text-sm cursor-pointer sm:border-l border-gray-200 sm:pl-4 mt-2 sm:mt-0 w-full sm:w-auto">
-            <input type="checkbox" checked={hideEmptyDays} onChange={(e) => setHideEmptyDays(e.target.checked)} className="rounded w-4 h-4 text-gray-600 focus:ring-gray-500"/>
-            <span className="text-gray-600 font-bold">Leere Tage ausblenden</span>
-          </label>
-        </>
+        <label className="flex items-center space-x-2 text-sm cursor-pointer sm:border-l border-gray-200 sm:pl-4 mt-2 sm:mt-0 w-full sm:w-auto">
+          <input type="checkbox" checked={hideEmptyDays} onChange={(e) => setHideEmptyDays(e.target.checked)} className="rounded w-4 h-4 text-gray-600 focus:ring-gray-500"/>
+          <span className="text-gray-600 font-bold">Leere Tage ausblenden</span>
+        </label>
       )}
     </div>
   );
@@ -467,4 +485,4 @@ export const CalendarView: React.FC = () => {
     </div>
   );
 };
-// --- END OF FILE 505 Zeilen ---
+// --- END OF FILE 515 Zeilen ---
