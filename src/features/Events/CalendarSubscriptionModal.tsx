@@ -1,4 +1,4 @@
-// 2026-04-14 18:30 - FEATURE: WhatsApp Erinnerung an Abos / ICS-Dateien gehängt
+// 2026-04-14 19:30 - FIX: TypeScript-Fehler bei Lucide-Icon title-Prop behoben
 // src/features/Events/CalendarSubscriptionModal.tsx
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
@@ -26,7 +26,6 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
 
-  // CHIRURGISCHER EINGRIFF: WhatsApp States
   const [reminderSenderUserId, setReminderSenderUserId] = useState('');
   const [reminderLeadDays, setReminderLeadDays] = useState('1');
   const [reminderCustomText, setReminderCustomText] = useState('');
@@ -282,7 +281,6 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
                 {fileName && importType === 'file' && <p className="text-[10px] text-gray-500 mt-1 truncate">Datei: {fileName}</p>}
               </div>
 
-              {/* CHIRURGISCHER EINGRIFF: WhatsApp Erinnerung Sektion im Formular */}
               <div className="md:col-span-12 bg-green-50/50 p-3 rounded-lg border border-green-100 mt-2">
                 <h4 className="text-xs font-bold text-green-900 flex items-center mb-3">
                   <MessageCircle className="w-3.5 h-3.5 mr-1.5" />
@@ -359,7 +357,12 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
                     <div className="font-bold text-gray-900 text-sm flex items-center">
                       {sub.name} 
                       {sub.url === 'FILE_IMPORT' && <span className="ml-2 text-[9px] uppercase tracking-wider bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded border border-gray-200">Datei</span>}
-                      {sub.reminderSenderUserId && <MessageCircle className="w-3.5 h-3.5 ml-2 text-green-500" title="Erinnerung aktiv" />}
+                      {/* CHIRURGISCHER EINGRIFF: Icon in <span> eingewickelt, um TS Fehler zu beheben */}
+                      {sub.reminderSenderUserId && (
+                        <span title="Erinnerung aktiv" className="ml-2 flex items-center">
+                          <MessageCircle className="w-3.5 h-3.5 text-green-500" />
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-gray-500 italic truncate">{formatSyncDate(sub.lastSyncedAt)}</div>
                   </div>
@@ -391,4 +394,4 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
     </div>
   );
 };
-// --- END OF FILE 373 Zeilen ---
+// --- END OF FILE 375 Zeilen ---
