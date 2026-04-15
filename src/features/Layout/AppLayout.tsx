@@ -1,12 +1,11 @@
-// 2026-04-14 19:00 - FIX: Zähler für WhatsApp-Erinnerungen synchronisiert (Abo-Termine hinzugefügt)
+// 2026-04-15 18:45 - FEATURE: Menü nach Priorität/Nutzungshäufigkeit gruppiert und für Mobile optimiert
 // src/features/Layout/AppLayout.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { Users, Calendar, ClipboardList, CheckSquare, LogOut, LayoutDashboard, BookOpen, CalendarDays, Pin, PinOff, MessageCircle } from 'lucide-react';
+import { Users, Calendar, ClipboardList, CheckSquare, LogOut, LayoutDashboard, BookOpen, CalendarDays, Pin, PinOff, MessageCircle, BarChart2 } from 'lucide-react';
 import { useClubStore } from '../../store/useClubStore';
 
 export const AppLayout: React.FC = () => {
-  // CHIRURGISCHER EINGRIFF: calendarSubscriptions aus Store geladen
   const { logout, user, fetchUsersAndHelpers, fetchGroups, calendarEvents, tasks, events, calendarSubscriptions, fetchEvents, fetchTasks, fetchCalendarData } = useClubStore();
 
   const [isPinned, setIsPinned] = useState(() => {
@@ -39,7 +38,6 @@ export const AppLayout: React.FC = () => {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
-    // 1. Kalender-Einträge
     if (calendarEvents) {
       calendarEvents.forEach(ce => {
         if (ce.reminderSenderUserId === user.id && !ce.reminderSentAt && ce.reminderLeadDays !== undefined) {
@@ -51,7 +49,6 @@ export const AppLayout: React.FC = () => {
       });
     }
 
-    // 2. Aufgaben
     if (tasks) {
       tasks.forEach(t => {
         if (t.reminderSenderUserId === user.id && !t.reminderSentAt && t.reminderLeadDays !== undefined && t.dueDate) {
@@ -63,7 +60,6 @@ export const AppLayout: React.FC = () => {
       });
     }
 
-    // 3. Sitzungen (Events)
     if (events) {
       events.forEach(ev => {
         if (ev.status !== 'ABGESCHLOSSEN' && ev.reminderSenderUserId === user.id && !ev.reminderSentAt && ev.reminderLeadDays !== undefined && ev.plannedStartTime) {
@@ -75,7 +71,6 @@ export const AppLayout: React.FC = () => {
       });
     }
 
-    // CHIRURGISCHER EINGRIFF: 4. Kalender-Abos / ICS Dateien zum Zähler hinzugefügt
     if (calendarSubscriptions) {
       calendarSubscriptions.forEach(sub => {
         if (sub.isActive && sub.reminderSenderUserId === user.id && sub.reminderLeadDays !== undefined && sub.cachedEvents) {
@@ -92,7 +87,7 @@ export const AppLayout: React.FC = () => {
     }
 
     return count;
-  }, [user, calendarEvents, tasks, events, calendarSubscriptions]); // CHIRURGISCHER EINGRIFF: calendarSubscriptions als Dependency
+  }, [user, calendarEvents, tasks, events, calendarSubscriptions]);
 
   useEffect(() => {
     if (pendingRemindersCount > 0) {
@@ -106,14 +101,19 @@ export const AppLayout: React.FC = () => {
     }
   }, [pendingRemindersCount]);
 
-  const navItems = [
-    { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  // CHIRURGISCHER EINGRIFF: Menü in primäre und sekundäre Gruppen aufgeteilt
+  const mainNavItems = [
     { to: '/calendar', icon: CalendarDays, label: 'Vereinskalender' },
-    { to: '/users', icon: Users, label: 'User & Gruppen' },
-    { to: '/events', icon: Calendar, label: 'Projekte & Sitzungen' },
-    { to: '/templates', icon: ClipboardList, label: 'Vorlagen & Routinen' },
+    { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/todos', icon: CheckSquare, label: 'Meine ToDos' },
     { to: '/reminders', icon: MessageCircle, label: 'Erinnerungen' },
+    { to: '/events', icon: Calendar, label: 'Projekte & Sitzungen' },
+  ];
+
+  const setupNavItems = [
+    { to: '/users', icon: Users, label: 'User & Gruppen' },
+    { to: '/templates', icon: ClipboardList, label: 'Vorlagen & Routinen' },
+    { to: '/reports', icon: BarChart2, label: 'Reports & Statistik' },
     { to: '/help', icon: BookOpen, label: 'Handbuch & Hilfe' },
   ];
 
@@ -142,6 +142,31 @@ export const AppLayout: React.FC = () => {
 
   const isExpanded = isPinned || isHovered;
 
+  const renderDesktopNavItem = (item: { to: string; icon: React.ElementType; label: string }) => (
+    <NavLink
+      key={item.to}
+      to={item.to}
+      title={!isExpanded ? item.label : undefined}
+      className={({ isActive }) =>
+        `flex items-center p-3 rounded-lg transition-colors whitespace-nowrap ${
+          isActive ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'
+        }`
+      }
+    >
+      <div className="relative shrink-0 flex items-center justify-center">
+        <item.icon className="w-5 h-5" />
+        {item.to === '/reminders' && pendingRemindersCount > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold px-1 min-w-[16px] h-4 rounded-full flex items-center justify-center border border-white">
+            {pendingRemindersCount}
+          </span>
+        )}
+      </div>
+      <span className={`ml-3 font-medium transition-all duration-300 overflow-hidden ${isExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
+        {item.label}
+      </span>
+    </NavLink>
+  );
+
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-gray-100 flex-col lg:flex-row print:!h-auto print:!bg-white print:!block">
       
@@ -168,31 +193,21 @@ export const AppLayout: React.FC = () => {
           </button>
         </div>
         
-        <nav className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-2">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              title={!isExpanded ? item.label : undefined}
-              className={({ isActive }) =>
-                `flex items-center p-3 rounded-lg transition-colors whitespace-nowrap ${
-                  isActive ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'
-                }`
-              }
-            >
-              <div className="relative shrink-0 flex items-center justify-center">
-                <item.icon className="w-5 h-5" />
-                {item.to === '/reminders' && pendingRemindersCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold px-1 min-w-[16px] h-4 rounded-full flex items-center justify-center border border-white">
-                    {pendingRemindersCount}
-                  </span>
-                )}
-              </div>
-              <span className={`ml-3 font-medium transition-all duration-300 overflow-hidden ${isExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
-                {item.label}
-              </span>
-            </NavLink>
-          ))}
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-1 custom-scrollbar">
+          {/* Hauptmenü */}
+          {mainNavItems.map(renderDesktopNavItem)}
+          
+          {/* CHIRURGISCHER EINGRIFF: Visuelle Trennung für Setup-Elemente */}
+          <div className="mt-6 mb-2">
+            {isExpanded ? (
+              <div className="px-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Setup & Info</div>
+            ) : (
+              <div className="border-t border-gray-200 mx-3"></div>
+            )}
+          </div>
+          
+          {/* Setup-Menü */}
+          {setupNavItems.map(renderDesktopNavItem)}
         </nav>
         
         <div className="p-3 border-t border-gray-200 overflow-hidden shrink-0">
@@ -213,8 +228,9 @@ export const AppLayout: React.FC = () => {
         <Outlet />
       </main>
 
-      <nav className="lg:hidden shrink-0 w-full bg-white border-t border-gray-200 flex justify-around items-center px-1 py-2 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-50 print:!hidden overflow-x-auto">
-        {navItems.map((item) => (
+      {/* CHIRURGISCHER EINGRIFF: Mobile Navigation mit horizontalem Scroll (flex-nowrap, gap-2) */}
+      <nav className="lg:hidden shrink-0 w-full bg-white border-t border-gray-200 flex flex-nowrap items-center px-2 py-2 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-50 print:!hidden overflow-x-auto gap-2 custom-scrollbar">
+        {[...mainNavItems, ...setupNavItems].map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -237,6 +253,7 @@ export const AppLayout: React.FC = () => {
             )}
           </NavLink>
         ))}
+        <div className="w-px h-8 bg-gray-200 shrink-0 mx-1"></div>
         <button
           onClick={() => logout()}
           className="flex items-center justify-center p-2.5 text-red-500 hover:bg-red-50 rounded-xl transition-colors shrink-0"
@@ -248,4 +265,4 @@ export const AppLayout: React.FC = () => {
     </div>
   );
 };
-// --- END OF FILE 238 Zeilen ---
+// --- END OF FILE ---
