@@ -1,14 +1,16 @@
+// 2026-04-15 19:40 - FEATURE: Echtzeit-Sync (onSnapshot) für Aufgaben implementiert
 // src/store/slices/createTaskSlice.ts
 import type { StateCreator } from 'zustand';
 import type { Task, AgendaItem } from '../../core/types/models';
 import { DataProcessor } from '../../services/DataProcessor';
 import type { Result } from '../../core/types/shared';
-import { collection, getDocs, deleteDoc, doc, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, deleteDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 
 export interface TaskSlice {
   tasks: Task[];
   isTasksLoading: boolean;
+  unsubTasks: (() => void) | null;
   fetchTasks: () => Promise<Result<Task[]>>;
   addTask: (task: Task) => Promise<Result<void>>;
   updateTask: (task: Task) => Promise<Result<void>>;
@@ -19,20 +21,30 @@ export interface TaskSlice {
 export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set, get) => ({
   tasks: [],
   isTasksLoading: false,
+  unsubTasks: null,
   fetchTasks: async () => {
+    const currentUnsub = get().unsubTasks;
+    if (currentUnsub) currentUnsub();
+
     set({ isTasksLoading: true });
     try {
       const q = query(collection(db, 'agenda_items'), where('type', '==', 'AUFGABE'));
-      const querySnapshot = await getDocs(q);
-      const tasks: Task[] = [];
-      querySnapshot.forEach((docSnap) => {
-        const data = { ...docSnap.data(), id: docSnap.id } as Task;
-        if (data.schemaVersion === '1.0') {
-          tasks.push(data);
-        }
+      const unsub = onSnapshot(q, (querySnapshot) => {
+        const tasks: Task[] = [];
+        querySnapshot.forEach((docSnap) => {
+          const data = { ...docSnap.data(), id: docSnap.id } as Task;
+          if (data.schemaVersion === '1.0') {
+            tasks.push(data);
+          }
+        });
+        set({ tasks, isTasksLoading: false });
+      }, (error) => {
+        console.error("Fehler beim Live-Sync der Tasks:", error);
+        set({ isTasksLoading: false });
       });
-      set({ tasks, isTasksLoading: false });
-      return { success: true, data: tasks };
+      
+      set({ unsubTasks: unsub });
+      return { success: true, data: [] };
     } catch (e) {
       set({ isTasksLoading: false });
       return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
@@ -46,12 +58,9 @@ export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set,
   },
   deleteTask: async (taskId) => {
     try {
-      try { await deleteDoc(doc(db, 'tasks', taskId)); } catch (e) {} // Legacy Cleanup
+      try { await deleteDoc(doc(db, 'tasks', taskId)); } catch (e) {} 
       try { await deleteDoc(doc(db, 'agenda_items', taskId)); } catch (e) {}
-      
-      set((state) => ({
-        tasks: state.tasks.filter((t) => t.id !== taskId),
-      }));
+      // CHIRURGISCHER EINGRIFF: Kein lokales set() mehr nötig, onSnapshot triggert sofort
       return { success: true, data: undefined };
     } catch (e) {
       return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
@@ -59,7 +68,6 @@ export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set,
   },
   saveAgendaItem: async (itemData) => {
     try {
-      // CHIRURGISCHER EINGRIFF: Automatischer Fortschritt bei Status-Wechsel
       const existingTask = get().tasks.find(t => t.id === itemData.id);
       const updatedData = { ...itemData };
       
@@ -73,19 +81,11 @@ export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set,
       const payload = { ...updatedData, id: docId, schemaVersion: '1.0' };
       await DataProcessor.saveDocument('agenda_items', docId, payload as any);
       
-      // CHIRURGISCHER EINGRIFF: Der fehlerhafte Sofort-Klon-Motor wurde hier restlos entfernt.
-      // Routinen werden jetzt AUSSCHLIESSLICH beim Beenden einer Sitzung in EventDetailView mitgeführt!
-
-      get().fetchTasks(); 
-      if (itemData.eventId) {
-        const store = get() as any;
-        if (store.fetchEventAgenda) store.fetchEventAgenda(itemData.eventId);
-      }
-
+      // CHIRURGISCHER EINGRIFF: Firebase lokaler Cache reagiert sofort, kein fetchTasks() nötig
       return { success: true, data: undefined };
     } catch (error: any) {
       return { success: false, error: new Error(error.message) };
     }
   },
 });
-// Exakte Zeilenzahl: 91
+// --- END OF FILE ---
