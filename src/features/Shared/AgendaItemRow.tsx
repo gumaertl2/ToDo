@@ -1,3 +1,4 @@
+// 2026-04-15 17:30 - FEATURE: Sortierfunktion (Dropdown) für Vorlagen freigeschaltet
 // src/features/Shared/AgendaItemRow.tsx
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
@@ -113,15 +114,14 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
     setIsEditingRoutine(false);
   };
 
-  // CHIRURGISCHER EINGRIFF: Die überarbeiteten Wow-Methoden für den Time-Tuner
   const currentDur = effectiveDuration !== undefined ? effectiveDuration : (item.durationEstimate || 0);
 
   const handlePreviewChange = (e: React.MouseEvent, newVal: number) => {
     e.stopPropagation();
     e.preventDefault();
     if (newVal < 0) newVal = 0;
-    setLocalDur(newVal); // Lokaler State für das rasend schnelle Popover
-    if (onDurationPreview) onDurationPreview(newVal); // Globaler State für die Echtzeit-Vorschau der restlichen Agenda
+    setLocalDur(newVal); 
+    if (onDurationPreview) onDurationPreview(newVal); 
   };
 
   const commitDuration = (e: React.MouseEvent) => {
@@ -143,7 +143,8 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
       <div className={`p-3 grid ${isTemplateMode ? 'grid-cols-[60px_1fr_auto]' : 'grid-cols-[85px_1fr_auto]'} gap-3 items-start print:!grid-cols-[50px_1fr_auto] print:!gap-2 print:!p-2`}>
         
         <div className="relative flex items-start gap-2 pt-1 print:!pt-0">
-          {isTemplateMode || isReadOnly ? (
+          {/* CHIRURGISCHER EINGRIFF: isTemplateMode aus der Bedingung entfernt, damit Dropdown bei Vorlagen gerendert wird */}
+          {isReadOnly ? (
             <span className="font-bold text-gray-500 text-sm ml-2 print:!ml-0 mt-0.5">{index + 1}.</span>
           ) : (
             <>
@@ -171,13 +172,12 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
                 <span className="text-[10px] text-gray-400 font-medium mt-[1px] print:!hidden">({currentDur}m)</span>
               </span>
 
-              {/* CHIRURGISCHER EINGRIFF: Popover rechts verschoben und Bubbling blockiert */}
               {isEditingDuration && (
                 <>
                   <div className="fixed inset-0 z-[50]" onClick={cancelDuration} />
                   <div 
                     className="absolute left-full top-[-20px] ml-4 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 z-[60] p-4 origin-top-left print:hidden"
-                    onClick={(e) => e.stopPropagation()} // Verhindert Bubbling vom Panel nach draußen
+                    onClick={(e) => e.stopPropagation()} 
                   >
                     <div className="flex justify-between items-center mb-4">
                       <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Zeitfenster</h4>
@@ -282,9 +282,13 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
             </div>
 
             <div className="w-[80px] flex items-center justify-end border-l border-gray-200 pl-3 gap-1 print:!hidden print:!w-0 print:!h-0 print:!absolute print:!overflow-hidden print:!m-0 print:!p-0 print:!border-0">
-              {hasDescription ? (
-                <button onClick={() => onToggleExpand(item.id)} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded text-lg font-mono font-bold leading-none">{isExpanded ? '-' : '+'}</button>
-              ) : <div className="w-7"></div>}
+              <button 
+                onClick={() => onToggleExpand(item.id)} 
+                className={`w-7 h-7 flex items-center justify-center rounded text-lg font-mono font-bold leading-none transition-colors ${hasDescription ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-gray-300 hover:bg-gray-100 hover:text-gray-500'}`}
+                title={hasDescription ? "Notizen einklappen/ausklappen" : "Notizen hinzufügen"}
+              >
+                {isExpanded ? '-' : '+'}
+              </button>
               
               {!isReadOnly && (
                 <>
@@ -351,29 +355,31 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
         </div>
       </div>
 
-      {hasDescription && (
-        <div className={`px-3 pb-3 print:!pl-[60px] print:!pr-2 print:!pb-2 print:!pt-0 ${isExpanded ? 'block' : 'hidden print:!block'}`}>
-          {editField === 'description' ? (
-             <textarea 
-               ref={el => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
-               autoFocus 
-               value={editVal} 
-               onChange={e => {
-                 setEditVal(e.target.value);
-                 e.target.style.height = 'auto';
-                 e.target.style.height = e.target.scrollHeight + 'px';
-               }} 
-               onBlur={handleInlineSaveText}
-               className="w-full text-sm text-gray-900 bg-white p-3 rounded border-2 border-blue-500 outline-none shadow-sm min-h-[80px] overflow-hidden resize-none print:!hidden"
-             />
-          ) : (
-            <div onClick={() => startEdit('description', item.description || '')} className={`text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 p-3 rounded border border-gray-100 shadow-inner print:!bg-white print:!border-none print:!shadow-none print:!p-0 ${isReadOnly ? '' : 'cursor-text hover:bg-gray-100 transition-colors'}`} title={isReadOnly ? "" : "Klicken zum Bearbeiten"}>
-              {item.description}
-            </div>
-          )}
-        </div>
-      )}
+      <div className={`px-3 pb-3 print:!pl-[60px] print:!pr-2 print:!pb-2 print:!pt-0 ${isExpanded ? 'block' : 'hidden'} ${hasDescription ? 'print:!block' : 'print:!hidden'}`}>
+        {editField === 'description' ? (
+           <textarea 
+             ref={el => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
+             autoFocus 
+             value={editVal} 
+             onChange={e => {
+               setEditVal(e.target.value);
+               e.target.style.height = 'auto';
+               e.target.style.height = e.target.scrollHeight + 'px';
+             }} 
+             onBlur={handleInlineSaveText}
+             className="w-full text-sm text-gray-900 bg-white p-3 rounded border-2 border-blue-500 outline-none shadow-sm min-h-[80px] overflow-hidden resize-none print:!hidden"
+           />
+        ) : (
+          <div 
+            onClick={() => startEdit('description', item.description || '')} 
+            className={`text-sm whitespace-pre-wrap bg-gray-50 p-3 rounded border border-gray-100 shadow-inner print:!bg-white print:!border-none print:!shadow-none print:!p-0 ${isReadOnly ? '' : 'cursor-text hover:bg-gray-100 transition-colors'} ${item.description ? 'text-gray-700' : 'text-gray-400 italic'}`} 
+            title={isReadOnly ? "" : "Klicken zum Bearbeiten"}
+          >
+            {item.description || (isReadOnly ? 'Keine Beschreibung vorhanden.' : 'Klicken, um eine Beschreibung oder Notizen hinzuzufügen...')}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
-// Exakte Zeilenzahl: 318
+// --- END OF FILE 318 Zeilen ---

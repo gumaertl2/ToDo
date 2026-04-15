@@ -1,3 +1,4 @@
+// 2026-04-15 17:30 - FEATURE: Sortierung und Drag&Drop-Speicherung für Vorlagen
 // src/features/Templates/TemplatesView.tsx
 import React, { useEffect, useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
@@ -39,6 +40,28 @@ export const TemplatesView: React.FC = () => {
     setExpandedIds(next);
   };
 
+  // CHIRURGISCHER EINGRIFF: Vorlagen sortieren nach Zeitstempel
+  const sortedTemplates = [...templates].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+
+  // CHIRURGISCHER EINGRIFF: Sortierfunktion
+  const handleMove = async (id: string, newIdx: number) => {
+    const oldIdx = sortedTemplates.findIndex(t => t.id === id);
+    if (oldIdx < 0 || oldIdx === newIdx) return;
+
+    const newArr = [...sortedTemplates];
+    const [movedItem] = newArr.splice(oldIdx, 1);
+    newArr.splice(newIdx, 0, movedItem);
+
+    const baseTime = Date.now();
+    const promises = newArr.map((item, idx) => {
+      const newCreatedAt = baseTime + (idx * 1000); // 1-Sekunden-Versatz garantiert die Reihenfolge in der Datenbank
+      return saveAgendaItem({ ...item, createdAt: newCreatedAt });
+    });
+    
+    await Promise.all(promises);
+    fetchTemplatesAndRoutines();
+  };
+
   return (
     <div className="h-full flex flex-col">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
@@ -59,18 +82,20 @@ export const TemplatesView: React.FC = () => {
           <div className="p-8 text-center text-gray-500 animate-pulse">Lade Daten...</div>
         ) : (
           <div className="flex-1 overflow-y-auto">
-            {templates.length === 0 && <div className="p-8 text-center text-gray-500">Noch keine Vorlagen vorhanden.</div>}
+            {sortedTemplates.length === 0 && <div className="p-8 text-center text-gray-500">Noch keine Vorlagen vorhanden.</div>}
             
-            {templates.length > 0 && (
+            {sortedTemplates.length > 0 && (
               <div className="border border-gray-200 rounded-lg overflow-x-auto bg-white shadow-sm">
-                {templates.map((t, index) => (
+                {/* CHIRURGISCHER EINGRIFF: Verwendung des sortierten Arrays und Übergabe von onMove */}
+                {sortedTemplates.map((t, index) => (
                   <AgendaItemRow 
                     key={t.id} 
                     item={t} 
                     index={index}
-                    totalItems={templates.length}
+                    totalItems={sortedTemplates.length}
                     isExpanded={expandedIds.has(t.id)}
                     onToggleExpand={toggleItemExpanded}
+                    onMove={handleMove}
                     onEdit={(item) => { setEditingItem(item); setIsItemModalOpen(true); }} 
                     onDelete={handleDelete} 
                     onSaveInline={async (updatedItem) => {
@@ -86,7 +111,6 @@ export const TemplatesView: React.FC = () => {
         )}
       </div>
 
-      {/* CHIRURGISCHER EINGRIFF: Conditional Rendering für restlose Amnesie */}
       {isItemModalOpen && (
         <ItemFormModal 
           key={editingItem ? editingItem.id : 'new'}
@@ -107,4 +131,4 @@ export const TemplatesView: React.FC = () => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 106
+// --- END OF FILE 131 Zeilen ---

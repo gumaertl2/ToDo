@@ -1,4 +1,4 @@
-// 2026-04-14 13:55 - FEATURE: Getrennte Zuweisungs-Felder (Intern/Extern) mit sofortiger Komplettliste
+// 2026-04-15 17:00 - FEATURE: Automatische Zuweisung des Einbringers (requestedBy)
 // src/features/Shared/ItemFormModal.tsx
 import React, { useState, useMemo } from 'react';
 import { useClubStore } from '../../store/useClubStore';
@@ -16,7 +16,8 @@ interface Props {
 }
 
 export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existingItem, isFixedType, isReadOnly = false, onDurationPreview }) => {
-  const { users, groups, helpers = [], events, saveAgendaItem } = useClubStore();
+  // CHIRURGISCHER EINGRIFF: user aus dem Store geladen
+  const { users, groups, helpers = [], events, saveAgendaItem, user } = useClubStore();
   
   const parentEvent = existingItem?.eventId ? events.find(e => e.id === existingItem.eventId) : null;
   const isProtocolMode = parentEvent?.status === 'AKTIV' || parentEvent?.status === 'ABGESCHLOSSEN';
@@ -25,7 +26,10 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
   const [type, setType] = useState<ItemType>(existingItem?.type || (isProtocolMode ? 'INFO' : 'VORLAGE'));
   const [title, setTitle] = useState(existingItem?.title || '');
   const [description, setDescription] = useState(existingItem?.description || '');
-  const [requestedBy, setRequestedBy] = useState(existingItem?.requestedBy || '');
+  
+  // CHIRURGISCHER EINGRIFF: Automatisches Ausfüllen des eigenen Namens bei neuen Items
+  const [requestedBy, setRequestedBy] = useState(existingItem?.requestedBy || (!existingItem?.id && user?.name ? user.name : ''));
+  
   const [durationEstimate, setDurationEstimate] = useState<number>(existingItem?.durationEstimate || 15);
   
   const [mustBeDoneBeforeEvent, setMustBeDoneBeforeEvent] = useState(existingItem?.mustBeDoneBeforeEvent || false);
@@ -63,7 +67,6 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
 
   const [showAdvanced, setShowAdvanced] = useState(false);
   
-  // CHIRURGISCHER EINGRIFF: Getrennte Such-States für Intern und Extern
   const [internalSearchTerm, setInternalSearchTerm] = useState('');
   const [isInternalFocused, setIsInternalFocused] = useState(false);
 
@@ -72,7 +75,6 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
 
   const todayStr = new Date().toISOString().substring(0, 10);
 
-  // CHIRURGISCHER EINGRIFF: Gefilterte Liste für App-Nutzer und Rollen (Intern)
   const filteredInternal = useMemo(() => {
     const term = internalSearchTerm.toLowerCase();
     const res: { id: string; type: 'group'|'user'; label: string; sub: string }[] = [];
@@ -92,7 +94,6 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
     return res;
   }, [internalSearchTerm, groups, users, assigneeGroupIds, assigneeUserIds]);
 
-  // CHIRURGISCHER EINGRIFF: Gefilterte Liste für Helfer (Extern)
   const filteredExternal = useMemo(() => {
     const term = externalSearchTerm.toLowerCase();
     const res: { id: string; type: 'helper'; label: string; sub: string }[] = [];
@@ -246,7 +247,6 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
             </div>
           </div>
 
-          {/* CHIRURGISCHER EINGRIFF: Box 1 (App-Nutzer & Rollen) */}
           <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100">
             <label className="block text-xs font-bold text-blue-800 mb-2">Zuständige App-Nutzer & Rollen</label>
             
@@ -316,7 +316,6 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
             )}
           </div>
 
-          {/* CHIRURGISCHER EINGRIFF: Box 2 (Externe Helfer) */}
           <div className="bg-teal-50/50 p-4 rounded-lg border border-teal-100">
             <label className="block text-xs font-bold text-teal-800 mb-2">Zuständige Helfer (Extern)</label>
             
@@ -564,4 +563,4 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
     </div>
   );
 };
-// --- END OF FILE 423 Zeilen ---
+// --- END OF FILE 425 Zeilen ---
