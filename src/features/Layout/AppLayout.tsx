@@ -1,8 +1,8 @@
-// 2026-04-15 18:45 - FEATURE: Menü nach Priorität/Nutzungshäufigkeit gruppiert und für Mobile optimiert
+// 2026-04-15 19:00 - FEATURE: Mobile Bottom-Sheet ("Mehr"-Menü) für aufgeräumte Fußleiste implementiert
 // src/features/Layout/AppLayout.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { Users, Calendar, ClipboardList, CheckSquare, LogOut, LayoutDashboard, BookOpen, CalendarDays, Pin, PinOff, MessageCircle, BarChart2 } from 'lucide-react';
+import { Users, Calendar, ClipboardList, CheckSquare, LogOut, LayoutDashboard, BookOpen, CalendarDays, Pin, PinOff, MessageCircle, BarChart2, Menu, X } from 'lucide-react';
 import { useClubStore } from '../../store/useClubStore';
 
 export const AppLayout: React.FC = () => {
@@ -14,6 +14,9 @@ export const AppLayout: React.FC = () => {
   });
   const [isHovered, setIsHovered] = useState(false);
   const [sidebarTouchStart, setSidebarTouchStart] = useState<number | null>(null);
+  
+  // CHIRURGISCHER EINGRIFF: State für das mobile Overlay-Menü
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('papatodo_sidebar_pinned', String(isPinned));
@@ -101,7 +104,7 @@ export const AppLayout: React.FC = () => {
     }
   }, [pendingRemindersCount]);
 
-  // CHIRURGISCHER EINGRIFF: Menü in primäre und sekundäre Gruppen aufgeteilt
+  // CHIRURGISCHER EINGRIFF: Aufteilung in Primär- und Setup-Menü
   const mainNavItems = [
     { to: '/calendar', icon: CalendarDays, label: 'Vereinskalender' },
     { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -170,6 +173,7 @@ export const AppLayout: React.FC = () => {
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-gray-100 flex-col lg:flex-row print:!h-auto print:!bg-white print:!block">
       
+      {/* DESKTOP SIDEBAR */}
       <aside 
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -194,10 +198,8 @@ export const AppLayout: React.FC = () => {
         </div>
         
         <nav className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-1 custom-scrollbar">
-          {/* Hauptmenü */}
           {mainNavItems.map(renderDesktopNavItem)}
           
-          {/* CHIRURGISCHER EINGRIFF: Visuelle Trennung für Setup-Elemente */}
           <div className="mt-6 mb-2">
             {isExpanded ? (
               <div className="px-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Setup & Info</div>
@@ -206,7 +208,6 @@ export const AppLayout: React.FC = () => {
             )}
           </div>
           
-          {/* Setup-Menü */}
           {setupNavItems.map(renderDesktopNavItem)}
         </nav>
         
@@ -224,18 +225,60 @@ export const AppLayout: React.FC = () => {
         </div>
       </aside>
 
+      {/* HAUPTINHALT */}
       <main className="flex-1 overflow-y-auto min-h-0 p-4 lg:p-8 lg:pb-8 pb-6 print:!overflow-visible print:!p-0 print:!w-full print:!block print:!m-0">
         <Outlet />
       </main>
 
-      {/* CHIRURGISCHER EINGRIFF: Mobile Navigation mit horizontalem Scroll (flex-nowrap, gap-2) */}
-      <nav className="lg:hidden shrink-0 w-full bg-white border-t border-gray-200 flex flex-nowrap items-center px-2 py-2 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-50 print:!hidden overflow-x-auto gap-2 custom-scrollbar">
-        {[...mainNavItems, ...setupNavItems].map((item) => (
+      {/* CHIRURGISCHER EINGRIFF: Mobile Overlay (Bottom Sheet) */}
+      {isMobileMenuOpen && (
+        <div className="lg:hidden fixed inset-0 z-[60] flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/50 transition-opacity" onClick={() => setIsMobileMenuOpen(false)}></div>
+          <div className="bg-white rounded-t-3xl w-full p-5 relative animate-in slide-in-from-bottom-full duration-300 shadow-2xl">
+            <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
+              <h2 className="text-xl font-bold text-gray-800">Mehr Funktionen</h2>
+              <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="space-y-1 mb-6">
+              {[mainNavItems[4], ...setupNavItems].map(item => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={({ isActive }) =>
+                    `flex items-center p-3.5 rounded-xl transition-colors ${
+                      isActive ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-700 hover:bg-gray-50 font-medium'
+                    }`
+                  }
+                >
+                  <item.icon className="w-5 h-5 mr-4" />
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+            
+            <button
+              onClick={() => { setIsMobileMenuOpen(false); logout(); }}
+              className="flex items-center w-full p-4 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-colors font-bold justify-center"
+            >
+              <LogOut className="w-5 h-5 mr-2" />
+              Abmelden
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* CHIRURGISCHER EINGRIFF: Mobile Bottom Navigation (Nur Top 4 + "Mehr") */}
+      <nav className="lg:hidden shrink-0 w-full bg-white border-t border-gray-200 flex justify-around items-center px-1 py-2 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-50 print:!hidden">
+        {mainNavItems.slice(0, 4).map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             className={({ isActive }) =>
-              `flex items-center justify-center p-2.5 rounded-xl transition-colors shrink-0 ${
+              `flex items-center justify-center p-3 rounded-xl transition-colors shrink-0 ${
                 isActive ? 'text-blue-600 bg-blue-50' : 'text-gray-500 hover:bg-gray-50'
               }`
             }
@@ -253,16 +296,20 @@ export const AppLayout: React.FC = () => {
             )}
           </NavLink>
         ))}
-        <div className="w-px h-8 bg-gray-200 shrink-0 mx-1"></div>
+        
+        {/* Der "Mehr"-Button */}
         <button
-          onClick={() => logout()}
-          className="flex items-center justify-center p-2.5 text-red-500 hover:bg-red-50 rounded-xl transition-colors shrink-0"
-          title="Abmelden"
+          onClick={() => setIsMobileMenuOpen(true)}
+          className={`flex items-center justify-center p-3 rounded-xl transition-colors shrink-0 ${
+            isMobileMenuOpen ? 'text-blue-600 bg-blue-50' : 'text-gray-500 hover:bg-gray-50'
+          }`}
+          title="Mehr Funktionen"
         >
-          <LogOut className="w-6 h-6" strokeWidth={2} />
+          <Menu className="w-6 h-6" strokeWidth={isMobileMenuOpen ? 2.5 : 2} />
         </button>
       </nav>
+
     </div>
   );
 };
-// --- END OF FILE ---
+// --- END OF FILE 298 Zeilen ---
