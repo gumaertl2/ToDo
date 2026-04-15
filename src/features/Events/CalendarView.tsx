@@ -1,4 +1,4 @@
-// 2026-04-15 20:45 - FEATURE: Echte Spielplan-Filterung integriert
+// 2026-04-15 21:10 - FEATURE: Aufgeräumte Filter-Leiste (Links Abos, Rechts Interne Optionen)
 // src/features/Events/CalendarView.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
@@ -49,7 +49,6 @@ const getContrastYIQ = (hexcolor?: string) => {
   return (yiq >= 128) ? '#1f2937' : 'white'; 
 };
 
-// CHIRURGISCHER EINGRIFF: showInMatchPlan dem Adapter hinzugefügt
 interface AdaptedEvent extends RBCEvent {
   id: string; sourceId: string; sourceEvent?: CalendarEvent; rawSitzung?: Event; color?: string; description?: string; location?: string; seriesId?: string; showInMatchPlan?: boolean;
 }
@@ -147,7 +146,7 @@ export const CalendarView: React.FC = () => {
       description: ev.description || '', location: ev.location || '',
       start: new Date(ev.plannedStartTime!), end: ev.plannedEndTime ? new Date(ev.plannedEndTime) : new Date(ev.plannedStartTime! + (1000 * 60 * 60 * 2)), 
       allDay: false, rawSitzung: ev, color: '#8b5cf6',
-      showInMatchPlan: false // Sitzungen niemals im Spielplan
+      showInMatchPlan: false
     }));
 
     const cachedExternalEvents = calendarSubscriptions.filter(sub => sub.isActive && sub.cachedEvents).flatMap(sub => 
@@ -165,7 +164,6 @@ export const CalendarView: React.FC = () => {
     const isListView = ['termine', 'dienste', 'agenda'].includes(currentView);
 
     return rbcEvents.filter(ev => {
-      // CHIRURGISCHER EINGRIFF: Spielplan-Filter anwenden
       if (currentView === 'agenda' && !ev.showInMatchPlan) {
         return false;
       }
@@ -403,26 +401,46 @@ export const CalendarView: React.FC = () => {
     </>
   );
 
+  // CHIRURGISCHER EINGRIFF: Neues, aufgeräumtes Layout für die Filterleiste
   const renderFilters = () => (
-    <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-x-4 gap-y-3 p-3 bg-gray-50 lg:bg-white rounded-xl lg:border border-gray-200 lg:shadow-sm">
-      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider w-full sm:w-auto">Ansicht:</span>
-      <label className="flex items-center space-x-2 text-sm cursor-pointer"><input type="checkbox" checked={activeFilters.includes('manual')} onChange={() => toggleFilter('manual')} className="rounded w-4 h-4 text-blue-600 focus:ring-blue-500"/><span className="font-bold text-gray-700">Termine & Sitzungen</span></label>
-      <label className="flex items-center space-x-2 text-sm cursor-pointer"><input type="checkbox" checked={activeFilters.includes('dienste')} onChange={() => toggleFilter('dienste')} className="rounded w-4 h-4 text-orange-600 focus:ring-orange-500"/><span className="font-bold text-orange-600">Dienste</span></label>
-      {calendarSubscriptions.filter(s => s.isActive).map(sub => (<label key={sub.id} className="flex items-center space-x-2 text-sm cursor-pointer"><input type="checkbox" checked={activeFilters.includes(sub.id)} onChange={() => toggleFilter(sub.id)} className="rounded w-4 h-4 focus:ring-blue-500" style={{ accentColor: sub.color || '#10b981' }}/><span className="font-bold" style={{ color: sub.color || '#10b981' }}>{sub.name}</span></label>))}
+    <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-y-3 p-3 bg-gray-50 lg:bg-white rounded-xl lg:border border-gray-200 lg:shadow-sm">
       
-      <div className="hidden sm:block flex-1 min-w-[10px]"></div>
+      {/* LINKE SEITE: Kalender-Abos */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider w-full sm:w-auto">Kalender-Abos:</span>
+        {calendarSubscriptions.filter(s => s.isActive).length === 0 && <span className="text-sm text-gray-500 italic">Keine aktiv</span>}
+        {calendarSubscriptions.filter(s => s.isActive).map(sub => (
+          <label key={sub.id} className="flex items-center space-x-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={activeFilters.includes(sub.id)} onChange={() => toggleFilter(sub.id)} className="rounded w-4 h-4 focus:ring-blue-500" style={{ accentColor: sub.color || '#10b981' }}/>
+            <span className="font-bold" style={{ color: sub.color || '#10b981' }}>{sub.name}</span>
+          </label>
+        ))}
+      </div>
       
-      <label className="flex items-center space-x-2 text-sm cursor-pointer sm:border-l border-gray-200 sm:pl-4 mt-2 sm:mt-0 w-full sm:w-auto">
-        <input type="checkbox" checked={showPastEvents} onChange={(e) => setShowPastEvents(e.target.checked)} className="rounded w-4 h-4 text-purple-600 focus:ring-purple-500"/>
-        <span className="text-gray-600 font-bold">Historie einblenden</span>
-      </label>
-
-      {['agenda', 'termine', 'dienste'].includes(currentView) && (
-        <label className="flex items-center space-x-2 text-sm cursor-pointer sm:border-l border-gray-200 sm:pl-4 mt-2 sm:mt-0 w-full sm:w-auto">
-          <input type="checkbox" checked={hideEmptyDays} onChange={(e) => setHideEmptyDays(e.target.checked)} className="rounded w-4 h-4 text-gray-600 focus:ring-gray-500"/>
-          <span className="text-gray-600 font-bold">Leere Tage ausblenden</span>
+      {/* RECHTE SEITE: Interne Filter & Anzeige-Optionen */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 xl:border-l border-gray-200 xl:pl-4 w-full xl:w-auto pt-2 xl:pt-0 border-t xl:border-t-0 border-gray-100">
+        <label className="flex items-center space-x-2 text-sm cursor-pointer">
+          <input type="checkbox" checked={activeFilters.includes('manual')} onChange={() => toggleFilter('manual')} className="rounded w-4 h-4 text-blue-600 focus:ring-blue-500"/>
+          <span className="font-bold text-gray-700">Termine</span>
         </label>
-      )}
+        <label className="flex items-center space-x-2 text-sm cursor-pointer">
+          <input type="checkbox" checked={activeFilters.includes('dienste')} onChange={() => toggleFilter('dienste')} className="rounded w-4 h-4 text-orange-600 focus:ring-orange-500"/>
+          <span className="font-bold text-orange-600">Dienste</span>
+        </label>
+        
+        {['agenda', 'termine', 'dienste'].includes(currentView) && (
+          <label className="flex items-center space-x-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={hideEmptyDays} onChange={(e) => setHideEmptyDays(e.target.checked)} className="rounded w-4 h-4 text-gray-600 focus:ring-gray-500"/>
+            <span className="text-gray-600 font-bold">Leere Tage</span>
+          </label>
+        )}
+        
+        <label className="flex items-center space-x-2 text-sm cursor-pointer">
+          <input type="checkbox" checked={showPastEvents} onChange={(e) => setShowPastEvents(e.target.checked)} className="rounded w-4 h-4 text-purple-600 focus:ring-purple-500"/>
+          <span className="text-gray-600 font-bold">Historie</span>
+        </label>
+      </div>
+      
     </div>
   );
 
