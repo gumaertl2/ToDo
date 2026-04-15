@@ -1,9 +1,9 @@
-// 2026-04-14 19:30 - FIX: TypeScript-Fehler bei Lucide-Icon title-Prop behoben
+// 2026-04-15 20:45 - FEATURE: Schalter für Spielplan/Wettkampfkalender-Abo
 // src/features/Events/CalendarSubscriptionModal.tsx
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import type { CalendarSubscription, CachedIcsEvent } from '../../core/types/models';
-import { X, Save, AlertCircle, Trash2, Link as LinkIcon, Edit2, RefreshCw, ChevronUp, ChevronDown, MessageCircle } from 'lucide-react';
+import { X, Save, AlertCircle, Trash2, Link as LinkIcon, Edit2, RefreshCw, ChevronUp, ChevronDown, MessageCircle, List as ListIcon } from 'lucide-react';
 import ICAL from 'ical.js';
 
 interface Props {
@@ -22,6 +22,10 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
   const [fileName, setFileName] = useState<string>('');
 
   const [color, setColor] = useState('#10b981');
+  
+  // CHIRURGISCHER EINGRIFF: State für das Spielplan-Flag
+  const [showInMatchPlan, setShowInMatchPlan] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
@@ -100,6 +104,7 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
       name: name.trim(),
       url: importType === 'file' ? 'FILE_IMPORT' : url.trim(),
       color,
+      showInMatchPlan,
       reminderSenderUserId: reminderSenderUserId || undefined,
       reminderLeadDays: reminderSenderUserId ? parseInt(reminderLeadDays, 10) : undefined,
       reminderCustomText: reminderSenderUserId ? reminderCustomText.trim() : undefined,
@@ -188,6 +193,7 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
       setFileName('');
     }
     setColor(sub.color || '#10b981');
+    setShowInMatchPlan(sub.showInMatchPlan || false);
     setReminderSenderUserId(sub.reminderSenderUserId || '');
     setReminderLeadDays(sub.reminderLeadDays?.toString() || '1');
     setReminderCustomText(sub.reminderCustomText || '');
@@ -201,6 +207,7 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
     setParsedEvents(null);
     setFileName('');
     setColor('#10b981');
+    setShowInMatchPlan(false);
     setReminderSenderUserId('');
     setReminderLeadDays('1');
     setReminderCustomText('');
@@ -328,6 +335,15 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
                 )}
               </div>
 
+              {/* CHIRURGISCHER EINGRIFF: Checkbox für Spielplan */}
+              <div className="md:col-span-12 mt-2 flex items-center mb-2">
+                <input type="checkbox" id="showInMatchPlan" checked={showInMatchPlan} onChange={(e) => setShowInMatchPlan(e.target.checked)} className="mr-2 rounded text-green-600 focus:ring-green-500" disabled={isSaving} />
+                <label htmlFor="showInMatchPlan" className="text-sm text-gray-700 font-bold flex items-center cursor-pointer">
+                  <ListIcon className="w-4 h-4 mr-2 text-gray-500" />
+                  Als Spielplan / Wettkampfkalender behandeln
+                </label>
+              </div>
+
               <div className="md:col-span-1 mt-2">
                 <label className="block text-xs font-medium text-gray-600 mb-1">Farbe</label>
                 <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-full h-8 p-0 border border-gray-300 rounded cursor-pointer" />
@@ -357,7 +373,11 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
                     <div className="font-bold text-gray-900 text-sm flex items-center">
                       {sub.name} 
                       {sub.url === 'FILE_IMPORT' && <span className="ml-2 text-[9px] uppercase tracking-wider bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded border border-gray-200">Datei</span>}
-                      {/* CHIRURGISCHER EINGRIFF: Icon in <span> eingewickelt, um TS Fehler zu beheben */}
+                      {sub.showInMatchPlan && (
+                        <span title="Im Spielplan sichtbar" className="ml-2 flex items-center bg-blue-50 text-blue-700 text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-blue-100">
+                          Spielplan
+                        </span>
+                      )}
                       {sub.reminderSenderUserId && (
                         <span title="Erinnerung aktiv" className="ml-2 flex items-center">
                           <MessageCircle className="w-3.5 h-3.5 text-green-500" />
@@ -394,4 +414,4 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
     </div>
   );
 };
-// --- END OF FILE 375 Zeilen ---
+// --- END OF FILE ---

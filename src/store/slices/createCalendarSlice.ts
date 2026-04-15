@@ -1,9 +1,10 @@
+// 2026-04-15 19:40 - FEATURE: Echtzeit-Sync (onSnapshot) für Kalender & Abos implementiert
 // src/store/slices/createCalendarSlice.ts
 import type { StateCreator } from 'zustand';
 import type { CalendarEvent, CalendarSubscription, CachedIcsEvent } from '../../core/types/models';
 import { DataProcessor } from '../../services/DataProcessor';
 import type { Result } from '../../core/types/shared';
-import { collection, getDocs, doc, deleteDoc, writeBatch } from 'firebase/firestore'; // CHIRURGISCHER EINGRIFF: writeBatch für Bulk
+import { collection, onSnapshot, doc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import ICAL from 'ical.js';
 
@@ -11,12 +12,14 @@ export interface CalendarSlice {
   calendarEvents: CalendarEvent[];
   calendarSubscriptions: CalendarSubscription[];
   isCalendarLoading: boolean;
+  unsubCalendarEvents: (() => void) | null;
+  unsubCalendarSubs: (() => void) | null;
   fetchCalendarData: () => Promise<void>;
   addCalendarEvent: (event: CalendarEvent) => Promise<Result<void>>;
-  addCalendarEventsBulk: (events: CalendarEvent[]) => Promise<Result<void>>; // NEU
+  addCalendarEventsBulk: (events: CalendarEvent[]) => Promise<Result<void>>;
   updateCalendarEvent: (event: CalendarEvent) => Promise<Result<void>>;
   deleteCalendarEvent: (id: string) => Promise<Result<void>>;
-  deleteCalendarSeries: (seriesId: string) => Promise<Result<void>>; // NEU
+  deleteCalendarSeries: (seriesId: string) => Promise<Result<void>>;
   addCalendarSubscription: (sub: CalendarSubscription) => Promise<Result<void>>;
   updateCalendarSubscription: (sub: CalendarSubscription) => Promise<Result<void>>;
   updateCalendarSubscriptionOrder: (subs: CalendarSubscription[]) => Promise<Result<void>>;
@@ -28,128 +31,85 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
   calendarEvents: [],
   calendarSubscriptions: [],
   isCalendarLoading: false,
+  unsubCalendarEvents: null,
+  unsubCalendarSubs: null,
 
   fetchCalendarData: async () => {
+    if (get().unsubCalendarEvents) get().unsubCalendarEvents!();
+    if (get().unsubCalendarSubs) get().unsubCalendarSubs!();
+    
     set({ isCalendarLoading: true });
-    try {
-      const eventsSnap = await getDocs(collection(db, 'calendar_events'));
+    
+    const eSub = onSnapshot(collection(db, 'calendar_events'), (snap) => {
       const events: CalendarEvent[] = [];
-      eventsSnap.forEach((d) => events.push({ ...d.data(), id: d.id } as CalendarEvent));
+      snap.forEach((d) => events.push({ ...d.data(), id: d.id } as CalendarEvent));
+      set({ calendarEvents: events });
+    });
 
-      const subsSnap = await getDocs(collection(db, 'calendar_subscriptions'));
+    const sSub = onSnapshot(collection(db, 'calendar_subscriptions'), (snap) => {
       const subs: CalendarSubscription[] = [];
-      subsSnap.forEach((d) => subs.push({ ...d.data(), id: d.id } as CalendarSubscription));
+      snap.forEach((d) => subs.push({ ...d.data(), id: d.id } as CalendarSubscription));
+      set({ calendarSubscriptions: subs.sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999)), isCalendarLoading: false });
+    });
 
-      const sortedSubs = subs.sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
-      set({ calendarEvents: events, calendarSubscriptions: sortedSubs, isCalendarLoading: false });
-    } catch (e) {
-      set({ isCalendarLoading: false });
-    }
+    set({ unsubCalendarEvents: eSub, unsubCalendarSubs: sSub });
   },
 
-  addCalendarEvent: async (event) => {
-    const result = await DataProcessor.saveDocument<CalendarEvent>('calendar_events', event.id, event);
-    if (result.success) set((state) => ({ calendarEvents: [...state.calendarEvents, event] }));
-    return result;
-  },
+  addCalendarEvent: async (event) => await DataProcessor.saveDocument<CalendarEvent>('calendar_events', event.id, event),
 
-  // CHIRURGISCHER EINGRIFF: Viele Termine gleichzeitig speichern
   addCalendarEventsBulk: async (events) => {
     try {
       const batch = writeBatch(db);
-      events.forEach(event => {
-        const ref = doc(db, 'calendar_events', event.id);
-        batch.set(ref, event);
-      });
+      events.forEach(event => batch.set(doc(db, 'calendar_events', event.id), event));
       await batch.commit();
-      set((state) => ({ calendarEvents: [...state.calendarEvents, ...events] }));
       return { success: true, data: undefined };
-    } catch (e) {
-      return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
-    }
+    } catch (e) { return { success: false, error: e as Error }; }
   },
 
-  updateCalendarEvent: async (event) => {
-    const result = await DataProcessor.saveDocument<CalendarEvent>('calendar_events', event.id, event);
-    if (result.success) set((state) => ({ calendarEvents: state.calendarEvents.map(e => e.id === event.id ? event : e) }));
-    return result;
-  },
+  updateCalendarEvent: async (event) => await DataProcessor.saveDocument<CalendarEvent>('calendar_events', event.id, event),
 
   deleteCalendarEvent: async (id) => {
     try {
       await deleteDoc(doc(db, 'calendar_events', id));
-      set((state) => ({ calendarEvents: state.calendarEvents.filter(e => e.id !== id) }));
       return { success: true, data: undefined };
-    } catch (e) {
-      return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
-    }
+    } catch (e) { return { success: false, error: e as Error }; }
   },
 
-  // CHIRURGISCHER EINGRIFF: Eine ganze Serie anhand der ID löschen
   deleteCalendarSeries: async (seriesId) => {
-    const state = get();
-    const toDelete = state.calendarEvents.filter(e => e.seriesId === seriesId);
+    const toDelete = get().calendarEvents.filter(e => e.seriesId === seriesId);
     try {
       const batch = writeBatch(db);
-      toDelete.forEach(event => {
-        batch.delete(doc(db, 'calendar_events', event.id));
-      });
+      toDelete.forEach(event => batch.delete(doc(db, 'calendar_events', event.id)));
       await batch.commit();
-      set((state) => ({ calendarEvents: state.calendarEvents.filter(e => e.seriesId !== seriesId) }));
       return { success: true, data: undefined };
-    } catch (e) {
-      return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
-    }
+    } catch (e) { return { success: false, error: e as Error }; }
   },
 
   addCalendarSubscription: async (sub) => {
-    const currentSubs = get().calendarSubscriptions;
-    const maxOrder = currentSubs.reduce((max, s) => Math.max(max, s.sortOrder ?? 0), 0);
-    const subWithOrder = { ...sub, sortOrder: maxOrder + 1 };
-    const result = await DataProcessor.saveDocument<CalendarSubscription>('calendar_subscriptions', subWithOrder.id, subWithOrder);
-    if (result.success) set((state) => ({ calendarSubscriptions: [...state.calendarSubscriptions, subWithOrder] }));
-    return result;
+    const maxOrder = get().calendarSubscriptions.reduce((max, s) => Math.max(max, s.sortOrder ?? 0), 0);
+    return await DataProcessor.saveDocument<CalendarSubscription>('calendar_subscriptions', sub.id, { ...sub, sortOrder: maxOrder + 1 });
   },
 
-  updateCalendarSubscription: async (sub) => {
-    const result = await DataProcessor.saveDocument<CalendarSubscription>('calendar_subscriptions', sub.id, sub);
-    if (result.success) {
-      set((state) => {
-        const newSubs = state.calendarSubscriptions.map(s => s.id === sub.id ? sub : s);
-        return { calendarSubscriptions: newSubs.sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999)) };
-      });
-    }
-    return result;
-  },
+  updateCalendarSubscription: async (sub) => await DataProcessor.saveDocument<CalendarSubscription>('calendar_subscriptions', sub.id, sub),
 
   updateCalendarSubscriptionOrder: async (subs) => {
     try {
       const batch = writeBatch(db);
-      subs.forEach((sub, index) => {
-        const subWithOrder = { ...sub, sortOrder: index };
-        batch.set(doc(db, 'calendar_subscriptions', sub.id), subWithOrder);
-      });
+      subs.forEach((sub, index) => batch.set(doc(db, 'calendar_subscriptions', sub.id), { ...sub, sortOrder: index }));
       await batch.commit();
-      set({ calendarSubscriptions: subs.map((s, i) => ({ ...s, sortOrder: i })) });
       return { success: true, data: undefined };
-    } catch (e) {
-      return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
-    }
+    } catch (e) { return { success: false, error: e as Error }; }
   },
 
   deleteCalendarSubscription: async (id) => {
     try {
       await deleteDoc(doc(db, 'calendar_subscriptions', id));
-      set((state) => ({ calendarSubscriptions: state.calendarSubscriptions.filter(s => s.id !== id) }));
       return { success: true, data: undefined };
-    } catch (e) {
-      return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
-    }
+    } catch (e) { return { success: false, error: e as Error }; }
   },
 
   syncSubscription: async (id) => {
-    const state = get();
-    const sub = state.calendarSubscriptions.find(s => s.id === id);
+    const sub = get().calendarSubscriptions.find(s => s.id === id);
     if (!sub) return { success: false, error: new Error('Abo nicht gefunden') };
     try {
       let feedUrl = sub.url.trim();
@@ -166,6 +126,7 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
         } catch (e) { console.warn(`Proxy fail`); }
       }
       if (!textData) return { success: false, error: new Error('Download fehlgeschlagen') };
+      
       const jcalData = ICAL.parse(textData);
       const comp = new ICAL.Component(jcalData);
       const vevents = comp.getAllSubcomponents('vevent');
@@ -179,11 +140,9 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
         if (event.endDate) { const e = event.endDate; endDate = new Date(e.year, e.month - 1, e.day, e.hour, e.minute).getTime(); }
         cachedEvents.push({ uid: event.uid, title: event.summary || 'Ohne Titel', description: event.description || '', location: event.location || '', startTime: startDate, endTime: endDate, isAllDay: s.isDate });
       });
-      const updatedSub: CalendarSubscription = { ...sub, cachedEvents, lastSyncedAt: Date.now() };
-      const result = await DataProcessor.saveDocument<CalendarSubscription>('calendar_subscriptions', sub.id, updatedSub);
-      if (result.success) set((state) => ({ calendarSubscriptions: state.calendarSubscriptions.map(s => s.id === sub.id ? updatedSub : s) }));
-      return result;
-    } catch (error) { return { success: false, error: error instanceof Error ? error : new Error(String(error)) }; }
+      
+      return await DataProcessor.saveDocument<CalendarSubscription>('calendar_subscriptions', sub.id, { ...sub, cachedEvents, lastSyncedAt: Date.now() });
+    } catch (error) { return { success: false, error: error as Error }; }
   }
 });
-// Exakte Zeilenzahl: 161
+// --- END OF FILE ---

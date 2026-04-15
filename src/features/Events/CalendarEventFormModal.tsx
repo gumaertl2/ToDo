@@ -1,9 +1,9 @@
-// 2026-04-13 22:20 - FIX: Vercel Build Errors (Type Conversion)
+// 2026-04-15 20:45 - FEATURE: Schalter für Spielplan-Sichtbarkeit für manuelle Termine
 // src/features/Events/CalendarEventFormModal.tsx
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import type { CalendarEvent } from '../../core/types/models';
-import { X, Save, AlertCircle, Globe, Trash2, Layers, Info, Plus, MessageCircle } from 'lucide-react';
+import { X, Save, AlertCircle, Globe, Trash2, Layers, Info, Plus, MessageCircle, List as ListIcon } from 'lucide-react';
 
 interface Props {
   onClose: () => void;
@@ -28,7 +28,10 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
   const [endTime, setEndTime] = useState(existingEvent ? fTime(initEnd) : '20:00');
   const [isAllDay, setIsAllDay] = useState(existingEvent?.isAllDay || false);
   const [color, setColor] = useState(existingEvent?.color || '#3b82f6');
+  
   const [isPublic, setIsPublic] = useState(existingEvent?.isPublic ?? true);
+  // CHIRURGISCHER EINGRIFF: Neuer State für Spielplan
+  const [showInMatchPlan, setShowInMatchPlan] = useState(existingEvent?.showInMatchPlan || false);
   
   const [reminderSenderUserId, setReminderSenderUserId] = useState(existingEvent?.reminderSenderUserId || '');
   const [reminderLeadDays, setReminderLeadDays] = useState(existingEvent?.reminderLeadDays?.toString() || '7');
@@ -80,6 +83,7 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
       isAllDay,
       color,
       isPublic,
+      showInMatchPlan,
       eventType: 'TERMIN',
       reminderSenderUserId: reminderSenderUserId || undefined,
       reminderLeadDays: reminderSenderUserId ? parseInt(reminderLeadDays, 10) : undefined,
@@ -91,7 +95,6 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
       rawEventData.seriesId = existingEvent.seriesId;
     }
 
-    // CHIRURGISCHER EINGRIFF: as unknown as hinzugefügt, um TS2352 zu beheben
     const safeEventData = Object.fromEntries(Object.entries(rawEventData).filter(([_, v]) => v !== undefined)) as unknown as CalendarEvent;
 
     const result = existingEvent 
@@ -266,8 +269,14 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
               <label className="block text-sm font-medium text-gray-700 mb-1">Sichtbarkeit</label>
               <div className="flex items-center mt-2">
                 <input type="checkbox" id="isPublic" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} className="mr-2 rounded text-blue-600 focus:ring-blue-500" disabled={isSaving} />
-                <label htmlFor="isPublic" className="text-sm text-gray-600 flex items-center">
+                <label htmlFor="isPublic" className="text-sm text-gray-600 flex items-center cursor-pointer">
                   <Globe className="w-3 h-3 mr-1" /> Auf Homepage zeigen
+                </label>
+              </div>
+              <div className="flex items-center mt-2">
+                <input type="checkbox" id="showInMatchPlan" checked={showInMatchPlan} onChange={(e) => setShowInMatchPlan(e.target.checked)} className="mr-2 rounded text-blue-600 focus:ring-blue-500" disabled={isSaving} />
+                <label htmlFor="showInMatchPlan" className="text-sm text-gray-600 flex items-center cursor-pointer">
+                  <ListIcon className="w-3 h-3 mr-1" /> Im Spielplan zeigen
                 </label>
               </div>
             </div>
@@ -308,4 +317,4 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
     </div>
   );
 };
-// --- END OF FILE 300 Zeilen ---
+// --- END OF FILE ---

@@ -1,7 +1,7 @@
-// 2026-04-14 13:30 - FIX: Route für RemindersView hinzugefügt
+// 2026-04-15 19:15 - FEATURE: Kalender als neue Standard-Startseite gesetzt
 // src/App.tsx
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthGuard } from './features/Auth/AuthGuard';
 import { LoginView } from './features/Auth/LoginView';
 import { AppLayout } from './features/Layout/AppLayout';
@@ -16,8 +16,8 @@ import { TasksView } from './features/Tasks/TasksView';
 import { TemplatesView } from './features/Templates/TemplatesView';
 import { UsersView } from './features/Users/UsersView';
 import { HelpView } from './features/Help/HelpView';
-// CHIRURGISCHER EINGRIFF: Import der neuen Ansicht
 import { RemindersView } from './features/Reminders/RemindersView';
+import { ReportsView } from './features/Reports/ReportsView';
 
 export default function App() {
   const { initializeAuth } = useClubStore();
@@ -41,14 +41,16 @@ export default function App() {
             </AuthGuard>
           }
         >
-          <Route index element={<DashboardView />} />
+          {/* CHIRURGISCHER EINGRIFF: Umleitung auf Kalender als Default */}
+          <Route index element={<Navigate to="/calendar" replace />} />
+          <Route path="dashboard" element={<DashboardView />} />
           <Route path="calendar" element={<CalendarView />} /> 
           <Route path="users" element={<UsersView />} />
           <Route path="events" element={<EventsView />} />
           <Route path="events/:eventId" element={<EventDetailView />} />
           <Route path="templates" element={<TemplatesView />} />
           <Route path="todos" element={<TasksView />} />
-          {/* CHIRURGISCHER EINGRIFF: Neue Route */}
+          <Route path="reports" element={<ReportsView />} />
           <Route path="reminders" element={<RemindersView />} />
           <Route path="help" element={<HelpView />} />
         </Route>
@@ -56,4 +58,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
-// Exakte Zeilenzahl: 59
+// --- END OF FILE ---

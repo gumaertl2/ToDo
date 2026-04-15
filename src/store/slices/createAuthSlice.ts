@@ -1,3 +1,4 @@
+// 2026-04-15 19:50 - FIX: Typisierungsfehler (TS2353) beim globalen Store-Reset behoben
 // src/store/slices/createAuthSlice.ts
 import type { StateCreator } from 'zustand';
 import type { User } from '../../core/types/models';
@@ -17,7 +18,7 @@ export interface AuthSlice {
   resetPassword: (email: string) => Promise<Result<void>>;
 }
 
-export const createAuthSlice: StateCreator<AuthSlice, [], [], AuthSlice> = (set) => ({
+export const createAuthSlice: StateCreator<AuthSlice, [], [], AuthSlice> = (set, get) => ({
   user: null,
   isAuthenticated: false,
   isAuthLoading: true,
@@ -33,10 +34,8 @@ export const createAuthSlice: StateCreator<AuthSlice, [], [], AuthSlice> = (set)
           let userData: User | null = null;
 
           if (!querySnapshot.empty) {
-            // Akte über E-Mail gefunden (vom Admin vorher angelegt)
             userData = querySnapshot.docs[0].data() as User;
           } else {
-            // Fallback: Versuch es über die UID (für den allerersten Admin-Account)
             const docRef = doc(db, 'users', firebaseUser.uid);
             const docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
@@ -65,7 +64,6 @@ export const createAuthSlice: StateCreator<AuthSlice, [], [], AuthSlice> = (set)
   login: async (email, pass) => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, pass);
-      
       const normalizedEmail = userCredential.user.email?.toLowerCase().trim() || email.toLowerCase().trim();
       const q = query(collection(db, 'users'), where('email', '==', normalizedEmail));
       const querySnapshot = await getDocs(q);
@@ -73,10 +71,8 @@ export const createAuthSlice: StateCreator<AuthSlice, [], [], AuthSlice> = (set)
       let userData: User | null = null;
 
       if (!querySnapshot.empty) {
-        // Akte über E-Mail gefunden (vom Admin vorher angelegt)
         userData = querySnapshot.docs[0].data() as User;
       } else {
-        // Fallback: Versuch es über die UID
         const docRef = doc(db, 'users', userCredential.user.uid);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
@@ -101,8 +97,35 @@ export const createAuthSlice: StateCreator<AuthSlice, [], [], AuthSlice> = (set)
     }
   },
   logout: async () => {
+    const store = get() as any;
+    if (store.unsubTasks) store.unsubTasks();
+    if (store.unsubEvents) store.unsubEvents();
+    if (store.unsubEventDetails) store.unsubEventDetails();
+    if (store.unsubEventAgenda) store.unsubEventAgenda();
+    if (store.unsubUsers) store.unsubUsers();
+    if (store.unsubHelpers) store.unsubHelpers();
+    if (store.unsubGroups) store.unsubGroups();
+    if (store.unsubTemplates) store.unsubTemplates();
+    if (store.unsubCalendarEvents) store.unsubCalendarEvents();
+    if (store.unsubCalendarSubs) store.unsubCalendarSubs();
+
     await signOut(auth);
-    set({ user: null, isAuthenticated: false });
+    
+    // CHIRURGISCHER EINGRIFF: TypeScript Boundary aufheben, um den kompletten Store sicher zu leeren
+    (set as any)({ 
+      user: null, 
+      isAuthenticated: false,
+      tasks: [],
+      events: [],
+      eventAgenda: [],
+      currentEvent: null,
+      users: [],
+      helpers: [],
+      groups: [],
+      templates: [],
+      calendarEvents: [],
+      calendarSubscriptions: []
+    });
   },
   resetPassword: async (email) => {
     try {
@@ -113,3 +136,4 @@ export const createAuthSlice: StateCreator<AuthSlice, [], [], AuthSlice> = (set)
     }
   },
 });
+// --- END OF FILE ---
