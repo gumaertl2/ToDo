@@ -1,4 +1,4 @@
-// 2026-04-14 14:20 - FIX: Vollständige Datei gemäß Protokoll
+// 2026-04-14 18:30 - FEATURE: Reminder-Felder für CalendarSubscription
 // src/core/types/models.ts
 
 export interface BaseDocument {
@@ -148,6 +148,8 @@ export interface CachedIcsEvent {
   startTime: number;
   endTime: number;
   isAllDay: boolean;
+  // CHIRURGISCHER EINGRIFF: Einzelne Reminder-Verfolgung für Abo-Termine
+  reminderSentAt?: number;
 }
 
 export interface CalendarSubscription extends BaseDocument {
@@ -158,6 +160,11 @@ export interface CalendarSubscription extends BaseDocument {
   lastSyncedAt?: number;
   cachedEvents?: CachedIcsEvent[];
   sortOrder?: number; 
+  
+  // CHIRURGISCHER EINGRIFF: WhatsApp Reminder Felder für das Abo
+  reminderSenderUserId?: string;   
+  reminderLeadDays?: number;       
+  reminderCustomText?: string;
 }
 
 export interface CalendarEvent extends BaseDocument {
@@ -177,4 +184,4 @@ export interface CalendarEvent extends BaseDocument {
   reminderSentAt?: number;         
   reminderCustomText?: string;     
 }
-// --- END OF FILE 180 Zeilen ---
+// --- END OF FILE 184 Zeilen ---

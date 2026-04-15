@@ -1,4 +1,4 @@
-// 2026-04-14 16:45 - FIX: Benutzerdefinierter Erinnerungstext für Sitzungen (CustomText Parameter)
+// 2026-04-14 18:30 - FEATURE: WhatsApp Reminder für ICS Abos / Dateien integriert
 // src/features/Reminders/RemindersView.tsx
 import React, { useMemo, useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
@@ -7,13 +7,15 @@ import { useNavigate } from 'react-router-dom';
 import { ItemFormModal } from '../Shared/ItemFormModal';
 import { CalendarEventFormModal } from '../Events/CalendarEventFormModal';
 import { CalendarBulkEventModal } from '../Events/CalendarBulkEventModal';
+import { CalendarIcsDetailModal } from '../Events/CalendarIcsDetailModal'; // CHIRURGISCHER EINGRIFF: Abo Details
 import type { Task, CalendarEvent } from '../../core/types/models';
 
-const formatReminderText = (type: 'Event' | 'Task' | 'Sitzung', item: any, customText?: string) => {
+const formatReminderText = (type: 'Event' | 'Task' | 'Sitzung' | 'Abo', item: any, customText?: string) => {
   const baseText = customText ? customText : 'Hallo, hier ist eine kurze Erinnerung für dich:';
   const details: string[] = [];
 
-  if (type === 'Event' || type === 'Sitzung') {
+  // CHIRURGISCHER EINGRIFF: Formatierer für Abo-Termine erweitert
+  if (type === 'Event' || type === 'Sitzung' || type === 'Abo') {
     const start = new Date(item.startTime || item.plannedStartTime);
     const dateStr = start.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     
@@ -54,13 +56,15 @@ export const RemindersView: React.FC = () => {
     events,
     calendarEvents, 
     tasks, 
+    calendarSubscriptions, // CHIRURGISCHER EINGRIFF: Abos aus dem Store importiert
     groups, 
     helpers,
     users, 
     user, 
     saveAgendaItem,
     updateCalendarEvent,
-    updateEvent, 
+    updateEvent,
+    updateCalendarSubscription, // CHIRURGISCHER EINGRIFF: Speicherfunktion für Abos
     isEventsLoading,
     isUsersLoading,
     fetchTasks
@@ -73,6 +77,7 @@ export const RemindersView: React.FC = () => {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editingCalendarEvent, setEditingCalendarEvent] = useState<CalendarEvent | null>(null);
   const [editingSeriesId, setEditingSeriesId] = useState<string | null>(null);
+  const [editingIcsEvent, setEditingIcsEvent] = useState<any | null>(null); // Für Abo-Detail
 
   const pendingReminders = useMemo(() => {
     if (!user) return [];
@@ -83,6 +88,7 @@ export const RemindersView: React.FC = () => {
 
     const items: any[] = [];
 
+    // 1. Kalender-Einträge
     if (calendarEvents) {
       calendarEvents.forEach(ce => {
         if (ce.reminderSenderUserId === user.id && !ce.reminderSentAt && ce.reminderLeadDays !== undefined) {
@@ -136,6 +142,7 @@ export const RemindersView: React.FC = () => {
       });
     }
 
+    // 2. Aufgaben
     if (tasks) {
       tasks.forEach(t => {
         if (t.reminderSenderUserId === user.id && !t.reminderSentAt && t.reminderLeadDays !== undefined && t.dueDate) {
@@ -180,6 +187,7 @@ export const RemindersView: React.FC = () => {
       });
     }
 
+    // 3. Sitzungen
     if (events) {
       events.forEach(ev => {
         if (ev.status !== 'ABGESCHLOSSEN' && ev.reminderSenderUserId === user.id && !ev.reminderSentAt && ev.reminderLeadDays !== undefined && ev.plannedStartTime) {
@@ -204,7 +212,6 @@ export const RemindersView: React.FC = () => {
             const isDirect = targets.length === 1 && !targets[0].isGroup && !!targets[0].phone;
             const phone = isDirect ? targets[0].phone : '';
 
-            // CHIRURGISCHER EINGRIFF: Custom-Text Parameter ev.reminderCustomText hinzugefügt
             const fullText = formatReminderText('Sitzung', ev, ev.reminderCustomText);
 
             items.push({
@@ -225,8 +232,45 @@ export const RemindersView: React.FC = () => {
       });
     }
 
+    // CHIRURGISCHER EINGRIFF: 4. Kalender-Abos (ICS Dateien / Links)
+    if (calendarSubscriptions) {
+      calendarSubscriptions.forEach(sub => {
+        // Prüfen, ob für dieses Abo überhaupt ein Sender konfiguriert wurde und dieser der aktuelle User ist
+        if (sub.isActive && sub.reminderSenderUserId === user.id && sub.reminderLeadDays !== undefined && sub.cachedEvents) {
+          
+          sub.cachedEvents.forEach((cachedEv, index) => {
+            // Nur Events verarbeiten, die noch nicht gesendet wurden
+            if (!cachedEv.reminderSentAt) {
+              const eventStart = new Date(cachedEv.startTime);
+              const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
+              const stichtag = eventDateStart - (sub.reminderLeadDays! * MS_PER_DAY);
+              
+              if (todayStart >= stichtag) {
+                const diffDays = Math.ceil((eventDateStart - todayStart) / MS_PER_DAY);
+                const fullText = formatReminderText('Abo', cachedEv, sub.reminderCustomText);
+
+                items.push({
+                  id: `sub-${sub.id}-ev-${cachedEv.uid}-${index}`, // Eindeutige ID
+                  type: 'Abo',
+                  title: `${sub.name}: ${cachedEv.title}`, // Zeigt z.B. "Müllkalender: Papiertonne"
+                  date: cachedEv.startTime,
+                  text: fullText,
+                  targetsNames: 'Manuelle Auswahl', // Abos haben keine direkten Empfänger
+                  isDirect: false,
+                  phone: '',
+                  rawItem: { ...cachedEv, subId: sub.id }, // Abo-ID mitgeben zum Speichern
+                  diffDays,
+                  model: 'subscription' 
+                });
+              }
+            }
+          });
+        }
+      });
+    }
+
     return items.sort((a, b) => a.date - b.date);
-  }, [user, calendarEvents, tasks, events, groups, helpers, users]);
+  }, [user, calendarEvents, tasks, events, calendarSubscriptions, groups, helpers, users]);
 
   const openWhatsApp = (isDirect: boolean, phoneStr: string, text: string) => {
     let url = '';
@@ -249,7 +293,18 @@ export const RemindersView: React.FC = () => {
       } else if (rem.model === 'task') {
         await saveAgendaItem({ ...rem.rawItem, reminderSentAt: Date.now() });
       } else if (rem.model === 'event') {
-         await updateEvent({ ...rem.rawItem, reminderSentAt: Date.now() });
+        await updateEvent({ ...rem.rawItem, reminderSentAt: Date.now() });
+      } else if (rem.model === 'subscription') {
+        // CHIRURGISCHER EINGRIFF: Abo Speicherung
+        const sub = calendarSubscriptions.find(s => s.id === rem.rawItem.subId);
+        if (sub && sub.cachedEvents) {
+          const updatedEvents = sub.cachedEvents.map(e => 
+            e.uid === rem.rawItem.uid && e.startTime === rem.rawItem.startTime 
+              ? { ...e, reminderSentAt: Date.now() } 
+              : e
+          );
+          await updateCalendarSubscription({ ...sub, cachedEvents: updatedEvents });
+        }
       }
     } catch (err) {
       console.error("Fehler beim Speichern:", err);
@@ -257,6 +312,11 @@ export const RemindersView: React.FC = () => {
   };
 
   const handleSnoozeReminder = async (rem: any) => {
+    if (rem.model === 'subscription') {
+      alert('Die "Erneut erinnern"-Funktion ist für Termine aus Datei-Abos (ICS) derzeit nicht verfügbar. Bitte "Senden & Erledigt" oder "Verwerfen" wählen.');
+      return;
+    }
+
     openWhatsApp(rem.isDirect, rem.phone, rem.text);
     const defaultX = Math.max(1, Math.floor(rem.diffDays / 2));
     const xDays = snoozeDays[rem.id] !== undefined ? snoozeDays[rem.id] : defaultX;
@@ -284,6 +344,17 @@ export const RemindersView: React.FC = () => {
         await saveAgendaItem({ ...rem.rawItem, reminderSentAt: Date.now() });
       } else if (rem.model === 'event') {
          await updateEvent({ ...rem.rawItem, reminderSentAt: Date.now() });
+      } else if (rem.model === 'subscription') {
+        // CHIRURGISCHER EINGRIFF: Abo Verwerfen
+        const sub = calendarSubscriptions.find(s => s.id === rem.rawItem.subId);
+        if (sub && sub.cachedEvents) {
+          const updatedEvents = sub.cachedEvents.map(e => 
+            e.uid === rem.rawItem.uid && e.startTime === rem.rawItem.startTime 
+              ? { ...e, reminderSentAt: Date.now() } 
+              : e
+          );
+          await updateCalendarSubscription({ ...sub, cachedEvents: updatedEvents });
+        }
       }
     } catch (err) {
       console.error("Fehler beim Verwerfen:", err);
@@ -331,6 +402,16 @@ export const RemindersView: React.FC = () => {
                   onClick={() => {
                     if (rem.type === 'Sitzung') navigate(`/events/${rem.id}`);
                     else if (rem.type === 'Aufgabe') setEditingTask(rem.rawItem);
+                    else if (rem.type === 'Abo') {
+                       // Ein fiktives AdaptedEvent Objekt für das Detail-Modal bauen
+                       const sub = calendarSubscriptions.find(s => s.id === rem.rawItem.subId);
+                       setEditingIcsEvent({
+                         id: rem.id, title: rem.rawItem.title, start: new Date(rem.rawItem.startTime), 
+                         end: new Date(rem.rawItem.endTime), allDay: rem.rawItem.isAllDay, 
+                         location: rem.rawItem.location, description: rem.rawItem.description,
+                         color: sub?.color || '#10b981'
+                       });
+                    }
                     else {
                       if (rem.rawItem.seriesId) setEditingSeriesId(rem.rawItem.seriesId);
                       else setEditingCalendarEvent(rem.rawItem);
@@ -340,7 +421,7 @@ export const RemindersView: React.FC = () => {
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${rem.type === 'Sitzung' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${rem.type === 'Sitzung' ? 'bg-purple-100 text-purple-700' : rem.type === 'Abo' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-700'}`}>
                         {rem.type}
                       </span>
                       <span className="text-base font-bold text-gray-900 group-hover:text-green-700 transition-colors">{rem.title}</span>
@@ -378,23 +459,25 @@ export const RemindersView: React.FC = () => {
                     Senden & Erledigt
                   </button>
                   
-                  <div className="flex flex-col gap-2 border-t border-gray-200 pt-3">
+                  <div className={`flex flex-col gap-2 border-t border-gray-200 pt-3 ${rem.model === 'subscription' ? 'opacity-30 pointer-events-none' : ''}`}>
                     <div className="flex items-center justify-between text-xs text-gray-600 font-medium px-1">
                       <span>Erneut erinnern in:</span>
                       <div className="flex items-center">
                         <input 
                           type="number" 
                           min="1" 
-                          className="w-12 p-1 border border-gray-300 rounded text-center text-xs font-bold focus:ring-blue-500"
+                          className="w-12 p-1 border border-gray-300 rounded text-center text-xs font-bold focus:ring-blue-500 disabled:bg-gray-100"
                           value={currentX}
                           onChange={(e) => setSnoozeDays(prev => ({...prev, [rem.id]: Number(e.target.value)}))}
+                          disabled={rem.model === 'subscription'}
                         />
                         <span className="ml-1.5">Tagen</span>
                       </div>
                     </div>
                     <button
                       onClick={() => handleSnoozeReminder(rem)}
-                      className="flex items-center justify-center w-full px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg font-bold text-xs transition-colors shadow-sm"
+                      disabled={rem.model === 'subscription'}
+                      className="flex items-center justify-center w-full px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg font-bold text-xs transition-colors shadow-sm disabled:cursor-not-allowed"
                     >
                       <Clock className="w-3.5 h-3.5 mr-1.5" />
                       Senden & Erinnern
@@ -441,7 +524,13 @@ export const RemindersView: React.FC = () => {
           existingSeriesId={editingSeriesId}
         />
       )}
+      {editingIcsEvent && (
+        <CalendarIcsDetailModal
+          event={editingIcsEvent}
+          onClose={() => setEditingIcsEvent(null)}
+        />
+      )}
     </div>
   );
 };
-// --- END OF FILE 418 Zeilen ---
+// --- END OF FILE 485 Zeilen ---

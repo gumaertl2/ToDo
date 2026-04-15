@@ -1,33 +1,95 @@
+// 2026-04-14 18:30 - FEATURE: WhatsApp Erinnerung an Abos / ICS-Dateien gehängt
 // src/features/Events/CalendarSubscriptionModal.tsx
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import type { CalendarSubscription } from '../../core/types/models';
-import { X, Save, AlertCircle, Trash2, Link as LinkIcon, Edit2, RefreshCw, ChevronUp, ChevronDown } from 'lucide-react';
+import type { CalendarSubscription, CachedIcsEvent } from '../../core/types/models';
+import { X, Save, AlertCircle, Trash2, Link as LinkIcon, Edit2, RefreshCw, ChevronUp, ChevronDown, MessageCircle } from 'lucide-react';
+import ICAL from 'ical.js';
 
 interface Props {
   onClose: () => void;
 }
 
 export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
-  const { calendarSubscriptions, addCalendarSubscription, updateCalendarSubscription, deleteCalendarSubscription, syncSubscription } = useClubStore();
+  const { users, calendarSubscriptions, addCalendarSubscription, updateCalendarSubscription, deleteCalendarSubscription, syncSubscription } = useClubStore();
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
+  
+  const [importType, setImportType] = useState<'url' | 'file'>('url');
   const [url, setUrl] = useState('');
+  const [parsedEvents, setParsedEvents] = useState<CachedIcsEvent[] | null>(null);
+  const [fileName, setFileName] = useState<string>('');
+
   const [color, setColor] = useState('#10b981');
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
 
+  // CHIRURGISCHER EINGRIFF: WhatsApp States
+  const [reminderSenderUserId, setReminderSenderUserId] = useState('');
+  const [reminderLeadDays, setReminderLeadDays] = useState('1');
+  const [reminderCustomText, setReminderCustomText] = useState('');
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setError(null);
+    
+    try {
+      const textData = await file.text();
+      const jcalData = ICAL.parse(textData);
+      const comp = new ICAL.Component(jcalData);
+      const vevents = comp.getAllSubcomponents('vevent');
+      const cachedEvents: CachedIcsEvent[] = [];
+
+      vevents.forEach((vevent: any) => {
+        const event = new ICAL.Event(vevent);
+        if (!event.startDate) return; 
+        const s = event.startDate;
+        const startDate = new Date(s.year, s.month - 1, s.day, s.hour, s.minute).getTime();
+        let endDate = startDate;
+        if (event.endDate) { 
+          const evEnd = event.endDate; 
+          endDate = new Date(evEnd.year, evEnd.month - 1, evEnd.day, evEnd.hour, evEnd.minute).getTime(); 
+        }
+        cachedEvents.push({ 
+          uid: event.uid, 
+          title: event.summary || 'Ohne Titel', 
+          description: event.description || '', 
+          location: event.location || '', 
+          startTime: startDate, 
+          endTime: endDate, 
+          isAllDay: s.isDate 
+        });
+      });
+
+      setParsedEvents(cachedEvents);
+      setFileName(file.name);
+      if (!name) setName(file.name.replace('.ics', ''));
+    } catch (err: any) {
+      setError('Fehler beim Parsen. Ist es eine gültige ICS-Datei?');
+      setParsedEvents(null);
+    }
+  };
+
   const handleSave = async () => {
-    if (!name.trim() || !url.trim()) {
-      setError('Name und URL dürfen nicht leer sein.');
+    if (!name.trim()) {
+      setError('Name darf nicht leer sein.');
       return;
     }
-    
-    if (!url.startsWith('http') && !url.startsWith('webcal')) {
-      setError('Die URL muss mit http://, https:// oder webcal:// beginnen.');
-      return;
+
+    if (importType === 'url') {
+      if (!url.trim() || (!url.startsWith('http') && !url.startsWith('webcal'))) {
+        setError('Die URL muss mit http://, https:// oder webcal:// beginnen.');
+        return;
+      }
+    } else {
+      if (!parsedEvents || parsedEvents.length === 0) {
+        setError('Bitte wähle eine gültige ICS-Datei mit Terminen aus.');
+        return;
+      }
     }
     
     setIsSaving(true);
@@ -35,15 +97,23 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
 
     let targetSubId: string;
 
+    const subPayload = {
+      name: name.trim(),
+      url: importType === 'file' ? 'FILE_IMPORT' : url.trim(),
+      color,
+      reminderSenderUserId: reminderSenderUserId || undefined,
+      reminderLeadDays: reminderSenderUserId ? parseInt(reminderLeadDays, 10) : undefined,
+      reminderCustomText: reminderSenderUserId ? reminderCustomText.trim() : undefined,
+    };
+
     if (editingId) {
       const existingSub = calendarSubscriptions.find(s => s.id === editingId);
       if (!existingSub) return;
       
       const updatedSub: CalendarSubscription = {
         ...existingSub,
-        name: name.trim(),
-        url: url.trim(),
-        color,
+        ...subPayload,
+        ...(importType === 'file' && parsedEvents ? { cachedEvents: parsedEvents, lastSyncedAt: Date.now() } : {})
       };
 
       const result = await updateCalendarSubscription(updatedSub);
@@ -59,13 +129,12 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
       const newSub: CalendarSubscription = {
         id: `sub-${Date.now()}`,
         schemaVersion: '1.0',
-        name: name.trim(),
-        url: url.trim(),
-        color,
+        ...subPayload,
         isActive: true,
+        ...(importType === 'file' && parsedEvents ? { cachedEvents: parsedEvents, lastSyncedAt: Date.now() } : {})
       };
 
-      const result = await addCalendarSubscription(newSub);
+      const result = await addCalendarSubscription(newSub as CalendarSubscription);
       if (result.success) {
         targetSubId = newSub.id;
         cancelEdit();
@@ -76,7 +145,10 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
       }
     }
     
-    handleSync(targetSubId);
+    if (importType === 'url') {
+      handleSync(targetSubId);
+    }
+    
     setIsSaving(false);
   };
 
@@ -105,15 +177,34 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
   const handleEdit = (sub: CalendarSubscription) => {
     setEditingId(sub.id);
     setName(sub.name);
-    setUrl(sub.url);
+    if (sub.url === 'FILE_IMPORT') {
+      setImportType('file');
+      setUrl('');
+      setParsedEvents(sub.cachedEvents || []);
+      setFileName('Bereits importiert (Neue Datei wählen zum Überschreiben)');
+    } else {
+      setImportType('url');
+      setUrl(sub.url);
+      setParsedEvents(null);
+      setFileName('');
+    }
     setColor(sub.color || '#10b981');
+    setReminderSenderUserId(sub.reminderSenderUserId || '');
+    setReminderLeadDays(sub.reminderLeadDays?.toString() || '1');
+    setReminderCustomText(sub.reminderCustomText || '');
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setName('');
     setUrl('');
+    setImportType('url');
+    setParsedEvents(null);
+    setFileName('');
     setColor('#10b981');
+    setReminderSenderUserId('');
+    setReminderLeadDays('1');
+    setReminderCustomText('');
   };
 
   const handleDelete = async (id: string) => {
@@ -132,7 +223,6 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
     <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
         
-        {/* Header - Fixiert */}
         <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-gray-50 shrink-0">
           <h2 className="text-xl font-bold text-gray-900 flex items-center">
             <LinkIcon className="w-5 h-5 mr-2 text-green-600" />
@@ -143,10 +233,9 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
           </button>
         </div>
         
-        {/* CHIRURGISCHER EINGRIFF: Formular-Bereich - Fixiert am oberen Rand */}
-        <div className="p-6 bg-gray-50/50 border-b border-gray-200 shrink-0">
+        <div className="p-6 bg-gray-50/50 border-b border-gray-200 shrink-0 overflow-y-auto max-h-[50vh]">
           {error && (
-             <div className="bg-red-50 text-red-700 p-3 rounded-lg flex items-center mb-4 border border-red-100 text-sm">
+             <div className="bg-red-50 text-red-700 p-3 rounded-lg flex items-center mb-4 border border-red-100 text-sm font-bold">
                <AlertCircle className="w-5 h-5 mr-2 shrink-0" /> {error}
              </div>
           )}
@@ -154,7 +243,6 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
           <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm text-sm">
             <div className="flex justify-between items-center mb-3">
               <h3 className="font-bold text-gray-700">{editingId ? 'Abo bearbeiten' : 'Neues Abo hinzufügen'}</h3>
-              {/* Neuer Abbrechen-Button für besseres UX bei fixiertem Formular */}
               {editingId && (
                 <button onClick={cancelEdit} className="text-xs text-gray-500 hover:text-gray-800 underline transition-colors">
                   Abbrechen
@@ -162,31 +250,102 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
               )}
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
               <div className="md:col-span-4">
                 <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
                 <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full p-2 border border-gray-300 rounded focus:ring-green-500" placeholder="z.B. Feiertage" />
               </div>
-              <div className="md:col-span-5">
-                <label className="block text-xs font-medium text-gray-600 mb-1">ICS URL</label>
-                <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} className="w-full p-2 border border-gray-300 rounded focus:ring-green-500" placeholder="https://..." />
+              
+              <div className="md:col-span-8">
+                <div className="flex gap-4 mb-1 border-b border-gray-100 pb-1">
+                  <label className="flex items-center text-[10px] font-bold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-green-700">
+                    <input type="radio" checked={importType === 'url'} onChange={() => setImportType('url')} className="mr-1.5 accent-green-600" /> Web-URL
+                  </label>
+                  <label className="flex items-center text-[10px] font-bold text-gray-600 uppercase tracking-wider cursor-pointer hover:text-green-700">
+                    <input type="radio" checked={importType === 'file'} onChange={() => setImportType('file')} className="mr-1.5 accent-green-600" /> Lokale Datei
+                  </label>
+                </div>
+                
+                {importType === 'url' ? (
+                  <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} className="w-full p-1.5 border border-gray-300 rounded focus:ring-green-500 text-sm" placeholder="https://..." />
+                ) : (
+                  <div className="flex items-center gap-2 mt-1">
+                    <input 
+                      type="file" 
+                      accept=".ics" 
+                      onChange={handleFileUpload} 
+                      className="w-full p-1 border border-gray-300 rounded text-xs bg-white file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-bold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 cursor-pointer" 
+                    />
+                    {parsedEvents && <span className="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded shrink-0">{parsedEvents.length} Events</span>}
+                  </div>
+                )}
+                {fileName && importType === 'file' && <p className="text-[10px] text-gray-500 mt-1 truncate">Datei: {fileName}</p>}
               </div>
-              <div className="md:col-span-1">
+
+              {/* CHIRURGISCHER EINGRIFF: WhatsApp Erinnerung Sektion im Formular */}
+              <div className="md:col-span-12 bg-green-50/50 p-3 rounded-lg border border-green-100 mt-2">
+                <h4 className="text-xs font-bold text-green-900 flex items-center mb-3">
+                  <MessageCircle className="w-3.5 h-3.5 mr-1.5" />
+                  WhatsApp Erinnerung für dieses Abo (Optional)
+                </h4>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-green-800 mb-1">Wer verschickt die Erinnerung?</label>
+                    <select 
+                      value={reminderSenderUserId} 
+                      onChange={(e) => setReminderSenderUserId(e.target.value)}
+                      className="w-full p-1.5 border border-green-300 rounded text-xs bg-white"
+                    >
+                      <option value="">-- Niemand --</option>
+                      {(users || []).map(u => (
+                        <option key={u.id} value={u.id}>{u.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  {reminderSenderUserId && (
+                    <div>
+                      <label className="block text-[10px] font-bold text-green-800 mb-1">Tage vor Termin?</label>
+                      <input 
+                        type="number" min="0" max="365"
+                        value={reminderLeadDays} 
+                        onChange={(e) => setReminderLeadDays(e.target.value)}
+                        className="w-full p-1.5 border border-green-300 rounded text-xs bg-white"
+                      />
+                    </div>
+                  )}
+                </div>
+                {reminderSenderUserId && (
+                  <div className="mt-2">
+                    <label className="block text-[10px] font-bold text-green-800 mb-1">Zusätzlicher Text (Optional)</label>
+                    <textarea 
+                      value={reminderCustomText} 
+                      onChange={(e) => setReminderCustomText(e.target.value)}
+                      className="w-full p-1.5 border border-green-300 rounded text-xs bg-white"
+                      rows={1}
+                      placeholder="z.B. Bitte Mülltonnen rausstellen!"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="md:col-span-1 mt-2">
                 <label className="block text-xs font-medium text-gray-600 mb-1">Farbe</label>
-                <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-full h-9 p-0.5 border border-gray-300 rounded cursor-pointer" />
+                <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-full h-8 p-0 border border-gray-300 rounded cursor-pointer" />
               </div>
-              <div className="md:col-span-2">
-                <button onClick={handleSave} disabled={isSaving} className="w-full flex justify-center items-center px-3 py-2 bg-green-600 text-white rounded font-medium hover:bg-green-700 transition-colors">
-                  <Save className="w-4 h-4 mr-1" /> {editingId ? 'Save' : 'Add'}
+              
+              <div className="md:col-span-11 mt-2 flex justify-end items-end h-full">
+                <button onClick={handleSave} disabled={isSaving} className="w-40 flex justify-center items-center px-3 py-1.5 h-8 bg-green-600 text-white rounded font-bold hover:bg-green-700 transition-colors">
+                  <Save className="w-4 h-4 mr-1" /> {editingId ? 'Speichern' : 'Hinzufügen'}
                 </button>
               </div>
             </div>
           </div>
         </div>
 
-        {/* CHIRURGISCHER EINGRIFF: Listen-Bereich - Scrollbar */}
         <div className="p-6 overflow-y-auto flex-1 bg-gray-50/30">
-          <h3 className="text-sm font-bold text-gray-700 mb-3">Aktive Abos ({calendarSubscriptions.length})</h3>
+          <h3 className="text-sm font-bold text-gray-700 mb-3">Aktive Abos & Dateien ({calendarSubscriptions.length})</h3>
           <div className="space-y-2">
             {calendarSubscriptions.map((sub, index) => (
               <div key={sub.id} className="flex items-center justify-between bg-white p-3 rounded-lg border border-gray-200 shadow-sm hover:border-green-200 transition-colors">
@@ -197,12 +356,21 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
                   </div>
                   <div className="w-4 h-4 rounded-full mr-3 shrink-0 shadow-inner border border-black/10" style={{ backgroundColor: sub.color }}></div>
                   <div className="truncate">
-                    <div className="font-medium text-gray-900 text-sm">{sub.name}</div>
+                    <div className="font-bold text-gray-900 text-sm flex items-center">
+                      {sub.name} 
+                      {sub.url === 'FILE_IMPORT' && <span className="ml-2 text-[9px] uppercase tracking-wider bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded border border-gray-200">Datei</span>}
+                      {sub.reminderSenderUserId && <MessageCircle className="w-3.5 h-3.5 ml-2 text-green-500" title="Erinnerung aktiv" />}
+                    </div>
                     <div className="text-xs text-gray-500 italic truncate">{formatSyncDate(sub.lastSyncedAt)}</div>
                   </div>
                 </div>
                 <div className="flex items-center shrink-0 ml-2">
-                  <button onClick={() => handleSync(sub.id)} disabled={!!syncingId} className={`p-2 transition-colors ${syncingId === sub.id ? 'text-green-500' : 'text-gray-400 hover:text-green-600'}`} title="Jetzt synchronisieren">
+                  <button 
+                    onClick={() => handleSync(sub.id)} 
+                    disabled={!!syncingId || sub.url === 'FILE_IMPORT'} 
+                    className={`p-2 transition-colors ${syncingId === sub.id ? 'text-green-500' : 'text-gray-400 hover:text-green-600'} disabled:opacity-20 disabled:cursor-not-allowed`} 
+                    title={sub.url === 'FILE_IMPORT' ? 'Dateien synchronisieren sich nicht automatisch' : 'Jetzt synchronisieren'}
+                  >
                     <RefreshCw className={`w-4 h-4 ${syncingId === sub.id ? 'animate-spin' : ''}`} />
                   </button>
                   <button onClick={() => handleEdit(sub)} className="text-blue-400 hover:text-blue-600 p-2 mx-1" title="Bearbeiten"><Edit2 className="w-4 h-4" /></button>
@@ -212,8 +380,8 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
             ))}
             
             {calendarSubscriptions.length === 0 && (
-              <div className="text-center p-6 bg-white rounded-lg border border-dashed border-gray-300 text-gray-500 text-sm">
-                Noch keine Kalender-Abos eingerichtet.
+              <div className="text-center p-6 bg-white rounded-lg border border-dashed border-gray-300 text-gray-500 text-sm font-bold">
+                Noch keine Abos oder Dateien verknüpft.
               </div>
             )}
           </div>
@@ -223,4 +391,4 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
     </div>
   );
 };
-// Exakte Zeilenzahl: 236
+// --- END OF FILE 373 Zeilen ---

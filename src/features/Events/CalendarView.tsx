@@ -1,4 +1,4 @@
-// 2026-04-14 16:30 - FIX: calendarTitle in Export-Modal gepatcht (Vercel Fix)
+// 2026-04-14 17:30 - FEATURE: Dynamischer Farbkontrast & Schloss-Icon (🔒) für interne Termine
 // src/features/Events/CalendarView.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
@@ -30,6 +30,26 @@ const locales = { 'de': de };
 const localizer = dateFnsLocalizer({
   format, parse, startOfWeek: (date: Date) => startOfWeek(date, { weekStartsOn: 1 }), getDay, locales,
 });
+
+// CHIRURGISCHER EINGRIFF: Kontrast-Berechnung für lesbare Schrift auf hellen Farben
+const getContrastYIQ = (hexcolor?: string) => {
+  if (!hexcolor || !hexcolor.startsWith('#')) return 'white';
+  const hex = hexcolor.replace('#', '');
+  if (hex.length !== 6 && hex.length !== 3) return 'white';
+  let r = 0, g = 0, b = 0;
+  if (hex.length === 3) {
+    r = parseInt(hex[0] + hex[0], 16);
+    g = parseInt(hex[1] + hex[1], 16);
+    b = parseInt(hex[2] + hex[2], 16);
+  } else {
+    r = parseInt(hex.slice(0, 2), 16);
+    g = parseInt(hex.slice(2, 4), 16);
+    b = parseInt(hex.slice(4, 6), 16);
+  }
+  // YIQ Formel zur Bestimmung der wahrgenommenen Helligkeit
+  const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+  return (yiq >= 128) ? '#1f2937' : 'white'; // Bei hellen Farben dunkles Grau (gray-800)
+};
 
 interface AdaptedEvent extends RBCEvent {
   id: string; sourceId: string; sourceEvent?: CalendarEvent; rawSitzung?: Event; color?: string; description?: string; location?: string; seriesId?: string;
@@ -112,14 +132,19 @@ export const CalendarView: React.FC = () => {
   };
 
   const rbcEvents: AdaptedEvent[] = useMemo(() => {
+    // CHIRURGISCHER EINGRIFF: Schloss-Icon (🔒) für nicht-öffentliche Termine & Sitzungen
     const internalEvents = calendarEvents.map(ev => ({
-      id: ev.id, sourceId: 'manual', seriesId: ev.seriesId, title: ev.title, description: ev.description || '', location: ev.location || '',
+      id: ev.id, sourceId: 'manual', seriesId: ev.seriesId, 
+      title: ev.isPublic ? ev.title : `🔒 ${ev.title}`, // Schloss für interne Termine
+      description: ev.description || '', location: ev.location || '',
       start: new Date(ev.startTime), end: ev.endTime ? new Date(ev.endTime) : new Date(ev.startTime + (1000 * 60 * 60)), 
       allDay: ev.isAllDay, sourceEvent: ev, color: ev.color || '#3b82f6' 
     }));
     
     const internalSitzungen = events.filter(ev => ev.plannedStartTime && ev.status !== 'ABGESCHLOSSEN').map(ev => ({
-      id: ev.id, sourceId: 'manual', seriesId: undefined, title: `Sitzung: ${ev.title}`, description: ev.description || '', location: ev.location || '',
+      id: ev.id, sourceId: 'manual', seriesId: undefined, 
+      title: ev.isPublished ? `Sitzung: ${ev.title}` : `🔒 Sitzung: ${ev.title}`, // Schloss für interne Sitzungen
+      description: ev.description || '', location: ev.location || '',
       start: new Date(ev.plannedStartTime!), end: ev.plannedEndTime ? new Date(ev.plannedEndTime) : new Date(ev.plannedStartTime! + (1000 * 60 * 60 * 2)), 
       allDay: false, rawSitzung: ev, color: '#8b5cf6'
     }));
@@ -146,7 +171,18 @@ export const CalendarView: React.FC = () => {
     return filteredEvents;
   }, [filteredEvents, currentView]);
 
-  const eventStyleGetter = (event: AdaptedEvent) => ({ style: { backgroundColor: event.color || '#3b82f6', borderRadius: '6px', opacity: 0.9, color: 'white', border: 'none', display: 'block', cursor: 'pointer' } });
+  // CHIRURGISCHER EINGRIFF: Schriftfarbe über getContrastYIQ dynamisch berechnen
+  const eventStyleGetter = (event: AdaptedEvent) => ({ 
+    style: { 
+      backgroundColor: event.color || '#3b82f6', 
+      borderRadius: '6px', 
+      opacity: 0.9, 
+      color: getContrastYIQ(event.color || '#3b82f6'), 
+      border: 'none', 
+      display: 'block', 
+      cursor: 'pointer' 
+    } 
+  });
 
   const handleSelectEvent = (event: AdaptedEvent) => {
     if (event.id.startsWith('ics-')) { setSelectedIcsEvent(event); setIsIcsDetailModalOpen(true); return; }
@@ -231,7 +267,10 @@ export const CalendarView: React.FC = () => {
                       <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{format(startD, 'dd.MM.yyyy', { locale: de })}</td>
                       <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{format(actualEnd, 'dd.MM.yyyy', { locale: de })}</td>
                       <td className="py-3 px-4">
-                        <div className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">{e.title}</div>
+                        <div className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">
+                          <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ backgroundColor: e.color || '#3b82f6' }}></span>
+                          {e.title}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -254,7 +293,10 @@ export const CalendarView: React.FC = () => {
                       <td className="py-3 px-4 text-gray-900 font-medium whitespace-nowrap">{dateStr}</td>
                       <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{timeStr}</td>
                       <td className="py-3 px-4">
-                        <div className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">{e.title}</div>
+                        <div className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">
+                          <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ backgroundColor: e.color || '#3b82f6' }}></span>
+                          {e.title}
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-gray-600 truncate max-w-[200px]" title={e.location}>{e.location}</td>
                     </tr>
@@ -421,9 +463,8 @@ export const CalendarView: React.FC = () => {
       {isSubModalOpen && <CalendarSubscriptionModal onClose={() => setIsSubModalOpen(false)} />}
       {isIcsDetailModalOpen && selectedIcsEvent && <CalendarIcsDetailModal event={selectedIcsEvent as any} onClose={() => setIsIcsDetailModalOpen(false)} />}
       {isBulkModalOpen && <CalendarBulkEventModal onClose={() => setIsBulkModalOpen(false)} existingSeriesId={selectedSeriesId} />}
-      {/* CHIRURGISCHER EINGRIFF: calendarTitle an ExportModal übergeben */}
       {isExportModalOpen && <CalendarExportModal onClose={() => setIsExportModalOpen(false)} calendarTitle={calendarTitle} />}
     </div>
   );
 };
-// --- END OF FILE 486 Zeilen ---
+// --- END OF FILE 505 Zeilen ---

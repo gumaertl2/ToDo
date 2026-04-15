@@ -1,4 +1,4 @@
-// 2026-04-14 17:00 - FIX: Zähler für WhatsApp-Erinnerungen synchronisiert (Sitzungen hinzugefügt)
+// 2026-04-14 19:00 - FIX: Zähler für WhatsApp-Erinnerungen synchronisiert (Abo-Termine hinzugefügt)
 // src/features/Layout/AppLayout.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
@@ -6,8 +6,8 @@ import { Users, Calendar, ClipboardList, CheckSquare, LogOut, LayoutDashboard, B
 import { useClubStore } from '../../store/useClubStore';
 
 export const AppLayout: React.FC = () => {
-  // CHIRURGISCHER EINGRIFF: events aus Store geladen
-  const { logout, user, fetchUsersAndHelpers, fetchGroups, calendarEvents, tasks, events, fetchEvents, fetchTasks, fetchCalendarData } = useClubStore();
+  // CHIRURGISCHER EINGRIFF: calendarSubscriptions aus Store geladen
+  const { logout, user, fetchUsersAndHelpers, fetchGroups, calendarEvents, tasks, events, calendarSubscriptions, fetchEvents, fetchTasks, fetchCalendarData } = useClubStore();
 
   const [isPinned, setIsPinned] = useState(() => {
     const saved = localStorage.getItem('papatodo_sidebar_pinned');
@@ -63,7 +63,7 @@ export const AppLayout: React.FC = () => {
       });
     }
 
-    // CHIRURGISCHER EINGRIFF: 3. Sitzungen (Events) zum Zähler hinzugefügt
+    // 3. Sitzungen (Events)
     if (events) {
       events.forEach(ev => {
         if (ev.status !== 'ABGESCHLOSSEN' && ev.reminderSenderUserId === user.id && !ev.reminderSentAt && ev.reminderLeadDays !== undefined && ev.plannedStartTime) {
@@ -75,8 +75,24 @@ export const AppLayout: React.FC = () => {
       });
     }
 
+    // CHIRURGISCHER EINGRIFF: 4. Kalender-Abos / ICS Dateien zum Zähler hinzugefügt
+    if (calendarSubscriptions) {
+      calendarSubscriptions.forEach(sub => {
+        if (sub.isActive && sub.reminderSenderUserId === user.id && sub.reminderLeadDays !== undefined && sub.cachedEvents) {
+          sub.cachedEvents.forEach(cachedEv => {
+            if (!cachedEv.reminderSentAt) {
+              const eventStart = new Date(cachedEv.startTime);
+              const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
+              const stichtag = eventDateStart - (sub.reminderLeadDays! * MS_PER_DAY);
+              if (todayStart >= stichtag) count++;
+            }
+          });
+        }
+      });
+    }
+
     return count;
-  }, [user, calendarEvents, tasks, events]); // CHIRURGISCHER EINGRIFF: events als Dependency
+  }, [user, calendarEvents, tasks, events, calendarSubscriptions]); // CHIRURGISCHER EINGRIFF: calendarSubscriptions als Dependency
 
   useEffect(() => {
     if (pendingRemindersCount > 0) {
@@ -232,4 +248,4 @@ export const AppLayout: React.FC = () => {
     </div>
   );
 };
-// --- END OF FILE 222 Zeilen ---
+// --- END OF FILE 238 Zeilen ---

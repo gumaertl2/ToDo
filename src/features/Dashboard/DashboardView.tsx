@@ -1,4 +1,4 @@
-// 2026-04-14 17:00 - FIX: Zähler für WhatsApp-Erinnerungen synchronisiert (Sitzungen hinzugefügt)
+// 2026-04-14 19:00 - FIX: Zähler für WhatsApp-Erinnerungen synchronisiert (Abo-Termine hinzugefügt)
 // src/features/Dashboard/DashboardView.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
@@ -13,6 +13,7 @@ export const DashboardView: React.FC = () => {
     events, 
     tasks, 
     calendarEvents, 
+    calendarSubscriptions, // CHIRURGISCHER EINGRIFF: calendarSubscriptions geladen
     user, 
     fetchEvents, 
     fetchTasks, 
@@ -60,7 +61,6 @@ export const DashboardView: React.FC = () => {
       });
     }
 
-    // CHIRURGISCHER EINGRIFF: Sitzungen (Events) zum Zähler hinzugefügt
     if (events) {
       events.forEach(ev => {
         if (ev.status !== 'ABGESCHLOSSEN' && ev.reminderSenderUserId === user.id && !ev.reminderSentAt && ev.reminderLeadDays !== undefined && ev.plannedStartTime) {
@@ -72,8 +72,24 @@ export const DashboardView: React.FC = () => {
       });
     }
 
+    // CHIRURGISCHER EINGRIFF: Kalender-Abos / ICS Dateien zum Zähler hinzugefügt
+    if (calendarSubscriptions) {
+      calendarSubscriptions.forEach(sub => {
+        if (sub.isActive && sub.reminderSenderUserId === user.id && sub.reminderLeadDays !== undefined && sub.cachedEvents) {
+          sub.cachedEvents.forEach(cachedEv => {
+            if (!cachedEv.reminderSentAt) {
+              const eventStart = new Date(cachedEv.startTime);
+              const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
+              const stichtag = eventDateStart - (sub.reminderLeadDays! * MS_PER_DAY);
+              if (todayStart >= stichtag) count++;
+            }
+          });
+        }
+      });
+    }
+
     return count;
-  }, [user, calendarEvents, tasks, events]); // CHIRURGISCHER EINGRIFF: events als Dependency
+  }, [user, calendarEvents, tasks, events, calendarSubscriptions]); // CHIRURGISCHER EINGRIFF: calendarSubscriptions als Dependency
 
   const upcomingEvents = useMemo(() => {
     const startOfToday = new Date();
@@ -228,4 +244,4 @@ export const DashboardView: React.FC = () => {
     </div>
   );
 };
-// --- END OF FILE 233 Zeilen ---
+// --- END OF FILE 250 Zeilen ---

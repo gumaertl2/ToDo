@@ -1,4 +1,4 @@
-// 2026-04-14 14:55 - FIX: Öffentliche Sitzungen (isPublished) auf Homepage integriert
+// 2026-04-14 17:30 - FEATURE: Dynamischer Farbkontrast auf der öffentlichen Homepage
 // src/features/Events/PublicCalendarEmbed.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
@@ -18,7 +18,6 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Printer, Menu, ChevronLeft, ChevronRight, Home, List as ListIcon, CalendarDays, MapPin, Clock, Info, X } from 'lucide-react';
-// CHIRURGISCHER EINGRIFF: Event (Sitzung) Type importiert
 import type { CalendarEvent, CalendarSubscription, Event } from '../../core/types/models';
 
 const locales = { 'de': de };
@@ -27,13 +26,32 @@ const localizer = dateFnsLocalizer({
   format, parse, startOfWeek: (date: Date) => startOfWeek(date, { weekStartsOn: 1 }), getDay, locales,
 });
 
+// CHIRURGISCHER EINGRIFF: Kontrast-Berechnung für lesbare Schrift auf hellen Farben
+const getContrastYIQ = (hexcolor?: string) => {
+  if (!hexcolor || !hexcolor.startsWith('#')) return 'white';
+  const hex = hexcolor.replace('#', '');
+  if (hex.length !== 6 && hex.length !== 3) return 'white';
+  let r = 0, g = 0, b = 0;
+  if (hex.length === 3) {
+    r = parseInt(hex[0] + hex[0], 16);
+    g = parseInt(hex[1] + hex[1], 16);
+    b = parseInt(hex[2] + hex[2], 16);
+  } else {
+    r = parseInt(hex.slice(0, 2), 16);
+    g = parseInt(hex.slice(2, 4), 16);
+    b = parseInt(hex.slice(4, 6), 16);
+  }
+  const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+  return (yiq >= 128) ? '#1f2937' : 'white';
+};
+
 interface AdaptedEvent extends RBCEvent {
   id: string; sourceId: string; sourceEvent?: CalendarEvent; rawSitzung?: Event; color?: string; description?: string; location?: string; seriesId?: string;
 }
 
 export const PublicCalendarEmbed: React.FC = () => {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
-  const [sitzungen, setSitzungen] = useState<Event[]>([]); // CHIRURGISCHER EINGRIFF: State für Sitzungen
+  const [sitzungen, setSitzungen] = useState<Event[]>([]);
   const [calendarSubscriptions, setCalendarSubscriptions] = useState<CalendarSubscription[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -52,19 +70,16 @@ export const PublicCalendarEmbed: React.FC = () => {
   useEffect(() => {
     const fetchPublicData = async () => {
       try {
-        // 1. Hole öffentliche Termine
         const eventsQ = query(collection(db, 'calendar_events'), where('isPublic', '==', true));
         const eventsSnap = await getDocs(eventsQ);
         const loadedEvents = eventsSnap.docs.map(doc => ({ ...doc.data(), id: doc.id } as CalendarEvent));
         setCalendarEvents(loadedEvents);
 
-        // 2. Hole öffentliche Sitzungen (isPublished)
         const sitzQ = query(collection(db, 'events'), where('isPublished', '==', true));
         const sitzSnap = await getDocs(sitzQ);
         const loadedSitzungen = sitzSnap.docs.map(doc => ({ ...doc.data(), id: doc.id } as Event));
         setSitzungen(loadedSitzungen);
 
-        // 3. Hole Kalender Abos und sortiere sie
         const subsSnap = await getDocs(collection(db, 'calendar_subscriptions'));
         const loadedSubs = subsSnap.docs.map(doc => ({ ...doc.data(), id: doc.id } as CalendarSubscription));
         const sortedSubs = loadedSubs.sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
@@ -123,7 +138,6 @@ export const PublicCalendarEmbed: React.FC = () => {
       allDay: ev.isAllDay, sourceEvent: ev, color: ev.color || '#3b82f6' 
     }));
     
-    // CHIRURGISCHER EINGRIFF: Sitzungen (lila) in den Kalender aufnehmen
     const publicSitzungen = sitzungen.filter(ev => ev.plannedStartTime && ev.status !== 'ABGESCHLOSSEN').map(ev => ({
       id: ev.id, sourceId: 'manual', seriesId: undefined, title: `Sitzung: ${ev.title}`, description: ev.description || '', location: ev.location || '',
       start: new Date(ev.plannedStartTime!), end: ev.plannedEndTime ? new Date(ev.plannedEndTime) : new Date(ev.plannedStartTime! + (1000 * 60 * 60 * 2)), 
@@ -152,7 +166,18 @@ export const PublicCalendarEmbed: React.FC = () => {
     return filteredEvents;
   }, [filteredEvents, currentView]);
 
-  const eventStyleGetter = (event: AdaptedEvent) => ({ style: { backgroundColor: event.color || '#3b82f6', borderRadius: '6px', opacity: 0.9, color: 'white', border: 'none', display: 'block', cursor: 'pointer' } });
+  // CHIRURGISCHER EINGRIFF: Schriftfarbe über getContrastYIQ dynamisch berechnen
+  const eventStyleGetter = (event: AdaptedEvent) => ({ 
+    style: { 
+      backgroundColor: event.color || '#3b82f6', 
+      borderRadius: '6px', 
+      opacity: 0.9, 
+      color: getContrastYIQ(event.color || '#3b82f6'), 
+      border: 'none', 
+      display: 'block', 
+      cursor: 'pointer' 
+    } 
+  });
 
   const handleSelectEvent = (event: AdaptedEvent) => {
     setSelectedEventToView(event);
@@ -232,7 +257,10 @@ export const PublicCalendarEmbed: React.FC = () => {
                       <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{format(startD, 'dd.MM.yyyy', { locale: de })}</td>
                       <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{format(actualEnd, 'dd.MM.yyyy', { locale: de })}</td>
                       <td className="py-3 px-4">
-                        <div className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">{e.title}</div>
+                        <div className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">
+                          <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ backgroundColor: e.color || '#3b82f6' }}></span>
+                          {e.title}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -255,7 +283,10 @@ export const PublicCalendarEmbed: React.FC = () => {
                       <td className="py-3 px-4 text-gray-900 font-medium whitespace-nowrap">{dateStr}</td>
                       <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{timeStr}</td>
                       <td className="py-3 px-4">
-                        <div className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">{e.title}</div>
+                        <div className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">
+                          <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ backgroundColor: e.color || '#3b82f6' }}></span>
+                          {e.title}
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-gray-600 truncate max-w-[200px]" title={e.location}>{e.location}</td>
                     </tr>
@@ -409,9 +440,9 @@ export const PublicCalendarEmbed: React.FC = () => {
       {selectedEventToView && (
         <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 print:hidden">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
-            <div className="p-4 border-b border-gray-200 flex justify-between items-center" style={{ backgroundColor: selectedEventToView.color || '#3b82f6' }}>
-              <h2 className="text-lg font-bold text-white pr-4">{selectedEventToView.title}</h2>
-              <button onClick={() => setSelectedEventToView(null)} className="text-white/80 hover:text-white transition-colors">
+            <div className="p-4 border-b border-gray-200 flex justify-between items-center" style={{ backgroundColor: selectedEventToView.color || '#3b82f6', color: getContrastYIQ(selectedEventToView.color || '#3b82f6') }}>
+              <h2 className="text-lg font-bold pr-4">{selectedEventToView.title}</h2>
+              <button onClick={() => setSelectedEventToView(null)} className="opacity-80 hover:opacity-100 transition-opacity">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -459,4 +490,4 @@ export const PublicCalendarEmbed: React.FC = () => {
     </div>
   );
 };
-// --- END OF FILE 428 Zeilen ---
+// --- END OF FILE 438 Zeilen ---
