@@ -1,4 +1,4 @@
-// 2026-04-15 19:00 - FEATURE: Mobile Bottom-Sheet ("Mehr"-Menü) für aufgeräumte Fußleiste implementiert
+// 2026-04-15 19:15 - FEATURE: Auto-Sync bei Aufwecken (visibilitychange) + Dashboard URL Update
 // src/features/Layout/AppLayout.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
@@ -15,13 +15,13 @@ export const AppLayout: React.FC = () => {
   const [isHovered, setIsHovered] = useState(false);
   const [sidebarTouchStart, setSidebarTouchStart] = useState<number | null>(null);
   
-  // CHIRURGISCHER EINGRIFF: State für das mobile Overlay-Menü
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('papatodo_sidebar_pinned', String(isPinned));
   }, [isPinned]);
 
+  // Initialer App-Start Sync
   useEffect(() => {
     const initApp = async () => {
       if (fetchUsersAndHelpers) await fetchUsersAndHelpers();
@@ -31,6 +31,24 @@ export const AppLayout: React.FC = () => {
       if (fetchCalendarData) await fetchCalendarData();
     };
     initApp();
+  }, [fetchUsersAndHelpers, fetchGroups, fetchEvents, fetchTasks, fetchCalendarData]);
+
+  // CHIRURGISCHER EINGRIFF: Automatischer Sync beim "Aufwecken" (Möglichkeit A)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        if (fetchUsersAndHelpers) fetchUsersAndHelpers();
+        if (fetchGroups) fetchGroups();
+        if (fetchEvents) fetchEvents();
+        if (fetchTasks) fetchTasks();
+        if (fetchCalendarData) fetchCalendarData();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [fetchUsersAndHelpers, fetchGroups, fetchEvents, fetchTasks, fetchCalendarData]);
 
   const pendingRemindersCount = useMemo(() => {
@@ -104,10 +122,10 @@ export const AppLayout: React.FC = () => {
     }
   }, [pendingRemindersCount]);
 
-  // CHIRURGISCHER EINGRIFF: Aufteilung in Primär- und Setup-Menü
+  // CHIRURGISCHER EINGRIFF: Dashboard Route angepasst auf '/dashboard'
   const mainNavItems = [
     { to: '/calendar', icon: CalendarDays, label: 'Vereinskalender' },
-    { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/todos', icon: CheckSquare, label: 'Meine ToDos' },
     { to: '/reminders', icon: MessageCircle, label: 'Erinnerungen' },
     { to: '/events', icon: Calendar, label: 'Projekte & Sitzungen' },
@@ -230,7 +248,7 @@ export const AppLayout: React.FC = () => {
         <Outlet />
       </main>
 
-      {/* CHIRURGISCHER EINGRIFF: Mobile Overlay (Bottom Sheet) */}
+      {/* MOBILE OVERLAY (Bottom Sheet) */}
       {isMobileMenuOpen && (
         <div className="lg:hidden fixed inset-0 z-[60] flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/50 transition-opacity" onClick={() => setIsMobileMenuOpen(false)}></div>
@@ -271,7 +289,7 @@ export const AppLayout: React.FC = () => {
         </div>
       )}
 
-      {/* CHIRURGISCHER EINGRIFF: Mobile Bottom Navigation (Nur Top 4 + "Mehr") */}
+      {/* MOBILE BOTTOM NAVIGATION (Top 4 + "Mehr") */}
       <nav className="lg:hidden shrink-0 w-full bg-white border-t border-gray-200 flex justify-around items-center px-1 py-2 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-50 print:!hidden">
         {mainNavItems.slice(0, 4).map((item) => (
           <NavLink
@@ -297,7 +315,6 @@ export const AppLayout: React.FC = () => {
           </NavLink>
         ))}
         
-        {/* Der "Mehr"-Button */}
         <button
           onClick={() => setIsMobileMenuOpen(true)}
           className={`flex items-center justify-center p-3 rounded-xl transition-colors shrink-0 ${
@@ -312,4 +329,4 @@ export const AppLayout: React.FC = () => {
     </div>
   );
 };
-// --- END OF FILE 298 Zeilen ---
+// --- END OF FILE 319 Zeilen ---
