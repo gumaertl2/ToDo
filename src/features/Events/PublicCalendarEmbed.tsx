@@ -1,4 +1,4 @@
-// 2026-04-14 17:30 - FEATURE: Dynamischer Farbkontrast auf der öffentlichen Homepage
+// 2026-04-15 20:45 - FEATURE: Echte Spielplan-Filterung integriert
 // src/features/Events/PublicCalendarEmbed.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
@@ -12,7 +12,7 @@ import { startOfMonth } from 'date-fns/startOfMonth';
 import { endOfMonth } from 'date-fns/endOfMonth';
 import { eachDayOfInterval } from 'date-fns/eachDayOfInterval';
 import { startOfDay } from 'date-fns/startOfDay';
-import { addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, addYears, subYears, getISOWeek } from 'date-fns';
+import { isSameMonth, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, addYears, subYears, getISOWeek } from 'date-fns';
 import { de } from 'date-fns/locale/de';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebase';
@@ -26,7 +26,6 @@ const localizer = dateFnsLocalizer({
   format, parse, startOfWeek: (date: Date) => startOfWeek(date, { weekStartsOn: 1 }), getDay, locales,
 });
 
-// CHIRURGISCHER EINGRIFF: Kontrast-Berechnung für lesbare Schrift auf hellen Farben
 const getContrastYIQ = (hexcolor?: string) => {
   if (!hexcolor || !hexcolor.startsWith('#')) return 'white';
   const hex = hexcolor.replace('#', '');
@@ -45,8 +44,9 @@ const getContrastYIQ = (hexcolor?: string) => {
   return (yiq >= 128) ? '#1f2937' : 'white';
 };
 
+// CHIRURGISCHER EINGRIFF: showInMatchPlan dem Adapter hinzugefügt
 interface AdaptedEvent extends RBCEvent {
-  id: string; sourceId: string; sourceEvent?: CalendarEvent; rawSitzung?: Event; color?: string; description?: string; location?: string; seriesId?: string;
+  id: string; sourceId: string; sourceEvent?: CalendarEvent; rawSitzung?: Event; color?: string; description?: string; location?: string; seriesId?: string; showInMatchPlan?: boolean;
 }
 
 export const PublicCalendarEmbed: React.FC = () => {
@@ -135,30 +135,51 @@ export const PublicCalendarEmbed: React.FC = () => {
     const internalEvents = calendarEvents.map(ev => ({
       id: ev.id, sourceId: 'manual', seriesId: ev.seriesId, title: ev.title, description: ev.description || '', location: ev.location || '',
       start: new Date(ev.startTime), end: ev.endTime ? new Date(ev.endTime) : new Date(ev.startTime + (1000 * 60 * 60)), 
-      allDay: ev.isAllDay, sourceEvent: ev, color: ev.color || '#3b82f6' 
+      allDay: ev.isAllDay, sourceEvent: ev, color: ev.color || '#3b82f6',
+      showInMatchPlan: ev.showInMatchPlan
     }));
     
     const publicSitzungen = sitzungen.filter(ev => ev.plannedStartTime && ev.status !== 'ABGESCHLOSSEN').map(ev => ({
       id: ev.id, sourceId: 'manual', seriesId: undefined, title: `Sitzung: ${ev.title}`, description: ev.description || '', location: ev.location || '',
       start: new Date(ev.plannedStartTime!), end: ev.plannedEndTime ? new Date(ev.plannedEndTime) : new Date(ev.plannedStartTime! + (1000 * 60 * 60 * 2)), 
-      allDay: false, rawSitzung: ev, color: '#8b5cf6' 
+      allDay: false, rawSitzung: ev, color: '#8b5cf6',
+      showInMatchPlan: false
     }));
 
     const cachedExternalEvents = calendarSubscriptions.filter(sub => sub.isActive && sub.cachedEvents).flatMap(sub => 
         sub.cachedEvents!.map((ev, index) => ({
           id: `ics-${sub.id}-${ev.uid}-${index}`, sourceId: sub.id, title: ev.title, description: ev.description || '', location: ev.location || '',
           start: new Date(ev.startTime), end: new Date(ev.endTime), allDay: ev.isAllDay, color: sub.color,
+          showInMatchPlan: sub.showInMatchPlan
         }))
       );
     return [...internalEvents, ...publicSitzungen, ...cachedExternalEvents];
   }, [calendarEvents, sitzungen, calendarSubscriptions]);
 
   const filteredEvents = useMemo(() => {
+    const todayStart = startOfDay(new Date()).getTime();
+    const isListView = ['termine', 'dienste', 'agenda'].includes(currentView);
+
     return rbcEvents.filter(ev => {
+      // CHIRURGISCHER EINGRIFF: Spielplan Filter
+      if (currentView === 'agenda' && !ev.showInMatchPlan) {
+        return false;
+      }
+
+      if (isListView) {
+        let exclusiveEnd = ev.end || ev.start!;
+        if (ev.allDay && exclusiveEnd.getTime() > ev.start!.getTime()) {
+          exclusiveEnd = new Date(exclusiveEnd.getTime() - 1000);
+        }
+        if (exclusiveEnd.getTime() < todayStart) {
+          return false;
+        }
+      }
+
       if (ev.sourceId === 'manual') return ev.seriesId ? activeFilters.includes('dienste') : activeFilters.includes('manual');
       return activeFilters.includes(ev.sourceId);
     });
-  }, [rbcEvents, activeFilters]);
+  }, [rbcEvents, activeFilters, currentView]);
 
   const displayEvents = useMemo(() => {
     if (currentView === 'termine') return filteredEvents.filter(e => e.sourceId === 'manual' && !e.seriesId);
@@ -166,7 +187,6 @@ export const PublicCalendarEmbed: React.FC = () => {
     return filteredEvents;
   }, [filteredEvents, currentView]);
 
-  // CHIRURGISCHER EINGRIFF: Schriftfarbe über getContrastYIQ dynamisch berechnen
   const eventStyleGetter = (event: AdaptedEvent) => ({ 
     style: { 
       backgroundColor: event.color || '#3b82f6', 
@@ -302,7 +322,17 @@ export const PublicCalendarEmbed: React.FC = () => {
 
   const CustomAgendaView = useMemo(() => {
     const View = ({ date, events }: { date: Date, events: AdaptedEvent[] }) => {
-      const daysInMonth = eachDayOfInterval({ start: startOfMonth(date), end: endOfMonth(date) });
+      const monthStart = startOfMonth(date);
+      const monthEnd = endOfMonth(date);
+      const today = startOfDay(new Date());
+
+      let rangeStart = monthStart;
+      if (isSameMonth(date, new Date())) {
+        rangeStart = today;
+      }
+
+      const daysInMonth = eachDayOfInterval({ start: rangeStart, end: monthEnd });
+      
       return (
         <div className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-4 bg-gray-50/30 h-full print:bg-white print:overflow-visible">
           {daysInMonth.map(day => {
@@ -314,12 +344,13 @@ export const PublicCalendarEmbed: React.FC = () => {
             });
             if (hideEmptyDays && dayEvents.length === 0) return null;
             dayEvents.sort((a, b) => { if (a.allDay && !b.allDay) return -1; if (!a.allDay && b.allDay) return 1; return a.start!.getTime() - b.start!.getTime(); });
-            const isToday = day.getTime() === startOfDay(new Date()).getTime();
+            const isToday = day.getTime() === today.getTime();
             return (
               <div key={day.toISOString()} className={`bg-white rounded-lg shadow-sm border ${isToday ? 'border-blue-300 ring-2 ring-blue-100' : 'border-gray-200'} overflow-hidden print:border-b print:shadow-none print:rounded-none`}>
                 <div className={`px-4 py-2 border-b ${isToday ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'} print:bg-transparent print:border-black`}>
                   <h3 className={`text-sm font-bold ${isToday ? 'text-blue-800 print:text-black' : 'text-gray-700 print:text-black'}`}>
                     {format(day, 'EEEE, dd. MMMM yyyy', { locale: de })}
+                    {isToday && <span className="ml-2 text-[10px] uppercase tracking-wider font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full print:hidden">Heute</span>}
                   </h3>
                 </div>
                 <div className="p-1.5">
@@ -490,4 +521,4 @@ export const PublicCalendarEmbed: React.FC = () => {
     </div>
   );
 };
-// --- END OF FILE 438 Zeilen ---
+// --- END OF FILE ---

@@ -1,4 +1,4 @@
-// 2026-04-14 18:30 - FEATURE: Reminder-Felder für CalendarSubscription
+// 2026-04-15 20:45 - FEATURE: 'showInMatchPlan' Flag für Spielplan-Filterung hinzugefügt
 // src/core/types/models.ts
 
 export interface BaseDocument {
@@ -148,7 +148,6 @@ export interface CachedIcsEvent {
   startTime: number;
   endTime: number;
   isAllDay: boolean;
-  // CHIRURGISCHER EINGRIFF: Einzelne Reminder-Verfolgung für Abo-Termine
   reminderSentAt?: number;
 }
 
@@ -161,7 +160,9 @@ export interface CalendarSubscription extends BaseDocument {
   cachedEvents?: CachedIcsEvent[];
   sortOrder?: number; 
   
-  // CHIRURGISCHER EINGRIFF: WhatsApp Reminder Felder für das Abo
+  // CHIRURGISCHER EINGRIFF: Kennzeichnung für den Spielplan
+  showInMatchPlan?: boolean;
+
   reminderSenderUserId?: string;   
   reminderLeadDays?: number;       
   reminderCustomText?: string;
@@ -178,10 +179,13 @@ export interface CalendarEvent extends BaseDocument {
   isPublic: boolean;
   seriesId?: string; 
   
+  // CHIRURGISCHER EINGRIFF: Kennzeichnung für den Spielplan
+  showInMatchPlan?: boolean;
+  
   eventType?: 'TERMIN' | 'DIENST'; 
   reminderSenderUserId?: string;   
   reminderLeadDays?: number;       
   reminderSentAt?: number;         
   reminderCustomText?: string;     
 }
-// --- END OF FILE 184 Zeilen ---
+// --- END OF FILE ---

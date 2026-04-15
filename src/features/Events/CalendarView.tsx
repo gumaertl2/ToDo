@@ -1,4 +1,4 @@
-// 2026-04-15 20:15 - FEATURE: Vergangene Termine standardmäßig ausgeblendet (Heutiger Tag immer oben)
+// 2026-04-15 20:45 - FEATURE: Echte Spielplan-Filterung integriert
 // src/features/Events/CalendarView.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
@@ -12,7 +12,7 @@ import { startOfMonth } from 'date-fns/startOfMonth';
 import { endOfMonth } from 'date-fns/endOfMonth';
 import { eachDayOfInterval } from 'date-fns/eachDayOfInterval';
 import { startOfDay } from 'date-fns/startOfDay';
-import { addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, addYears, subYears, getISOWeek } from 'date-fns';
+import { isSameMonth, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, addYears, subYears, getISOWeek } from 'date-fns';
 import { de } from 'date-fns/locale/de';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { useClubStore } from '../../store/useClubStore';
@@ -49,8 +49,9 @@ const getContrastYIQ = (hexcolor?: string) => {
   return (yiq >= 128) ? '#1f2937' : 'white'; 
 };
 
+// CHIRURGISCHER EINGRIFF: showInMatchPlan dem Adapter hinzugefügt
 interface AdaptedEvent extends RBCEvent {
-  id: string; sourceId: string; sourceEvent?: CalendarEvent; rawSitzung?: Event; color?: string; description?: string; location?: string; seriesId?: string;
+  id: string; sourceId: string; sourceEvent?: CalendarEvent; rawSitzung?: Event; color?: string; description?: string; location?: string; seriesId?: string; showInMatchPlan?: boolean;
 }
 
 export const CalendarView: React.FC = () => {
@@ -63,8 +64,6 @@ export const CalendarView: React.FC = () => {
 
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [hideEmptyDays, setHideEmptyDays] = useState(true);
-  
-  // CHIRURGISCHER EINGRIFF: Neuer State für die Historie
   const [showPastEvents, setShowPastEvents] = useState(false);
 
   const [currentView, setCurrentView] = useState<'month' | 'week' | 'day' | 'agenda' | 'termine' | 'dienste'>('month');
@@ -138,7 +137,8 @@ export const CalendarView: React.FC = () => {
       title: ev.isPublic ? ev.title : `🔒 ${ev.title}`,
       description: ev.description || '', location: ev.location || '',
       start: new Date(ev.startTime), end: ev.endTime ? new Date(ev.endTime) : new Date(ev.startTime + (1000 * 60 * 60)), 
-      allDay: ev.isAllDay, sourceEvent: ev, color: ev.color || '#3b82f6' 
+      allDay: ev.isAllDay, sourceEvent: ev, color: ev.color || '#3b82f6',
+      showInMatchPlan: ev.showInMatchPlan
     }));
     
     const internalSitzungen = events.filter(ev => ev.plannedStartTime && ev.status !== 'ABGESCHLOSSEN').map(ev => ({
@@ -146,13 +146,15 @@ export const CalendarView: React.FC = () => {
       title: ev.isPublished ? `Sitzung: ${ev.title}` : `🔒 Sitzung: ${ev.title}`,
       description: ev.description || '', location: ev.location || '',
       start: new Date(ev.plannedStartTime!), end: ev.plannedEndTime ? new Date(ev.plannedEndTime) : new Date(ev.plannedStartTime! + (1000 * 60 * 60 * 2)), 
-      allDay: false, rawSitzung: ev, color: '#8b5cf6'
+      allDay: false, rawSitzung: ev, color: '#8b5cf6',
+      showInMatchPlan: false // Sitzungen niemals im Spielplan
     }));
 
     const cachedExternalEvents = calendarSubscriptions.filter(sub => sub.isActive && sub.cachedEvents).flatMap(sub => 
         sub.cachedEvents!.map((ev, index) => ({
           id: `ics-${sub.id}-${ev.uid}-${index}`, sourceId: sub.id, title: ev.title, description: ev.description || '', location: ev.location || '',
           start: new Date(ev.startTime), end: new Date(ev.endTime), allDay: ev.isAllDay, color: sub.color,
+          showInMatchPlan: sub.showInMatchPlan
         }))
       );
     return [...internalEvents, ...internalSitzungen, ...cachedExternalEvents];
@@ -160,15 +162,19 @@ export const CalendarView: React.FC = () => {
 
   const filteredEvents = useMemo(() => {
     const todayStart = startOfDay(new Date()).getTime();
+    const isListView = ['termine', 'dienste', 'agenda'].includes(currentView);
 
     return rbcEvents.filter(ev => {
-      // CHIRURGISCHER EINGRIFF: Filter für alte Termine
-      if (!showPastEvents) {
+      // CHIRURGISCHER EINGRIFF: Spielplan-Filter anwenden
+      if (currentView === 'agenda' && !ev.showInMatchPlan) {
+        return false;
+      }
+
+      if (isListView && !showPastEvents) {
         let exclusiveEnd = ev.end || ev.start!;
         if (ev.allDay && exclusiveEnd.getTime() > ev.start!.getTime()) {
           exclusiveEnd = new Date(exclusiveEnd.getTime() - 1000);
         }
-        // Wenn der Termin vor heute 00:00 Uhr endete -> Ausblenden
         if (exclusiveEnd.getTime() < todayStart) {
           return false;
         }
@@ -177,7 +183,7 @@ export const CalendarView: React.FC = () => {
       if (ev.sourceId === 'manual') return ev.seriesId ? activeFilters.includes('dienste') : activeFilters.includes('manual');
       return activeFilters.includes(ev.sourceId);
     });
-  }, [rbcEvents, activeFilters, showPastEvents]);
+  }, [rbcEvents, activeFilters, showPastEvents, currentView]);
 
   const displayEvents = useMemo(() => {
     if (currentView === 'termine') return filteredEvents.filter(e => e.sourceId === 'manual' && !e.seriesId);
@@ -325,7 +331,17 @@ export const CalendarView: React.FC = () => {
 
   const CustomAgendaView = useMemo(() => {
     const View = ({ date, events }: { date: Date, events: AdaptedEvent[] }) => {
-      const daysInMonth = eachDayOfInterval({ start: startOfMonth(date), end: endOfMonth(date) });
+      const monthStart = startOfMonth(date);
+      const monthEnd = endOfMonth(date);
+      const today = startOfDay(new Date());
+      
+      let rangeStart = monthStart;
+      if (!showPastEvents && isSameMonth(date, new Date())) {
+        rangeStart = today;
+      }
+
+      const daysInMonth = eachDayOfInterval({ start: rangeStart, end: monthEnd });
+      
       return (
         <div className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-4 bg-gray-50/30 h-full">
           {daysInMonth.map(day => {
@@ -337,7 +353,7 @@ export const CalendarView: React.FC = () => {
             });
             if (hideEmptyDays && dayEvents.length === 0) return null;
             dayEvents.sort((a, b) => { if (a.allDay && !b.allDay) return -1; if (!a.allDay && b.allDay) return 1; return a.start!.getTime() - b.start!.getTime(); });
-            const isToday = day.getTime() === startOfDay(new Date()).getTime();
+            const isToday = day.getTime() === today.getTime();
             return (
               <div key={day.toISOString()} className={`bg-white rounded-lg shadow-sm border ${isToday ? 'border-blue-300 ring-2 ring-blue-100' : 'border-gray-200'} overflow-hidden`}>
                 <div className={`px-4 py-2 border-b ${isToday ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'}`}>
@@ -365,7 +381,7 @@ export const CalendarView: React.FC = () => {
       );
     };
     View.title = () => ''; View.navigate = () => new Date(); return View;
-  }, [hideEmptyDays]);
+  }, [hideEmptyDays, showPastEvents]);
 
   const renderActionButtons = () => (
     <>
@@ -396,7 +412,6 @@ export const CalendarView: React.FC = () => {
       
       <div className="hidden sm:block flex-1 min-w-[10px]"></div>
       
-      {/* CHIRURGISCHER EINGRIFF: Neuer Schalter für die Historie */}
       <label className="flex items-center space-x-2 text-sm cursor-pointer sm:border-l border-gray-200 sm:pl-4 mt-2 sm:mt-0 w-full sm:w-auto">
         <input type="checkbox" checked={showPastEvents} onChange={(e) => setShowPastEvents(e.target.checked)} className="rounded w-4 h-4 text-purple-600 focus:ring-purple-500"/>
         <span className="text-gray-600 font-bold">Historie einblenden</span>
@@ -485,4 +500,4 @@ export const CalendarView: React.FC = () => {
     </div>
   );
 };
-// --- END OF FILE 515 Zeilen ---
+// --- END OF FILE ---
