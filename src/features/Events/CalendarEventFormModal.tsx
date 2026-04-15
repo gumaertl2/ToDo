@@ -1,4 +1,4 @@
-// 2026-04-15 20:45 - FEATURE: Schalter für Spielplan-Sichtbarkeit für manuelle Termine
+// 2026-04-15 20:55 - FIX: Firebase "undefined" Error beim Speichern von Terminen behoben
 // src/features/Events/CalendarEventFormModal.tsx
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
@@ -30,7 +30,6 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
   const [color, setColor] = useState(existingEvent?.color || '#3b82f6');
   
   const [isPublic, setIsPublic] = useState(existingEvent?.isPublic ?? true);
-  // CHIRURGISCHER EINGRIFF: Neuer State für Spielplan
   const [showInMatchPlan, setShowInMatchPlan] = useState(existingEvent?.showInMatchPlan || false);
   
   const [reminderSenderUserId, setReminderSenderUserId] = useState(existingEvent?.reminderSenderUserId || '');
@@ -73,6 +72,7 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
       return;
     }
     
+    // CHIRURGISCHER EINGRIFF: null statt undefined verwenden, um Firebase-Crash zu verhindern
     const rawEventData: any = {
       id: existingEvent?.id || `calev-${Date.now()}`,
       schemaVersion: '1.0',
@@ -85,16 +85,15 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
       isPublic,
       showInMatchPlan,
       eventType: 'TERMIN',
-      reminderSenderUserId: reminderSenderUserId || undefined,
-      reminderLeadDays: reminderSenderUserId ? parseInt(reminderLeadDays, 10) : undefined,
-      reminderCustomText: reminderSenderUserId ? reminderCustomText.trim() : undefined,
-      reminderSentAt: existingEvent?.reminderSentAt,
+      reminderSenderUserId: reminderSenderUserId || null,
+      reminderLeadDays: reminderSenderUserId ? parseInt(reminderLeadDays, 10) : null,
+      reminderCustomText: reminderSenderUserId && reminderCustomText.trim() ? reminderCustomText.trim() : null,
     };
 
-    if (existingEvent?.seriesId) {
-      rawEventData.seriesId = existingEvent.seriesId;
-    }
+    if (existingEvent?.reminderSentAt) rawEventData.reminderSentAt = existingEvent.reminderSentAt;
+    if (existingEvent?.seriesId) rawEventData.seriesId = existingEvent.seriesId;
 
+    // CHIRURGISCHER EINGRIFF: Letzter Schutzschild gegen undefined
     const safeEventData = Object.fromEntries(Object.entries(rawEventData).filter(([_, v]) => v !== undefined)) as unknown as CalendarEvent;
 
     const result = existingEvent 
@@ -317,4 +316,4 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
     </div>
   );
 };
-// --- END OF FILE ---
+// --- END OF FILE 301 Zeilen ---

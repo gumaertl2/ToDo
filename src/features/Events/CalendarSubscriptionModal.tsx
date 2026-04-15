@@ -1,4 +1,4 @@
-// 2026-04-15 20:45 - FEATURE: Schalter für Spielplan/Wettkampfkalender-Abo
+// 2026-04-15 20:55 - FIX: Firebase "undefined" Error beim Speichern von Abos behoben
 // src/features/Events/CalendarSubscriptionModal.tsx
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
@@ -23,7 +23,6 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
 
   const [color, setColor] = useState('#10b981');
   
-  // CHIRURGISCHER EINGRIFF: State für das Spielplan-Flag
   const [showInMatchPlan, setShowInMatchPlan] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
@@ -100,29 +99,33 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
 
     let targetSubId: string;
 
-    const subPayload = {
+    // CHIRURGISCHER EINGRIFF: null statt undefined verwenden, damit Firebase nicht abstürzt
+    const subPayload: any = {
       name: name.trim(),
       url: importType === 'file' ? 'FILE_IMPORT' : url.trim(),
       color,
       showInMatchPlan,
-      reminderSenderUserId: reminderSenderUserId || undefined,
-      reminderLeadDays: reminderSenderUserId ? parseInt(reminderLeadDays, 10) : undefined,
-      reminderCustomText: reminderSenderUserId ? reminderCustomText.trim() : undefined,
+      reminderSenderUserId: reminderSenderUserId || null,
+      reminderLeadDays: reminderSenderUserId ? parseInt(reminderLeadDays, 10) : null,
+      reminderCustomText: reminderSenderUserId && reminderCustomText.trim() ? reminderCustomText.trim() : null,
     };
 
     if (editingId) {
       const existingSub = calendarSubscriptions.find(s => s.id === editingId);
       if (!existingSub) return;
       
-      const updatedSub: CalendarSubscription = {
+      const mergedObj = {
         ...existingSub,
         ...subPayload,
         ...(importType === 'file' && parsedEvents ? { cachedEvents: parsedEvents, lastSyncedAt: Date.now() } : {})
       };
 
-      const result = await updateCalendarSubscription(updatedSub);
+      // CHIRURGISCHER EINGRIFF: Letzter Schutzschild gegen undefined
+      const safeSub = Object.fromEntries(Object.entries(mergedObj).filter(([_, v]) => v !== undefined)) as unknown as CalendarSubscription;
+
+      const result = await updateCalendarSubscription(safeSub);
       if (result.success) {
-        targetSubId = updatedSub.id;
+        targetSubId = safeSub.id;
         cancelEdit();
       } else {
         setError(result.error?.message || 'Fehler beim Aktualisieren.');
@@ -130,7 +133,7 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
         return;
       }
     } else {
-      const newSub: CalendarSubscription = {
+      const mergedObj = {
         id: `sub-${Date.now()}`,
         schemaVersion: '1.0',
         ...subPayload,
@@ -138,9 +141,12 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
         ...(importType === 'file' && parsedEvents ? { cachedEvents: parsedEvents, lastSyncedAt: Date.now() } : {})
       };
 
-      const result = await addCalendarSubscription(newSub as CalendarSubscription);
+      // CHIRURGISCHER EINGRIFF: Letzter Schutzschild gegen undefined
+      const safeSub = Object.fromEntries(Object.entries(mergedObj).filter(([_, v]) => v !== undefined)) as unknown as CalendarSubscription;
+
+      const result = await addCalendarSubscription(safeSub);
       if (result.success) {
-        targetSubId = newSub.id;
+        targetSubId = safeSub.id;
         cancelEdit();
       } else {
         setError(result.error?.message || 'Fehler beim Speichern.');
@@ -335,7 +341,6 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
                 )}
               </div>
 
-              {/* CHIRURGISCHER EINGRIFF: Checkbox für Spielplan */}
               <div className="md:col-span-12 mt-2 flex items-center mb-2">
                 <input type="checkbox" id="showInMatchPlan" checked={showInMatchPlan} onChange={(e) => setShowInMatchPlan(e.target.checked)} className="mr-2 rounded text-green-600 focus:ring-green-500" disabled={isSaving} />
                 <label htmlFor="showInMatchPlan" className="text-sm text-gray-700 font-bold flex items-center cursor-pointer">
@@ -414,4 +419,4 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
     </div>
   );
 };
-// --- END OF FILE ---
+// --- END OF FILE 381 Zeilen ---
