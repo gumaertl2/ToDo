@@ -1,4 +1,4 @@
-// [2026-05-30] - FEATURE: WelcomeDashboard als neue Standard-Startseite (Route '/') integriert.
+// [2026-05-30] - FEATURE: WelcomeDashboard als neue Standard-Startseite (Route '/') integriert. 
 // 2026-04-15 19:15 - FEATURE: Kalender als neue Standard-Startseite gesetzt
 // 2026-04-30 17:15 - FEATURE: Route für Team-PINs (Wettkampf-Tresor) ergänzt
 // src/App.tsx
