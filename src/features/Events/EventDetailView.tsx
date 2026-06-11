@@ -1,5 +1,5 @@
+// [2026-06-11] - BUGFIX: JSX Parse Error final behoben. Kommentare vor das return-Statement verschoben.
 // [2026-06-11] - UX-FIX: "Weg B" (Natürliches Scrollen) final korrigiert. Die unsichtbare Höhen-Barriere 'h-full' im mobilen Hochformat wurde durch 'block min-h-screen' ersetzt. Das Layout verhält sich nun im Hochformat exakt so flüssig und grenzenlos wie zuvor nur im Querformat. Das Desktop-Layout (Split-Screen) bleibt via 'md:flex md:h-full' geschützt.
-// [2026-06-11] - BUGFIX: JSX Parse Error behoben. Ein fehlerhaft platzierter JSX-Kommentar direkt nach einem return-Statement wurde in das umschließende div verschoben.
 // [2026-06-11] - BUGFIX: Unused variable 'isRoutineItem' entfernt, um den strict TypeScript Compiler (Vercel Build) zufrieden zu stellen.
 // [2026-06-11] - ARCHITEKTUR-FIX: Staubsauger / Sitzungsabschluss an das Fate-Binding Konzept (isHistorical) angepasst. Schließt man ein Protokoll, erhalten alle Punkte des alten Protokolls zwingend den Stempel 'isHistorical: true'. Unfertige Aufgaben (<100%) werden als neue Klone ('isHistorical: false') in das nächste Meeting übertragen.
 // [2026-06-03] - UX-FIX: Blutlinien-Deduplizierung (Bloodline-Scanner) nun auch im Protokoll (EventDetailView) integriert. Verhindert, dass durch alte Bugs erzeugte "Zwillings-Klone" (Aufgaben mit derselben baseItemId im selben Event) doppelt in der Agenda oder im Druck-Layout auftauchen. Es wird pro Blutlinie zwingend nur der jüngste/offene Erbe angezeigt.
@@ -13,7 +13,6 @@
 // [2026-05-25] - MASTER SYNC: Klon-Logik für "Sitzung schließen" auf Container-Prinzip gehärtet. Unterpunkte (auch erledigte!) wandern 1:1 mit dem unfertigen Oberpunkt mit. baseItemId wird konsequent gesetzt, damit der neue fetchTasks-Filter die Vererbung erkennt.
 // [2026-05-25] - ARCHITEKTUR-FIX: Unterpunkte werden nun sauber mit ihrem neuen Oberpunkt verknüpft (keine Waisen mehr). Fortschritte von unfertigen Aufgaben bleiben erhalten, Info-Routinen starten sauber neu.
 // [2026-05-16] - BUGFIX: Druck-Funktion (handlePrint) filtert nun TRASH heraus und zeigt Typ-Präfixe (A:, I:) an.
-// --- START OF FILE ---
 // src/features/Events/EventDetailView.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -404,8 +403,8 @@ export const EventDetailView: React.FC = () => {
 
   const editingParentTask = editingItem?.parentItemId ? eventAgenda.find(t => t.id === editingItem.parentItemId) : undefined;
 
+  // CHIRURGISCHER EINGRIFF: Für Mobile wird hier 'block min-h-screen' gesetzt. Damit wird das unsichtbare 'h-full' Korsett zerstört und die Ansicht wächst natürlich nach unten. Ab 'md:' (Tablet/Desktop) greift wieder das vertraute 'flex h-full' Layout.
   return (
-    {/* CHIRURGISCHER EINGRIFF: Für Mobile wird hier 'block min-h-screen' gesetzt. Damit wird das unsichtbare 'h-full' Korsett zerstört und die Ansicht wächst natürlich nach unten. Ab 'md:' (Tablet/Desktop) greift wieder das vertraute 'flex h-full' Layout. */}
     <div className="block h-auto min-h-screen md:flex md:flex-col md:h-full md:overflow-hidden print:!bg-white print:!h-auto print:!block print:!w-full print:!m-0 print:!p-0">
       <EventDetailHeader
         eventId={eventId || ''}
