@@ -1,3 +1,4 @@
+// [2026-06-11] - BUGFIX: JSX Parse Error behoben. Den falsch platzierten JSX-Kommentar direkt nach dem return() in einen sauberen TS-Kommentar VOR das return Statement verschoben.
 // [2026-06-11] - UX-FIX: "Weg B" (Natürliches Scrollen) komplettiert. Innere Container auf 'overflow-visible md:overflow-y-auto' bzw. 'overflow-visible md:overflow-hidden' umgestellt, damit die mobile Listen-Ansicht nicht mehr durch eine eigene Scrollbar eingesperrt ist, sondern dem natürlichen Scroll-Flow der übergeordneten EventDetailView folgt.
 // [2026-06-11] - ARCHITEKTUR-FIX: Fate-Binding in EventAgendaList integriert. Kosmetik-Filter entfernt und durch isHistorical-Prüfung ersetzt. Legacy-Fallback für alte Daten (isHistorical === undefined) beibehalten.
 // [2026-06-10] - BUGFIX: Sperre beim Löschen für Unterpunkte aufgehoben. Unterpunkte in aktiven Sitzungen können nun per Soft-Delete (TRASH) entfernt werden, ohne dass die Haupt-Routine blockiert.
@@ -393,8 +394,8 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
     }
   };
 
+  // CHIRURGISCHER EINGRIFF: overflow-visible md:overflow-hidden erlaubt das Wachsen auf dem iPhone und behält den Split-Screen auf Desktop
   return (
-    {/* CHIRURGISCHER EINGRIFF: overflow-visible md:overflow-hidden erlaubt das Wachsen auf dem iPhone und behält den Split-Screen auf Desktop */}
     <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-visible md:overflow-hidden landscape:h-auto landscape:overflow-visible landscape:border-none landscape:shadow-none lg:!h-full lg:!overflow-hidden lg:!border lg:!border-gray-200 lg:!shadow-sm lg:!rounded-xl print:!shadow-none print:!border-none print:!rounded-none print:!overflow-visible print:!block">
       <div className="p-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center flex-wrap gap-2 sticky top-0 z-30 landscape:bg-white landscape:py-2 lg:!bg-gray-50 lg:!py-4 print:!bg-transparent print:!border-b-2 print:!border-black print:!px-0 print:!pt-0">
         
