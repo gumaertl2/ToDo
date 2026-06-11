@@ -1,9 +1,11 @@
+// [2026-06-11] - UX-FIX: "Weg B" (Natürliches Scrollen) komplettiert. Innere Container auf 'overflow-visible md:overflow-y-auto' bzw. 'overflow-visible md:overflow-hidden' umgestellt, damit die mobile Listen-Ansicht nicht mehr durch eine eigene Scrollbar eingesperrt ist, sondern dem natürlichen Scroll-Flow der übergeordneten EventDetailView folgt.
 // [2026-06-11] - ARCHITEKTUR-FIX: Fate-Binding in EventAgendaList integriert. Kosmetik-Filter entfernt und durch isHistorical-Prüfung ersetzt. Legacy-Fallback für alte Daten (isHistorical === undefined) beibehalten.
 // [2026-06-10] - BUGFIX: Sperre beim Löschen für Unterpunkte aufgehoben. Unterpunkte in aktiven Sitzungen können nun per Soft-Delete (TRASH) entfernt werden, ohne dass die Haupt-Routine blockiert.
 // [2026-06-03] - ARCHITEKTUR-FIX (Container-Swap): Wenn der Oberpunkt eines Containers (Routine) auf 100% (Erledigt) gesetzt wird, filtert das UI ab sofort den GESAMTEN Container (inkl. aller offenen/erledigten Unterpunkte) unsichtbar ins Schattenreich, da ihr frisch geklonter Container-Zwilling sofort den Platz in der Agenda einnimmt.
 // [2026-06-03] - BUGFIX: 'isReadOnly={isReadOnly}' Prop an ItemFormModal durchgereicht. Dadurch öffnet sich das Detail-Modal bei abgeschlossenen Protokollen nun korrekt im Read-Only-Modus.
 // [2026-06-01] - BUGFIX: 'searchQuery' Prop an AgendaItemRow durchgereicht, damit das Highlighting in den Zeilen ankommt.
 // [2026-05-31] - UX-FIX: Suchfeld ("Volltext / Ähnlichkeitssuche") re-integriert. 
+// --- START OF FILE ---
 // src/features/Events/EventAgendaList.tsx
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom'; 
@@ -98,12 +100,11 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
         if (item.status === 'TRASH') return false;
 
         // ---> CHIRURGISCHER EINGRIFF: FATE-BINDING FILTER <---
-        // In aktiven Sitzungen blenden wir historische Daten komplett aus (sie gehören ins Archiv)
         if (!isReadOnly && item.isHistorical === true) {
             return false;
         }
 
-        // FALLBACK: Wenn isHistorical noch undefined ist (Altdaten), greift der alte Kosmetik-Filter
+        // FALLBACK: Wenn isHistorical noch undefined ist (Altdaten)
         if (!isReadOnly && item.isHistorical === undefined) {
             const isRoutine = item.isRoutine === true || String(item.isRoutine) === 'true';
             const isCompleted = item.progress === 100 || item.status === 'ERLEDIGT';
@@ -376,7 +377,6 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
       const isClone = !!baseItemId;
       const isAssigned = (assigneeUserIds && assigneeUserIds.length > 0) || (assigneeGroupIds && assigneeGroupIds.length > 0);
       
-      // CHIRURGISCHER EINGRIFF: Sperre nur für Hauptpunkte!
       if (isClone && !selectedItem.isSubItem) {
         window.alert(`Die vererbte Aufgabe "${title}" kann nicht gelöscht werden.\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn sie beendet ist.`);
         return;
@@ -394,7 +394,8 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
   };
 
   return (
-    <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden landscape:h-auto landscape:overflow-visible landscape:border-none landscape:shadow-none lg:!h-full lg:!overflow-hidden lg:!border lg:!border-gray-200 lg:!shadow-sm lg:!rounded-xl print:!shadow-none print:!border-none print:!rounded-none print:!overflow-visible print:!block">
+    {/* CHIRURGISCHER EINGRIFF: overflow-visible md:overflow-hidden erlaubt das Wachsen auf dem iPhone und behält den Split-Screen auf Desktop */}
+    <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-visible md:overflow-hidden landscape:h-auto landscape:overflow-visible landscape:border-none landscape:shadow-none lg:!h-full lg:!overflow-hidden lg:!border lg:!border-gray-200 lg:!shadow-sm lg:!rounded-xl print:!shadow-none print:!border-none print:!rounded-none print:!overflow-visible print:!block">
       <div className="p-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center flex-wrap gap-2 sticky top-0 z-30 landscape:bg-white landscape:py-2 lg:!bg-gray-50 lg:!py-4 print:!bg-transparent print:!border-b-2 print:!border-black print:!px-0 print:!pt-0">
         
         <div className="flex items-center">
@@ -460,7 +461,8 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
         </div>
       </div>
       
-      <div className="flex-1 overflow-y-auto landscape:overflow-visible bg-gray-50/10 p-4 lg:!overflow-y-auto print:!overflow-visible print:!p-0 print:!pt-4 print:!bg-white">
+      {/* CHIRURGISCHER EINGRIFF: overflow-visible md:overflow-y-auto zwingt Mobile zum Durchreichen der Höhe, sperrt aber den Scroll-Container für Desktop ein */}
+      <div className="flex-1 overflow-visible md:overflow-y-auto landscape:overflow-visible bg-gray-50/10 p-4 lg:!overflow-y-auto print:!overflow-visible print:!p-0 print:!pt-4 print:!bg-white">
         {eventAgenda.length === 0 ? (
           <div className="text-center text-gray-400 py-10"><p>Die Agenda ist noch leer.</p></div>
         ) : (
@@ -502,7 +504,6 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
                         const isClone = !!item.baseItemId;
                         const isAssigned = (item.assigneeUserIds && item.assigneeUserIds.length > 0) || (item.assigneeGroupIds && item.assigneeGroupIds.length > 0);
                         
-                        // CHIRURGISCHER EINGRIFF: Sperre nur für Hauptpunkte!
                         if (isClone && !item.isSubItem) { 
                           window.alert(`Die vererbte Aufgabe "${title}" kann nicht gelöscht werden.\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn sie beendet ist.`); 
                           return; 
