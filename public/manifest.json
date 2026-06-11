@@ -1,0 +1,15 @@
+{
+  "name": "PapaToDo Vereinsmanager",
+  "short_name": "PapaToDo",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/papatodo-logo.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png"
+    }
+  ]
+}
