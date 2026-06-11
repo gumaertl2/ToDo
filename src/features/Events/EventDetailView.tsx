@@ -1,3 +1,5 @@
+// [2026-06-11] - BUGFIX: JSX Parse Error behoben. Ein fehlerhaft platzierter JSX-Kommentar direkt nach einem return-Statement wurde in das umschließende div verschoben.
+// [2026-06-11] - UX-FIX: "Weg B" (Natürliches Scrollen) für mobile Geräte aktiviert. Das starre h-full/overflow-hidden Korsett wurde auf md: (Desktop) beschränkt. Auf dem iPhone scrollt nun die gesamte Ansicht flüssig, sodass der Header aus dem Bild wandern kann und 100% Platz für die Agenda macht.
 // [2026-06-11] - BUGFIX: Unused variable 'isRoutineItem' entfernt, um den strict TypeScript Compiler (Vercel Build) zufrieden zu stellen.
 // [2026-06-11] - ARCHITEKTUR-FIX: Staubsauger / Sitzungsabschluss an das Fate-Binding Konzept (isHistorical) angepasst. Schließt man ein Protokoll, erhalten alle Punkte des alten Protokolls zwingend den Stempel 'isHistorical: true'. Unfertige Aufgaben (<100%) werden als neue Klone ('isHistorical: false') in das nächste Meeting übertragen.
 // [2026-06-03] - UX-FIX: Blutlinien-Deduplizierung (Bloodline-Scanner) nun auch im Protokoll (EventDetailView) integriert. Verhindert, dass durch alte Bugs erzeugte "Zwillings-Klone" (Aufgaben mit derselben baseItemId im selben Event) doppelt in der Agenda oder im Druck-Layout auftauchen. Es wird pro Blutlinie zwingend nur der jüngste/offene Erbe angezeigt.
@@ -106,7 +108,6 @@ export const EventDetailView: React.FC = () => {
     };
   }, [isEventModalOpen, currentEvent]);
 
-  // CHIRURGISCHER EINGRIFF: Blutlinien-Deduplizierung für die Agenda-Ansicht
   const deduplicatedAgenda = useMemo(() => {
     const bloodlineMap = new Map<string, AgendaItem[]>();
     eventAgenda.forEach(item => {
@@ -117,13 +118,11 @@ export const EventDetailView: React.FC = () => {
 
     const primaryTaskIds = new Set<string>();
     bloodlineMap.forEach(group => {
-      // Sortieren: Neuere nach Erstelldatum/Update zuerst
       group.sort((a, b) => {
          const timeA = a.createdAt || a.updatedAt || 0;
          const timeB = b.createdAt || b.updatedAt || 0;
          return timeB - timeA;
       });
-      // Der Primäre Erbe ist der offene, oder (wenn alle erledigt sind) der allerneueste
       let primary = group.find(t => t.status !== 'ERLEDIGT' && t.progress !== 100);
       if (!primary) primary = group[0];
       primaryTaskIds.add(primary.id);
@@ -405,7 +404,8 @@ export const EventDetailView: React.FC = () => {
   const editingParentTask = editingItem?.parentItemId ? eventAgenda.find(t => t.id === editingItem.parentItemId) : undefined;
 
   return (
-    <div className="flex flex-col h-full landscape:h-auto landscape:block lg:!flex lg:!flex-col lg:!h-full print:!bg-white print:!h-auto print:!block print:!w-full print:!m-0 print:!p-0">
+    <div className="flex flex-col h-full overflow-y-auto md:overflow-hidden landscape:h-auto landscape:block lg:!flex lg:!flex-col lg:!h-full print:!bg-white print:!h-auto print:!block print:!w-full print:!m-0 print:!p-0">
+      {/* CHIRURGISCHER EINGRIFF: overflow-y-auto erlaubt dem ganzen View das Scrollen auf Mobile. md:overflow-hidden blockt es wieder für den Desktop. */}
       <EventDetailHeader
         eventId={eventId || ''}
         currentEvent={currentEvent}
@@ -428,7 +428,8 @@ export const EventDetailView: React.FC = () => {
         onPrint={handlePrint}
       />
 
-      <div className="flex-1 flex flex-col md:flex-row gap-6 overflow-hidden landscape:overflow-visible landscape:block lg:!flex lg:!flex-row lg:!overflow-hidden print:!overflow-visible print:!block print:!w-full print:!m-0">
+      {/* CHIRURGISCHER EINGRIFF: overflow-visible erlaubt der Liste, nach unten zu wachsen auf Mobile. md:overflow-hidden kapselt das Scrollen wieder für den Desktop ein. */}
+      <div className="flex-1 flex flex-col md:flex-row gap-6 overflow-visible md:overflow-hidden landscape:overflow-visible landscape:block lg:!flex lg:!flex-row lg:!overflow-hidden print:!overflow-visible print:!block print:!w-full print:!m-0">
         <EventAgendaList
           eventId={eventId || ''}
           currentEvent={currentEvent}
@@ -442,9 +443,6 @@ export const EventDetailView: React.FC = () => {
           onPlanNextMeeting={() => { if (validateBeforeClose()) setIsEventModalOpen(true); }}
           onFinishEvent={async () => { 
             if (validateBeforeClose() && window.confirm('Projekt abschließen? (Achtung: Dies friert alle Daten dieses Protokolls unwiderruflich ein!)')) {
-              
-              // ---> CHIRURGISCHER EINGRIFF: FATE-BINDING (Sitzungsversiegelung ohne Klonen) <---
-              // Wird geklickt, ohne ein Folge-Meeting zu planen, wird einfach alles hart versiegelt.
               const sealPromises = eventAgenda.map(item => {
                 if (item.status === 'TRASH') return Promise.resolve({ success: true });
                 return saveAgendaItem({ ...item, isHistorical: true });
@@ -550,9 +548,6 @@ export const EventDetailView: React.FC = () => {
             if (!result?.success) throw new Error(result?.error?.message); 
             
             if (currentEvent.status === 'AKTIV') { 
-              
-              // ---> CHIRURGISCHER EINGRIFF: FATE-BINDING (Sitzungsversiegelung mit Klon-Übertrag) <---
-              // 1. Wir versiegeln das alte Protokoll unwiderruflich. Alles (auch <100%) bekommt isHistorical: true.
               const sealPromises = eventAgenda.map(item => {
                 if (item.status === 'TRASH') return Promise.resolve({ success: true });
                 return saveAgendaItem({ ...item, isHistorical: true });
@@ -561,16 +556,12 @@ export const EventDetailView: React.FC = () => {
               
               await updateEvent({ ...currentEvent, status: 'ABGESCHLOSSEN', actualEndTime: Date.now() }); 
               
-              // 2. Wir filtern, wer ins nächste Meeting kopiert werden darf (Der Übertrag).
               const parentItemsToCopy = eventAgenda.filter(item => {
                 if (item.isSubItem || item.status === 'TRASH') return false; 
-                
                 if (item.type === 'AUFGABE') {
                   const isFinished = item.progress === 100 || item.status === 'ERLEDIGT';
-                  // Nur Unfertige Aufgaben (<100%) wandern mit.
                   return !isFinished;
                 } else {
-                  // Nicht-Aufgaben (Info, Beschluss) wandern nicht mit.
                   return false; 
                 }
               });
@@ -604,7 +595,7 @@ export const EventDetailView: React.FC = () => {
                   createdAt: Date.now() + delay,
                   isDueNextMeeting: false,
                   dueDate: newDueDate,
-                  isHistorical: false // WICHTIG: Der neue Klon ist aktiv und frisch!
+                  isHistorical: false 
                 };
 
                 Object.keys(safePayload).forEach(key => {
@@ -615,7 +606,6 @@ export const EventDetailView: React.FC = () => {
                 delay += 50;
               }
 
-              // 3. Unterpunkte (Kinder) rüberziehen, sofern ihr Boss kopiert wurde.
               const subItemsToCopy = eventAgenda.filter(item => {
                 if (!item.isSubItem || item.status === 'TRASH' || !item.parentItemId) return false;
                 return idMap.has(item.parentItemId);
@@ -655,7 +645,7 @@ export const EventDetailView: React.FC = () => {
                   createdAt: Date.now() + delay,
                   isDueNextMeeting: false,
                   dueDate: newChildDueDate,
-                  isHistorical: false // WICHTIG: Die Klon-Kinder sind aktiv und frisch!
+                  isHistorical: false 
                 };
 
                 Object.keys(safeChildPayload).forEach(key => {
