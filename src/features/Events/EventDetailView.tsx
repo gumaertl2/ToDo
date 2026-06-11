@@ -1,5 +1,5 @@
+// [2026-06-11] - UX-FIX: "Weg B" (Natürliches Scrollen) final korrigiert. Die unsichtbare Höhen-Barriere 'h-full' im mobilen Hochformat wurde durch 'block min-h-screen' ersetzt. Das Layout verhält sich nun im Hochformat exakt so flüssig und grenzenlos wie zuvor nur im Querformat. Das Desktop-Layout (Split-Screen) bleibt via 'md:flex md:h-full' geschützt.
 // [2026-06-11] - BUGFIX: JSX Parse Error behoben. Ein fehlerhaft platzierter JSX-Kommentar direkt nach einem return-Statement wurde in das umschließende div verschoben.
-// [2026-06-11] - UX-FIX: "Weg B" (Natürliches Scrollen) für mobile Geräte aktiviert. Das starre h-full/overflow-hidden Korsett wurde auf md: (Desktop) beschränkt. Auf dem iPhone scrollt nun die gesamte Ansicht flüssig, sodass der Header aus dem Bild wandern kann und 100% Platz für die Agenda macht.
 // [2026-06-11] - BUGFIX: Unused variable 'isRoutineItem' entfernt, um den strict TypeScript Compiler (Vercel Build) zufrieden zu stellen.
 // [2026-06-11] - ARCHITEKTUR-FIX: Staubsauger / Sitzungsabschluss an das Fate-Binding Konzept (isHistorical) angepasst. Schließt man ein Protokoll, erhalten alle Punkte des alten Protokolls zwingend den Stempel 'isHistorical: true'. Unfertige Aufgaben (<100%) werden als neue Klone ('isHistorical: false') in das nächste Meeting übertragen.
 // [2026-06-03] - UX-FIX: Blutlinien-Deduplizierung (Bloodline-Scanner) nun auch im Protokoll (EventDetailView) integriert. Verhindert, dass durch alte Bugs erzeugte "Zwillings-Klone" (Aufgaben mit derselben baseItemId im selben Event) doppelt in der Agenda oder im Druck-Layout auftauchen. Es wird pro Blutlinie zwingend nur der jüngste/offene Erbe angezeigt.
@@ -13,6 +13,7 @@
 // [2026-05-25] - MASTER SYNC: Klon-Logik für "Sitzung schließen" auf Container-Prinzip gehärtet. Unterpunkte (auch erledigte!) wandern 1:1 mit dem unfertigen Oberpunkt mit. baseItemId wird konsequent gesetzt, damit der neue fetchTasks-Filter die Vererbung erkennt.
 // [2026-05-25] - ARCHITEKTUR-FIX: Unterpunkte werden nun sauber mit ihrem neuen Oberpunkt verknüpft (keine Waisen mehr). Fortschritte von unfertigen Aufgaben bleiben erhalten, Info-Routinen starten sauber neu.
 // [2026-05-16] - BUGFIX: Druck-Funktion (handlePrint) filtert nun TRASH heraus und zeigt Typ-Präfixe (A:, I:) an.
+// --- START OF FILE ---
 // src/features/Events/EventDetailView.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -404,8 +405,8 @@ export const EventDetailView: React.FC = () => {
   const editingParentTask = editingItem?.parentItemId ? eventAgenda.find(t => t.id === editingItem.parentItemId) : undefined;
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto md:overflow-hidden landscape:h-auto landscape:block lg:!flex lg:!flex-col lg:!h-full print:!bg-white print:!h-auto print:!block print:!w-full print:!m-0 print:!p-0">
-      {/* CHIRURGISCHER EINGRIFF: overflow-y-auto erlaubt dem ganzen View das Scrollen auf Mobile. md:overflow-hidden blockt es wieder für den Desktop. */}
+    {/* CHIRURGISCHER EINGRIFF: Für Mobile wird hier 'block min-h-screen' gesetzt. Damit wird das unsichtbare 'h-full' Korsett zerstört und die Ansicht wächst natürlich nach unten. Ab 'md:' (Tablet/Desktop) greift wieder das vertraute 'flex h-full' Layout. */}
+    <div className="block h-auto min-h-screen md:flex md:flex-col md:h-full md:overflow-hidden print:!bg-white print:!h-auto print:!block print:!w-full print:!m-0 print:!p-0">
       <EventDetailHeader
         eventId={eventId || ''}
         currentEvent={currentEvent}
@@ -428,8 +429,8 @@ export const EventDetailView: React.FC = () => {
         onPrint={handlePrint}
       />
 
-      {/* CHIRURGISCHER EINGRIFF: overflow-visible erlaubt der Liste, nach unten zu wachsen auf Mobile. md:overflow-hidden kapselt das Scrollen wieder für den Desktop ein. */}
-      <div className="flex-1 flex flex-col md:flex-row gap-6 overflow-visible md:overflow-hidden landscape:overflow-visible landscape:block lg:!flex lg:!flex-row lg:!overflow-hidden print:!overflow-visible print:!block print:!w-full print:!m-0">
+      {/* CHIRURGISCHER EINGRIFF: Auch hier wird das Flex-Korsett für Mobile entfernt und erst ab 'md:' reaktiviert. mt-4 sorgt für minimalen Abstand unterm Header auf dem Handy. */}
+      <div className="block mt-4 md:mt-0 md:flex-1 md:flex md:flex-row gap-6 md:overflow-hidden print:!overflow-visible print:!block print:!w-full print:!m-0">
         <EventAgendaList
           eventId={eventId || ''}
           currentEvent={currentEvent}
