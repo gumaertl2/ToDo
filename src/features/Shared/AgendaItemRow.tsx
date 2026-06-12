@@ -1,13 +1,7 @@
-// [2026-06-01] - UX-FIX: Such-Highlighting an die Beschreibung (RichTextRenderer) weitergereicht.
-// [2026-05-26] - BUGFIX: historyCount nutzt nun allAgendaItems statt tasks (gefilterter Store). Blutlinien-Logik (baseItemId || id) identisch zum RollenTab implementiert, damit auch erstmalig erledigte Routinen und Titel-Änderungen die Verbindung nicht verlieren.
-// 2026-05-12 16:55 - UX-FEATURE: Titel-Präfix (A: / I:) für AGENDA und INFO Punkte zur optischen Unterscheidung eingebaut.
-// 2026-05-12 15:45 - UX-FIX: CSS-Hack. Dropdown zeigt geschlossen nur noch nackte Nummer. Beim Klick volle Titel.
-// 2026-05-12 15:35 - FEATURE: Reordering auch für Unterpunkte freigeschaltet.
-// 2026-05-12 15:30 - FINAL REFACTOR: Vollständige Modularisierung bei 100% Layout-Treue.
-// 2026-05-13 16:35 - CHIRURGISCHER EINGRIFF: Soft-Delete Props aufgenommen und an Sub-Komponenten weitergeleitet.
-// 2026-05-13 18:20 - BUGFIX: Rechtsklick-Blockade für TRASH-Elemente aufgehoben & Props an Inline-Sektion gereicht.
-// 2026-05-14 10:45 - BUGFIX: Fokus-Konflikt gelöst. Inline-Editoren speichern nicht mehr überschreibend, wenn das Modal geöffnet wird.
-// 2026-05-14 11:00 - BUGFIX: Aggressives Auto-Focus von leeren Inline-Editoren deaktiviert, um Modal-Fokus zu schützen.
+// [2026-06-12] - UX-REFACTOR: Time-Badges (Heatmap) in die linke Gliederungsspalte verschoben und strikt linksbündig ausgerichtet. Verhindert optisches "Flattern" der Textlängen und räumt den Platz neben dem Titel auf.
+// [2026-06-12] - BUGFIX: 'isTemplateMode' aus dem Schutzschild der Heatmap (getTimeCategory) entfernt. Die TasksListView nutzt diesen Modus für das Layout, was fälschlicherweise die Farben blockiert hatte.
+// [2026-06-12] - BUGFIX: Heatmap und Time-Badges durch 'showTimeCategory'-Prop gekapselt.
+// [2026-06-12] - UX-UPGRADE: "Heatmap" (Farbiger linker Rand) & "Time-Badges" ([in X T]) integriert.
 // src/features/Shared/AgendaItemRow.tsx
 import React, { useState, useEffect } from 'react';
 import { useClubStore } from '../../store/useClubStore';
@@ -83,6 +77,7 @@ interface AgendaItemRowProps {
   onSelect?: () => void; 
   searchQuery?: string;
   showMinimalDesktopActions?: boolean; 
+  showTimeCategory?: boolean;
 }
 
 export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({ 
@@ -90,10 +85,8 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
   onToggleSubItems, startTimeStr, isExpanded, onToggleExpand, onMove, onEdit, onOpenHistory, 
   onDelete, onRestoreFromTrash, onPermanentDelete, canDeleteAnyItem, onSaveInline, onInsertBelow, onToggleSubItem, parentContextTitle, isTemplateMode = false, 
   isReadOnly = false, isOvertime = false, effectiveDuration, onDurationPreview, isSelected, onSelect,
-  searchQuery, showMinimalDesktopActions = false
+  searchQuery, showMinimalDesktopActions = false, showTimeCategory = false
 }) => {
-  // BUGFIX: allAgendaItems statt tasks — tasks ist der gefilterte Store und enthält keine
-  // erledigten Items aus abgeschlossenen Events. allAgendaItems enthält die komplette Datenbank.
   const { users, groups, allAgendaItems } = useClubStore();
   
   const hasDescription = !!item.description;
@@ -110,17 +103,36 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
 
   const todayStr = new Date().toISOString().substring(0, 10);
 
-  // BUGFIX: Blutlinien-Logik für historyCount — identisch zum RollenTab.
-  // bloodlineId = baseItemId || id (eigene ID ist der Ursprung der Linie, bevor ein Klon existiert).
-  // Wir zählen alle Items deren Blutlinie übereinstimmt UND die erledigt sind.
-  // Damit: Titeländerungen brechen die Verbindung nicht, und die erste Erledigung wird korrekt gezählt.
   const bloodlineId = item.baseItemId || item.id;
   const historyCount = allAgendaItems.filter(t => {
     const tBloodlineId = t.baseItemId || t.id;
     return tBloodlineId === bloodlineId && (t.status === 'ERLEDIGT' || t.progress === 100);
   }).length;
 
-  // CHIRURGISCHER EINGRIFF: Aggressiven autoFocus bei leeren Titeln entfernt, um Fokus-Klau vom Modal zu verhindern.
+  const getTimeCategory = () => {
+    if (!showTimeCategory) return null;
+    
+    if (item.type !== 'AUFGABE' || isReadOnly) return null;
+    if (item.status === 'ERLEDIGT' || item.progress === 100) return null;
+    if (item.status === 'TRASH') return null;
+    
+    if (item.isDueNextMeeting) return { colorClass: 'border-orange-500', badgeClass: 'bg-orange-100 text-orange-700 border-orange-200', text: 'Sitzung' };
+    if (!item.dueDate) return { colorClass: 'border-gray-200', badgeClass: 'bg-gray-100 text-gray-500 border-gray-200', text: 'Zukunft' };
+
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const due = new Date(item.dueDate); due.setHours(0, 0, 0, 0);
+    const diffDays = Math.ceil((due.getTime() - now.getTime()) / (1000 * 3600 * 24));
+
+    if (diffDays < 0) return { colorClass: 'border-red-500', badgeClass: 'bg-red-100 text-red-700 border-red-200', text: `Seit ${Math.abs(diffDays)} T` };
+    if (diffDays === 0) return { colorClass: 'border-orange-500', badgeClass: 'bg-orange-100 text-orange-700 border-orange-200', text: 'Heute' };
+    if (diffDays === 1) return { colorClass: 'border-orange-500', badgeClass: 'bg-orange-100 text-orange-700 border-orange-200', text: 'Morgen' };
+    if (diffDays <= 7) return { colorClass: 'border-orange-500', badgeClass: 'bg-orange-100 text-orange-700 border-orange-200', text: `in ${diffDays} T` };
+    if (diffDays <= 30) return { colorClass: 'border-blue-500', badgeClass: 'bg-blue-50 text-blue-600 border-blue-200', text: `in ${diffDays} T` };
+    
+    return { colorClass: 'border-gray-200', badgeClass: 'bg-gray-100 text-gray-500 border-gray-200', text: `in ${diffDays} T` };
+  };
+
+  const timeCategory = getTimeCategory();
 
   useEffect(() => {
     const handleWindowClick = () => { if (contextMenu) setContextMenu(null); };
@@ -188,7 +200,11 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
     }, 10);
   };
 
-  const wrapperClass = isSelected ? "bg-blue-50/60 ring-1 ring-inset ring-blue-400" : (isReadOnly ? "bg-white" : "bg-white hover:bg-blue-50/30 transition-colors cursor-pointer");
+  const wrapperClass = isSelected 
+    ? "bg-blue-50/60 ring-1 ring-inset ring-blue-400" 
+    : (isReadOnly ? "bg-white" : "bg-white hover:bg-blue-50/30 transition-colors cursor-pointer");
+    
+  const borderLeftClass = timeCategory ? `border-l-4 ${timeCategory.colorClass}` : 'border-l-0';
 
   return (
     <div 
@@ -196,7 +212,7 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
       onClick={() => { if(onSelect) onSelect(); }} 
       onDoubleClick={(e) => { e.stopPropagation(); if (!isReadOnly) handleSafeEdit(item); }}
       onContextMenu={handleContextMenu}
-      className={`agenda-row-wrapper ${wrapperClass} flex flex-col border-b border-gray-200 last:border-0 min-w-full md:min-w-[700px] print:!min-w-0 print:!w-full print:!border-b print:!border-gray-300 relative`}
+      className={`agenda-row-wrapper ${wrapperClass} ${borderLeftClass} flex flex-col border-b border-gray-200 last:border-0 min-w-full md:min-w-[700px] print:!min-w-0 print:!w-full print:!border-l-0 print:!border-b print:!border-gray-300 relative`}
     >
       {contextMenu && (
         <RowContextMenu 
@@ -212,42 +228,54 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
       )}
 
       <div className={`p-3 grid grid-cols-[auto_1fr] ${isTemplateMode ? 'md:grid-cols-[80px_1fr_auto]' : 'md:grid-cols-[105px_1fr_auto]'} gap-2 md:gap-3 items-start print:!grid-cols-[50px_1fr_auto] print:!gap-2 print:!p-2`}>
+        
+        {/* CHIRURGISCHER EINGRIFF: Die linke Gliederungsspalte. Wenn ToDo-Modus (showTimeCategory), dann sitzt hier das linksbündige Badge! */}
         <div className={`relative flex items-start gap-1.5 pt-1 print:!pt-0 ${item.isSubItem && !parentContextTitle ? 'pl-2 md:pl-5' : ''}`}>
           {item.isSubItem && !parentContextTitle && <div className="absolute left-1 top-2.5 w-3 h-3 border-l-2 border-b-2 border-gray-300 rounded-bl print:!hidden" />}
           
-          {onMove && index !== undefined && !isReadOnly && (!item.isSubItem || (positionOptions && positionOptions.length > 0)) ? (
-            <>
-              <div className="relative inline-flex group print:!hidden mt-0.5">
-                <div className="appearance-none text-center font-bold text-gray-600 bg-gray-100 group-hover:bg-gray-200 border border-transparent rounded text-sm py-0 px-1 cursor-pointer outline-none">
-                  {displayIndexStr !== undefined ? displayIndexStr : `${index + 1}.`}
-                </div>
-                <select 
-                  value={index} 
-                  onChange={(e) => onMove(item.id, Number(e.target.value))} 
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  title="Position / Reihenfolge ändern"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {positionOptions
-                    ? positionOptions.map((opt) => <option key={opt.index} value={opt.index}>{opt.label}</option>)
-                    : Array.from({length: totalItems || 0}).map((_, i) => <option key={i} value={i}>{i + 1}</option>)
-                  }
-                </select>
-              </div>
-              <span className="hidden print:!inline font-bold text-gray-500 text-sm mt-0.5">{displayIndexStr !== undefined ? displayIndexStr : `${index + 1}.`}</span>
-            </>
-          ) : (
-            <span className="font-bold text-gray-500 text-sm ml-2 mt-0.5 z-10">{displayIndexStr !== undefined ? displayIndexStr : (index !== undefined ? `${index + 1}.` : '-')}</span>
-          )}
-
-          {!isTemplateMode && (
-            <div className="flex flex-col items-center ml-0.5 z-10">
-              <span onClick={(e) => { e.stopPropagation(); if (!isReadOnly) { setLocalDur(item.durationEstimate || 0); setIsEditingDuration(true); } }} className={`font-bold text-sm whitespace-nowrap flex flex-col items-center leading-tight ${isOvertime ? 'text-red-600' : 'text-gray-900'} ${isReadOnly ? '' : 'cursor-pointer hover:bg-blue-50 hover:text-blue-600 rounded px-1 -ml-1 transition-colors'} print:!ml-1 print:!bg-transparent`}>
-                <span>{startTimeStr}</span>
-                <span className="text-[10px] text-gray-400 font-medium mt-[1px] print:!hidden">({effectiveDuration !== undefined ? effectiveDuration : (item.durationEstimate || 0)}m)</span>
+          {showTimeCategory ? (
+            timeCategory ? (
+              <span className={`z-10 ml-1 md:ml-2 mt-0.5 shrink-0 text-[11px] font-bold px-2 py-0.5 rounded border print:!hidden ${timeCategory.badgeClass}`}>
+                {timeCategory.text}
               </span>
-              {isEditingDuration && <DurationPickerPopup localDur={localDur} onPreviewChange={(v) => { setLocalDur(v); onDurationPreview?.(v); }} onCancel={() => { onDurationPreview?.(item.durationEstimate || 0); setIsEditingDuration(false); }} onCommit={() => { onSaveInline({ ...item, durationEstimate: localDur }); setIsEditingDuration(false); }} />}
-            </div>
+            ) : null
+          ) : (
+            <>
+              {onMove && index !== undefined && !isReadOnly && (!item.isSubItem || (positionOptions && positionOptions.length > 0)) ? (
+                <>
+                  <div className="relative inline-flex group print:!hidden mt-0.5">
+                    <div className="appearance-none text-center font-bold text-gray-600 bg-gray-100 group-hover:bg-gray-200 border border-transparent rounded text-sm py-0 px-1 cursor-pointer outline-none">
+                      {displayIndexStr !== undefined ? displayIndexStr : `${index + 1}.`}
+                    </div>
+                    <select 
+                      value={index} 
+                      onChange={(e) => onMove(item.id, Number(e.target.value))} 
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      title="Position / Reihenfolge ändern"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {positionOptions
+                        ? positionOptions.map((opt) => <option key={opt.index} value={opt.index}>{opt.label}</option>)
+                        : Array.from({length: totalItems || 0}).map((_, i) => <option key={i} value={i}>{i + 1}</option>)
+                      }
+                    </select>
+                  </div>
+                  <span className="hidden print:!inline font-bold text-gray-500 text-sm mt-0.5">{displayIndexStr !== undefined ? displayIndexStr : `${index + 1}.`}</span>
+                </>
+              ) : (
+                <span className="font-bold text-gray-500 text-sm ml-2 mt-0.5 z-10">{displayIndexStr !== undefined ? displayIndexStr : (index !== undefined ? `${index + 1}.` : '-')}</span>
+              )}
+
+              {!isTemplateMode && (
+                <div className="flex flex-col items-center ml-0.5 z-10">
+                  <span onClick={(e) => { e.stopPropagation(); if (!isReadOnly) { setLocalDur(item.durationEstimate || 0); setIsEditingDuration(true); } }} className={`font-bold text-sm whitespace-nowrap flex flex-col items-center leading-tight ${isOvertime ? 'text-red-600' : 'text-gray-900'} ${isReadOnly ? '' : 'cursor-pointer hover:bg-blue-50 hover:text-blue-600 rounded px-1 -ml-1 transition-colors'} print:!ml-1 print:!bg-transparent`}>
+                    <span>{startTimeStr}</span>
+                    <span className="text-[10px] text-gray-400 font-medium mt-[1px] print:!hidden">({effectiveDuration !== undefined ? effectiveDuration : (item.durationEstimate || 0)}m)</span>
+                  </span>
+                  {isEditingDuration && <DurationPickerPopup localDur={localDur} onPreviewChange={(v) => { setLocalDur(v); onDurationPreview?.(v); }} onCancel={() => { onDurationPreview?.(item.durationEstimate || 0); setIsEditingDuration(false); }} onCommit={() => { onSaveInline({ ...item, durationEstimate: localDur }); setIsEditingDuration(false); }} />}
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -318,7 +346,6 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
             <div className="mt-2 mb-2" onClick={e => e.stopPropagation()}><RichTextEditor value={editVal} onChange={setEditVal} onBlur={handleInlineSaveText} autoFocus /></div> 
           ) : ( 
             <div onClick={(e) => { e.stopPropagation(); if(!isReadOnly) { setEditVal(item.description || ''); setEditField('description'); } }} className={`text-sm bg-gray-50 p-3 rounded border border-gray-100 shadow-inner print:!bg-white print:!p-0 ${isReadOnly ? '' : 'cursor-text hover:bg-gray-100'}`}> 
-              {/* CHIRURGISCHER EINGRIFF: searchQuery an RichTextRenderer weiterreichen */}
               {item.description ? <RichTextRenderer text={item.description} searchQuery={searchQuery} /> : <span className="text-gray-400 italic text-xs">Klicken für Notizen...</span>} 
             </div> 
           )} 

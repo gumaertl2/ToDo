@@ -1,3 +1,4 @@
+// [2026-06-12] - UX-FEATURE: Heatmap und Time-Badges aktiviert! Die TasksListView gibt nun den Befehl 'showTimeCategory={true}' an die AgendaItemRow, wodurch die farbigen Dringlichkeits-Ränder exklusiv in der ToDo-Liste leuchten.
 // [2026-06-12] - UX-FEATURE: Intelligentes Rendering für die Listenansicht eingebaut. 
 // 1. Aktive ToDos: Werden streng chronologisch (flach) gerendert, um die Dringlichkeits-Sortierung nicht zu zerstören.
 // 2. Archivierte ToDos: Werden hierarchisch (Boss -> Kinder) gebündelt. Kinder sind standardmäßig eingeklappt und können über den Chevron-Toggle geöffnet werden, was die Übersichtlichkeit im Archiv massiv erhöht.
@@ -60,7 +61,6 @@ export const TasksListView: React.FC<TasksListViewProps> = ({
   moveToTrash, restoreFromTrash, deleteTask, canDeleteAnyItem
 }) => {
 
-  // Eigener State für die Archiv-Container (getrennt von den Notizen in expandedIds)
   const [expandedContainers, setExpandedContainers] = React.useState<Set<string>>(new Set());
 
   const handleScrollPreservedFolderToggle = (e: React.MouseEvent, groupTitle: string) => {
@@ -289,7 +289,8 @@ export const TasksListView: React.FC<TasksListViewProps> = ({
                           isTemplateMode={true} 
                           isReadOnly={isHistorical}
                           searchQuery={searchQuery}
-                          showMinimalDesktopActions={true} 
+                          showMinimalDesktopActions={true}
+                          showTimeCategory={true} // CHIRURGISCHER EINGRIFF: Heatmap in der Listenansicht aktivieren!
                         />
                       );
                     };

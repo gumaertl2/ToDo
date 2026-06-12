@@ -1,17 +1,15 @@
+// [2026-06-12] - UX-UPGRADE: "Zeitplan"-Dropdown durch die 5 rollierenden Multi-Select Zeitfenster-Pills ersetzt (Power-User Feature mit Strg-Klick).
 // 2026-04-22 20:55 - REFACTOR: Filter-Leiste (Toolbar) in eigenständige Komponente ausgelagert
-// 2026-04-22 21:10 - FIX: TS2322 RefObject Type auf 'HTMLDivElement | null' korrigiert
-// 2026-04-24 20:00 - FEATURE: Zeit-Filter (Clock-Dropdown) in die Toolbar integriert
-// 2026-05-10 13:45 - UX-REFACTOR: Archiv-Button entfernt, Überschrift (H1) zum interaktiven Toggle-Switch umgebaut
 // 2026-05-13 10:40 - SECURITY: Participation-First Filterung für die Dropdown-Projektliste hinzugefügt.
 // 2026-05-13 17:55 - CHIRURGISCHER EINGRIFF: Tri-State Toggle (Offen / Archiv / Papierkorb) in der Hauptüberschrift implementiert.
 // 2026-05-13 19:40 - UX-FIX: Automatischer Wechsel auf Listenansicht & Sperre des Kanban-Boards im Papierkorb.
-// 2026-05-13 23:30 - FEATURE: Geister-Scanner Button für Admins im Papierkorb-Modus hinzugefügt.
 // src/features/Tasks/TasksToolbar.tsx
+
 import React, { useMemo } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import { Kanban, List as ListIcon, Filter, Clock, ChevronDown, Check, Printer, Archive, Trash2, Ghost } from 'lucide-react';
+import { Kanban, List as ListIcon, Filter, ChevronDown, Check, Printer, Archive, Trash2, Ghost } from 'lucide-react';
 import { User, Users } from 'lucide-react';
-import { Calendar } from 'lucide-react';
+import { Calendar, Layers, Flame, Hourglass, Coffee } from 'lucide-react'; // CHIRURGISCHER EINGRIFF: Neue Icons für Zeit-Filter importiert
 import type { Task, Event, User as UserModel, Group } from '../../core/types/models';
 
 interface TasksToolbarProps {
@@ -29,11 +27,21 @@ interface TasksToolbarProps {
   selectedProjectTitles: string[];
   setSelectedProjectTitles: React.Dispatch<React.SetStateAction<string[]>>;
   
-  timeFilter: 'all' | 'overdue' | 'next7days' | 'onTrack';
-  setTimeFilter: (mode: 'all' | 'overdue' | 'next7days' | 'onTrack') => void;
-  isTimeFilterOpen: boolean;
-  setIsTimeFilterOpen: (isOpen: boolean) => void;
-  timeFilterRef: React.RefObject<HTMLDivElement | null>;
+  // CHIRURGISCHER EINGRIFF: Neues Array-System für Multi-Select
+  timeFilter: ('all' | 'overdue' | 'next7days' | 'next30days' | 'later')[];
+  setTimeFilter: React.Dispatch<React.SetStateAction<('all' | 'overdue' | 'next7days' | 'next30days' | 'later')[]>>;
+  timeFilterCounts: {
+    all: number;
+    overdue: number;
+    next7days: number;
+    next30days: number;
+    later: number;
+  };
+  
+  // Die alten Dropdown-States für den Zeitfilter brauchen wir konzeptionell nicht mehr, wir lassen die Props aber für API-Stabilität bestehen
+  isTimeFilterOpen?: boolean;
+  setIsTimeFilterOpen?: (isOpen: boolean) => void;
+  timeFilterRef?: React.RefObject<HTMLDivElement | null>;
 
   isFilterDropdownOpen: boolean;
   setIsFilterDropdownOpen: (isOpen: boolean) => void;
@@ -46,7 +54,7 @@ interface TasksToolbarProps {
   tasks: Task[];
   events: Event[];
   handlePrint: () => void;
-  onOpenOrphanCleanup: () => void; // CHIRURGISCHER EINGRIFF: Neue Prop für das Modal
+  onOpenOrphanCleanup: () => void;
 }
 
 export const TasksToolbar: React.FC<TasksToolbarProps> = ({
@@ -56,7 +64,7 @@ export const TasksToolbar: React.FC<TasksToolbarProps> = ({
   filterMode, setFilterMode,
   selectedAssignees, setSelectedAssignees,
   selectedProjectTitles, setSelectedProjectTitles,
-  timeFilter, setTimeFilter, isTimeFilterOpen, setIsTimeFilterOpen, timeFilterRef,
+  timeFilter, setTimeFilter, timeFilterCounts,
   isFilterDropdownOpen, setIsFilterDropdownOpen,
   isEventDropdownOpen, setIsEventDropdownOpen,
   dropdownRef, eventDropdownRef,
@@ -67,8 +75,6 @@ export const TasksToolbar: React.FC<TasksToolbarProps> = ({
   
   const userRoleProfile = roleProfiles?.find(p => p.id === user?.roleProfileId);
   const canManageEvents = !!userRoleProfile?.permissions?.manageEvents || !!(user?.permissions as any)?.manageEvents;
-  
-  // CHIRURGISCHER EINGRIFF: Sicherheits-Check für den Geisterjäger-Button
   const canDeleteAnyItem = !!userRoleProfile?.permissions?.deleteAnyItem || userRoleProfile?.name === 'ADMIN';
 
   const toggleAssignee = (id: string) => {
@@ -82,6 +88,36 @@ export const TasksToolbar: React.FC<TasksToolbarProps> = ({
 
   const toggleEventFilter = (projectTitle: string) => {
     setSelectedProjectTitles(prev => prev.includes(projectTitle) ? prev.filter(id => id !== projectTitle) : [...prev, projectTitle]);
+  };
+
+  // CHIRURGISCHER EINGRIFF: Die geniale Multi-Select Logik (Strg-Klick)
+  const handleTimeFilterClick = (e: React.MouseEvent, key: 'all' | 'overdue' | 'next7days' | 'next30days' | 'later') => {
+    if (key === 'all') {
+      setTimeFilter(['all']);
+      return;
+    }
+    
+    setTimeFilter(prev => {
+      const isMulti = e.ctrlKey || e.metaKey;
+      let next = [...prev];
+      
+      // 'all' entfernen, falls ein spezifischer Filter geklickt wird
+      next = next.filter(k => k !== 'all');
+
+      if (isMulti) {
+        // Toggle-Logik bei gedrückter Strg-Taste
+        if (next.includes(key)) {
+           next = next.filter(k => k !== key);
+           if (next.length === 0) return ['all']; // Wenn nichts mehr an ist, zurück zu 'all'
+        } else {
+           next.push(key);
+        }
+      } else {
+        // Exklusiver Klick ohne Strg-Taste
+        next = [key];
+      }
+      return next;
+    });
   };
 
   const renderAssigneeDropdown = () => (
@@ -178,7 +214,6 @@ export const TasksToolbar: React.FC<TasksToolbarProps> = ({
           </span>
         </button>
 
-        {/* CHIRURGISCHER EINGRIFF: Der Geisterjäger-Button (Nur Admin & Papierkorb) */}
         {viewCategory === 'trash' && canDeleteAnyItem && (
            <button 
              onClick={onOpenOrphanCleanup}
@@ -235,7 +270,7 @@ export const TasksToolbar: React.FC<TasksToolbarProps> = ({
 
         <div className="flex bg-gray-200 p-1 rounded-lg">
           <button
-            onClick={() => { setFilterMode('my'); setSelectedAssignees([]); setIsFilterDropdownOpen(false); setIsEventDropdownOpen(false); setIsTimeFilterOpen(false); }}
+            onClick={() => { setFilterMode('my'); setSelectedAssignees([]); setIsFilterDropdownOpen(false); setIsEventDropdownOpen(false); }}
             className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
               filterMode === 'my' && selectedAssignees.length === 0 ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900'
             }`}
@@ -249,13 +284,13 @@ export const TasksToolbar: React.FC<TasksToolbarProps> = ({
               selectedAssignees.length > 0 ? 'bg-blue-100 shadow text-blue-800' : 'text-gray-600 hover:text-gray-900'
             }`}>
               <button
-                onClick={() => { setFilterMode('all'); setSelectedAssignees([]); setIsFilterDropdownOpen(false); setIsEventDropdownOpen(false); setIsTimeFilterOpen(false); }}
+                onClick={() => { setFilterMode('all'); setSelectedAssignees([]); setIsFilterDropdownOpen(false); setIsEventDropdownOpen(false); }}
                 className="px-3 py-1.5 text-sm font-medium rounded-l-md transition-colors"
               >
                 {selectedAssignees.length > 0 ? `Einige (${selectedAssignees.length})` : 'Alle'}
               </button>
               <button
-                onClick={() => { setIsFilterDropdownOpen(!isFilterDropdownOpen); setIsEventDropdownOpen(false); setIsTimeFilterOpen(false); }}
+                onClick={() => { setIsFilterDropdownOpen(!isFilterDropdownOpen); setIsEventDropdownOpen(false); }}
                 className={`px-2 py-1.5 border-l rounded-r-md transition-colors ${
                    selectedAssignees.length > 0 ? 'border-blue-200 hover:bg-blue-200' : 'border-gray-100 hover:bg-gray-100'
                 }`}
@@ -280,7 +315,7 @@ export const TasksToolbar: React.FC<TasksToolbarProps> = ({
           <div className="relative flex items-center ml-1 border-l border-gray-300 pl-1" ref={eventDropdownRef}>
             <div className={`flex items-center rounded-md transition-colors ${selectedProjectTitles.length > 0 ? 'bg-indigo-100 shadow text-indigo-800' : 'text-gray-600 hover:text-gray-900'}`}>
               <button
-                onClick={() => { setIsEventDropdownOpen(!isEventDropdownOpen); setIsFilterDropdownOpen(false); setIsTimeFilterOpen(false); }}
+                onClick={() => { setIsEventDropdownOpen(!isEventDropdownOpen); setIsFilterDropdownOpen(false); }}
                 className="px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center"
               >
                 <Calendar className="w-3.5 h-3.5 mr-1.5" />
@@ -317,39 +352,51 @@ export const TasksToolbar: React.FC<TasksToolbarProps> = ({
             )}
           </div>
           
-          <div className="relative flex items-center ml-1 border-l border-gray-300 pl-1" ref={timeFilterRef}>
-            <div className={`flex items-center rounded-md transition-colors ${timeFilter !== 'all' ? 'bg-orange-100 shadow text-orange-800' : 'text-gray-600 hover:text-gray-900'}`}>
-              <button
-                onClick={() => { setIsTimeFilterOpen(!isTimeFilterOpen); setIsFilterDropdownOpen(false); setIsEventDropdownOpen(false); }}
-                className="px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center"
-              >
-                <Clock className="w-3.5 h-3.5 mr-1.5" />
-                {timeFilter === 'overdue' ? 'Überfällig' : timeFilter === 'next7days' ? '< 7 Tage' : timeFilter === 'onTrack' ? 'Auf Kurs' : 'Zeitplan'}
-                <ChevronDown className="w-3.5 h-3.5 ml-1 opacity-70" />
-              </button>
-            </div>
+          {/* CHIRURGISCHER EINGRIFF: Die neuen Power-User Zeit-Icons (ersetzen das alte Dropdown) */}
+          <div className="relative flex items-center ml-1 border-l border-gray-300 pl-1 gap-1">
+            <button
+              onClick={(e) => handleTimeFilterClick(e, 'all')}
+              title="Alle Zeiten anzeigen (Tipp: Strg-Klick für Mehrfachauswahl)"
+              className={`flex items-center justify-center px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${timeFilter.includes('all') ? 'bg-gray-800 shadow text-white' : 'text-gray-600 hover:text-gray-900'}`}
+            >
+              <Layers className="w-4 h-4" />
+            </button>
 
-            {isTimeFilterOpen && (
-              <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 z-[50]">
-                <div className="p-3 border-b border-gray-100 bg-gray-50 rounded-t-lg flex justify-between items-center">
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Nach Termin</p>
-                </div>
-                <div className="p-2 space-y-1">
-                  <button onClick={() => { setTimeFilter('all'); setIsTimeFilterOpen(false); }} className={`w-full text-left px-2 py-1.5 text-sm rounded transition-colors ${timeFilter === 'all' ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-700 hover:bg-gray-100'}`}>
-                    Alle Zeiten
-                  </button>
-                  <button onClick={() => { setTimeFilter('overdue'); setIsTimeFilterOpen(false); }} className={`w-full text-left px-2 py-1.5 text-sm rounded transition-colors ${timeFilter === 'overdue' ? 'bg-red-50 text-red-700 font-bold' : 'text-gray-700 hover:bg-gray-100'}`}>
-                    🚨 Überfällig
-                  </button>
-                  <button onClick={() => { setTimeFilter('next7days'); setIsTimeFilterOpen(false); }} className={`w-full text-left px-2 py-1.5 text-sm rounded transition-colors ${timeFilter === 'next7days' ? 'bg-orange-50 text-orange-700 font-bold' : 'text-gray-700 hover:bg-gray-100'}`}>
-                    ⏳ In &lt; 7 Tagen
-                  </button>
-                  <button onClick={() => { setTimeFilter('onTrack'); setIsTimeFilterOpen(false); }} className={`w-full text-left px-2 py-1.5 text-sm rounded transition-colors ${timeFilter === 'onTrack' ? 'bg-green-50 text-green-700 font-bold' : 'text-gray-700 hover:bg-gray-100'}`}>
-                    🟢 Auf Kurs (o. Datum)
-                  </button>
-                </div>
-              </div>
-            )}
+            <button
+              onClick={(e) => handleTimeFilterClick(e, 'overdue')}
+              title="Überfällig"
+              className={`flex items-center justify-center px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${timeFilter.includes('overdue') ? 'bg-red-600 shadow text-white' : 'text-red-500 hover:bg-red-100 hover:text-red-700'}`}
+            >
+              <Flame className="w-4 h-4" />
+              <span className="ml-1 font-bold">{timeFilterCounts.overdue}</span>
+            </button>
+
+            <button
+              onClick={(e) => handleTimeFilterClick(e, 'next7days')}
+              title="Nächste 7 Tage"
+              className={`flex items-center justify-center px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${timeFilter.includes('next7days') ? 'bg-orange-500 shadow text-white' : 'text-orange-500 hover:bg-orange-100 hover:text-orange-700'}`}
+            >
+              <Hourglass className="w-4 h-4" />
+              <span className="ml-1 font-bold">{timeFilterCounts.next7days}</span>
+            </button>
+
+            <button
+              onClick={(e) => handleTimeFilterClick(e, 'next30days')}
+              title="Nächste 30 Tage"
+              className={`flex items-center justify-center px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${timeFilter.includes('next30days') ? 'bg-blue-600 shadow text-white' : 'text-blue-500 hover:bg-blue-100 hover:text-blue-700'}`}
+            >
+              <Calendar className="w-4 h-4" />
+              <span className="ml-1 font-bold">{timeFilterCounts.next30days}</span>
+            </button>
+
+            <button
+              onClick={(e) => handleTimeFilterClick(e, 'later')}
+              title="Später (Zukunft & Ohne Datum)"
+              className={`flex items-center justify-center px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${timeFilter.includes('later') ? 'bg-gray-500 shadow text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'}`}
+            >
+              <Coffee className="w-4 h-4" />
+              <span className="ml-1 font-bold">{timeFilterCounts.later}</span>
+            </button>
           </div>
 
         </div>
