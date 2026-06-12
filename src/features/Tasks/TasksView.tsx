@@ -1,3 +1,5 @@
+// [2026-06-12] - UX-FIX: Default-Sortierung in TasksView angepasst. Kanban gruppiert nun standardmäßig nach Projekten. Liste sortiert standardmäßig nach Fälligkeitsdatum (Dringendste zuerst).
+// [2026-06-12] - BUGFIX: Sortier-Logik für Fälligkeitsdatum repariert. Aufgaben OHNE Datum erhalten nun Number.MAX_SAFE_INTEGER, damit sie bei aufsteigender Sortierung ans Ende fallen und nicht als 1.1.1970 ganz oben stehen.
 // [2026-06-11] - UX-FIX: Routing State Interpreter integriert. Die Ansicht (Board/Liste) kann nun per Navigation-State ({ state: { view: 'list' } }) vom Dashboard aus ferngesteuert werden.
 // [2026-06-04] - ARCHITEKTUR-FIX: Die TasksView bedient sich nun an der Hauptschlagader 'allAgendaItems' anstatt am vorgefilterten 'tasks'-Array. Dadurch wird der "Ghost-Filter" aus der Store-Schicht umgangen und erledigte Daueraufgaben erreichen den Archiv-Scanner wieder physisch, anstatt vorher unsichtbar verworfen zu werden.
 // [2026-06-03] - UX-FIX: Blutlinien-Deduplizierung (Bloodline-Scanner) für das Kanban-Board und die Listenansicht integriert. Verhindert, dass durch alte Bugs oder manuelle Klon-Vorgänge erzeugte "Geschwister" (erledigte Klone mit derselben baseItemId) die aktive Liste überfluten. Das System sucht nun bei übereinstimmender Blutlinie nur noch den jüngsten (offenen) Erben heraus; alle erledigten Vorgänger wandern zwingend ins historische Archiv.
@@ -11,6 +13,7 @@
 // [2026-05-14] - FEATURE: Integration des OrphanCleanupModal (Geister-Scanner) 100% Zero-Loss.
 // [2026-05-14] - BUGFIX: Papierkorb zeigt nun auch gelöschte Punkte aus geheimen Sitzungen (Planung) an.
 // src/features/Tasks/TasksView.tsx
+
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useClubStore } from '../../store/useClubStore';
@@ -30,33 +33,31 @@ export type SortDirection = 'asc' | 'desc';
 export const TasksView: React.FC = () => {
   // CHIRURGISCHER EINGRIFF: allAgendaItems importiert, um den UI-Filter des Stores zu umgehen
   const { tasks, allAgendaItems, fetchTasks, isTasksLoading, user, saveAgendaItem, moveToTrash, restoreFromTrash, deleteTask, events, fetchEvents, users, groups, roleProfiles } = useClubStore();
-  
   const location = useLocation();
-  
+
   const [viewCategory, setViewCategory] = useState<'active' | 'archived' | 'trash'>('active');
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [filterMode, setFilterMode] = useState<'all' | 'my' | 'custom'>('my');
-  
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedProjectTitles, setSelectedProjectTitles] = useState<string[]>([]);
-  const [kanbanSortMode, setKanbanSortMode] = useState<'date' | 'project'>('date');
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   
+  // CHIRURGISCHER EINGRIFF: Defaults auf 'project' und 'dueDate' 'asc' geändert
+  const [kanbanSortMode, setKanbanSortMode] = useState<'date' | 'project'>('project');
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection } | null>({ key: 'dueDate', direction: 'asc' });
+  
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [isEventDropdownOpen, setIsEventDropdownOpen] = useState(false);
   const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
   const [isColAssigneeFilterOpen, setIsColAssigneeFilterOpen] = useState(false);
   const [isColStatusFilterOpen, setIsColStatusFilterOpen] = useState(false);
-  
   const [timeFilter, setTimeFilter] = useState<'all' | 'overdue' | 'next7days' | 'onTrack'>('all');
   const [isTimeFilterOpen, setIsTimeFilterOpen] = useState(false);
-  
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection } | null>({ key: 'protocolIndex', direction: 'asc' });
   
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [isOrphanCleanupOpen, setIsOrphanCleanupOpen] = useState(false);
-  
+
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Task | null>(null);
   const [returnToTask, setReturnToTask] = useState<Task | null>(null);
@@ -123,13 +124,14 @@ export const TasksView: React.FC = () => {
 
       if (task.eventId && !canManageEvents && user) {
         const parentEvent = events.find(e => e.id === task.eventId);
-        if (parentEvent) { 
-           const isDirectParticipant = parentEvent.participantUserIds?.includes(user.id);
-           const isGroupParticipant = parentEvent.participantGroupIds?.some(gId => user.groupIds?.includes(gId));
-           const isTaskAssignee = task.assigneeUserIds?.includes(user.id) || task.assigneeGroupIds?.some(gId => user.groupIds?.includes(gId));
-           if (!isDirectParticipant && !isGroupParticipant && !isTaskAssignee) {
+        if (parentEvent) {
+            const isDirectParticipant = parentEvent.participantUserIds?.includes(user.id);
+            const isGroupParticipant = parentEvent.participantGroupIds?.some(gId => user.groupIds?.includes(gId));
+            const isTaskAssignee = task.assigneeUserIds?.includes(user.id) || task.assigneeGroupIds?.some(gId => user.groupIds?.includes(gId));
+            
+            if (!isDirectParticipant && !isGroupParticipant && !isTaskAssignee) {
              return false;
-           }
+            }
         }
       }
 
@@ -222,8 +224,9 @@ export const TasksView: React.FC = () => {
           return sortConfig.direction === 'asc' ? valA - valB : valB - valA;
         }
         if (sortConfig.key === 'dueDate') {
-          const valA = a.dueDate || 0;
-          const valB = b.dueDate || 0;
+          // CHIRURGISCHER EINGRIFF: Items ohne Datum fallen dank MAX_SAFE_INTEGER immer ans Ende, anstatt ganz oben (1970) zu landen!
+          const valA = a.dueDate || Number.MAX_SAFE_INTEGER;
+          const valB = b.dueDate || Number.MAX_SAFE_INTEGER;
           return sortConfig.direction === 'asc' ? valA - valB : valB - valA;
         }
         return 0;
@@ -240,6 +243,7 @@ export const TasksView: React.FC = () => {
     const histIds = new Set<string>();
 
     const bloodlineMap = new Map<string, Task[]>();
+    
     sortedTasksRaw.forEach(task => {
       const bId = task.baseItemId || task.id;
       if (!bloodlineMap.has(bId)) bloodlineMap.set(bId, []);
@@ -247,14 +251,17 @@ export const TasksView: React.FC = () => {
     });
 
     const primaryTaskIds = new Set<string>();
+    
     bloodlineMap.forEach(group => {
       group.sort((a, b) => {
          const timeA = a.createdAt || a.updatedAt || 0;
          const timeB = b.createdAt || b.updatedAt || 0;
          return timeB - timeA;
       });
+      
       let primary = group.find(t => t.status !== 'ERLEDIGT' && t.progress !== 100);
       if (!primary) primary = group[0];
+      
       primaryTaskIds.add(primary.id);
     });
 
@@ -275,11 +282,10 @@ export const TasksView: React.FC = () => {
       const isTrash = task.status === 'TRASH';
       const isPastDue = !task.eventId && (!task.dueDate || task.dueDate < now);
       const isRoutine = task.isRoutine === true || String(task.isRoutine) === 'true';
-
       const isSuperseded = !primaryTaskIds.has(task.id);
+
       const bId = task.baseItemId || task.id;
 
-      // CHIRURGISCHER EINGRIFF: Auch die erledigten Unterpunkte einer Routine abfangen
       let isParentDone = false;
       if (task.isSubItem && task.parentItemId) {
         const parentTask = allAgendaItems.find(t => t.id === task.parentItemId);
@@ -296,23 +302,21 @@ export const TasksView: React.FC = () => {
       
       if (isPlanungHidden) return;
 
-      // MATRIX LOGIC: Fällt die Karte in den Archiv-Eimer?
       const isArchiveCandidate = isClosedEvent || (isDone && isPastDue) || (isDone && isRoutine) || isSuperseded || isParentDone || (isDone && !task.eventId);
 
       if (isArchiveCandidate) {
-        histIds.add(task.id); 
-        
+        histIds.add(task.id);
+          
         if (isDone || isSuperseded || isClosedEvent) {
           const existing = historicalMap.get(bId);
           const taskDate = task.completedAt || task.updatedAt || task.createdAt || 0;
           const existingDate = existing ? (existing.completedAt || existing.updatedAt || existing.createdAt || 0) : 0;
-
+          
           if (!existing || taskDate > existingDate) {
              historicalMap.set(bId, task);
           }
         }
       } else {
-        // Aktives Board
         active.push(task);
       }
     });
@@ -335,16 +339,17 @@ export const TasksView: React.FC = () => {
 
   const kanbanTasks = useMemo(() => {
     let sorted = [...visibleTasks];
+    
     if (kanbanSortMode === 'project') {
       sorted.sort((a, b) => {
         const evA = a.eventId ? events.find(e => e.id === a.eventId)?.title || 'ZZZZZ' : 'ZZZZZ';
         const evB = b.eventId ? events.find(e => e.id === b.eventId)?.title || 'ZZZZZ' : 'ZZZZZ';
         if (evA < evB) return -1;
         if (evA > evB) return 1;
-        return (a.dueDate || 0) - (b.dueDate || 0); 
+        return (a.dueDate || Number.MAX_SAFE_INTEGER) - (b.dueDate || Number.MAX_SAFE_INTEGER); 
       });
     } else {
-      sorted.sort((a, b) => (a.dueDate || 0) - (b.dueDate || 0));
+      sorted.sort((a, b) => (a.dueDate || Number.MAX_SAFE_INTEGER) - (b.dueDate || Number.MAX_SAFE_INTEGER));
     }
     return sorted;
   }, [visibleTasks, kanbanSortMode, events]);
@@ -586,7 +591,7 @@ export const TasksView: React.FC = () => {
               visibleTasks={visibleTasks}
               showArchivedTasks={viewCategory !== 'active'}
               setShowArchivedTasks={(show) => setViewCategory(show ? 'archived' : 'active')} 
-              activeCount={activeCount}                 
+              activeCount={activeCount}                
               historicalCount={viewCategory === 'trash' ? trashCount : historicalCount}             
               groupedListTasks={groupedListTasks}
               historicalTaskIds={historicalTaskIds}
@@ -630,16 +635,16 @@ export const TasksView: React.FC = () => {
           existingItem={editingItem}
           parentItemContext={editingParentTask} 
           onNavigateToParent={() => {
-            if (editingParentTask) { 
-              setReturnToTask(editingItem); 
-              setEditingItem(editingParentTask);
+            if (editingParentTask) {
+               setReturnToTask(editingItem);
+               setEditingItem(editingParentTask);
             }
           }}
           returnItemContext={returnToTask || undefined}
           onNavigateBack={() => {
-            if (returnToTask) { 
-              setEditingItem(returnToTask); 
-              setReturnToTask(null);
+            if (returnToTask) {
+               setEditingItem(returnToTask);
+               setReturnToTask(null);
             }
           }}
           isFixedType={true}

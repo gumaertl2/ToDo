@@ -1,3 +1,4 @@
+// [2026-06-12] - BUGFIX: Mehrtägige und monatsübergreifende Termine (inkl. ganztägig) werden im WhatsApp-Text jetzt korrekt mit Start- und Enddatum ("Datum A bis Datum B") formatiert.
 // [2026-06-11] - UX-FIX: Poka-Yoke (Narrensicherung) für Browser-Benachrichtigungen integriert. Wenn der Browser die Anfrage stumm blockiert (Notification.permission === 'denied'), wirft die App nun explizit einen Alert mit der Lösungsanweisung (Klick auf das Schloss-Symbol), anstatt ohne Reaktion zu verbleiben.
 // [2026-05-23] - ARCHITEKTUR-FIX: Projekt-Schutzschild & Unterpunkt-Schutzschild in Reminder-Schleife eingebaut. Verhindert Phantom-Erinnerungen für erledigte Oberpunkte und abgeschlossene/archivierte Projekte.
 // [2026-05-17] - BUGFIX: Erinnerungs-Zentrale vollständig auf Omni-Channel harmonisiert (inklusive Teams). SSOT Architektur (dueDate) beibehalten.
@@ -20,15 +21,40 @@ const formatReminderText = (type: string, item: any, customText?: string) => {
 
   if (type === 'Event' || type === 'Sitzung' || type === 'Abo' || type === 'Dienst' || type === 'Termin') {
     const start = new Date(item.startTime || item.plannedStartTime);
-    const dateStr = start.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    let dateStr = start.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     
     let timeStr = 'Ganztägig';
-    if (!item.isAllDay) {
-      timeStr = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
-      if (item.endTime || item.plannedEndTime) {
-        const end = new Date(item.endTime || item.plannedEndTime);
-        timeStr += ` - ${end.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`;
+    const endTs = item.endTime || item.plannedEndTime;
+
+    // CHIRURGISCHER EINGRIFF: Enddatum auswerten (auch bei ganztägigen Terminen)
+    if (endTs) {
+      let end = new Date(endTs);
+      
+      // Korrektur für exklusive ICS-Enddaten bei ganztägigen Events (00:00 Uhr am Folgetag)
+      if (item.isAllDay && end.getHours() === 0 && end.getMinutes() === 0 && end.getTime() > start.getTime()) {
+        end = new Date(end.getTime() - 1000);
       }
+
+      const startDayStr = start.toLocaleDateString('de-DE');
+      const endDayStr = end.toLocaleDateString('de-DE');
+
+      // Wenn der Termin über mehrere Tage geht
+      if (startDayStr !== endDayStr) {
+        dateStr += ` bis ${end.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`;
+      }
+
+      // Uhrzeit formatieren (wenn nicht ganztägig)
+      if (!item.isAllDay) {
+        timeStr = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+        if (startDayStr !== endDayStr) {
+          timeStr += ` (Ende: ${end.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr)`;
+        } else {
+          timeStr += ` - ${end.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`;
+        }
+      }
+    } else if (!item.isAllDay) {
+      // Kein Enddatum vorhanden, aber spezifische Startzeit
+      timeStr = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
     }
 
     details.push(`📌 Titel: ${item.title}`);
@@ -90,9 +116,6 @@ export const RemindersView: React.FC = () => {
       return;
     }
 
-    // CHIRURGISCHER EINGRIFF: Poka-Yoke (Narrensicherung) für hartnäckige Browser-Blockaden.
-    // Falls der Browser bereits auf 'denied' steht, wird der native Dialog gar nicht erst
-    // angezeigt. Wir springen sofort ein und liefern dem Nutzer die Problemlösung.
     if (Notification.permission === 'denied') {
       alert('Dein Browser blockiert Benachrichtigungen für diese Seite.\n\nBitte klicke auf das Schloss-Symbol (oder die Einstellungen) oben links neben der Internetadresse (URL), um Benachrichtigungen manuell zu erlauben.');
       setPermissionStatus('denied');
@@ -103,8 +126,6 @@ export const RemindersView: React.FC = () => {
       const permission = await Notification.requestPermission();
       setPermissionStatus(permission);
       
-      // Falls der Nutzer im nativen Dialog gerade auf "Blockieren" geklickt hat (oder 
-      // der Inkognito-Modus es stumm weggedrückt hat), greift das Poka-Yoke sofort:
       if (permission === 'denied') {
          alert('Du hast die Benachrichtigungen soeben blockiert (oder dein Browser tut dies automatisch).\n\nBitte klicke auf das Schloss-Symbol oben in der Adresszeile, um sie wieder zu erlauben.');
       }
@@ -141,7 +162,6 @@ export const RemindersView: React.FC = () => {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const MS_PER_DAY = 1000 * 60 * 60 * 24;
     
-    // CHIRURGISCHER EINGRIFF: Lückenlose Erfassung der Nutzer-Zugehörigkeiten inkl. Teams
     const userGroupIds = user.groupIds || [];
     const myHelper = helpers.find(h => h.email?.toLowerCase() === user.email?.toLowerCase());
     const myHelperId = myHelper?.id;
@@ -149,9 +169,6 @@ export const RemindersView: React.FC = () => {
 
     const items: any[] = [];
 
-    // --------------------------------------------------------------------------------
-    // 1. Kalender-Einträge (Termine & Dienste)
-    // --------------------------------------------------------------------------------
     if (calendarEvents) {
       calendarEvents.forEach(ce => {
         if (ce.reminderSenderUserId && !ce.reminderSentAt) {
@@ -215,26 +232,20 @@ export const RemindersView: React.FC = () => {
       });
     }
 
-    // --------------------------------------------------------------------------------
-    // 2. Aufgaben & Agenda-Punkte
-    // --------------------------------------------------------------------------------
     if (allAgendaItems) {
       allAgendaItems.forEach(t => {
-        // SSOT Architektur: Wir vertrauen blind auf t.dueDate. Wenn es fehlt, ist es keine fällige Aufgabe.
         if (t.isTemplate || t.reminderSentAt || !t.reminderSenderUserId || !t.dueDate) return;
 
-        // CHIRURGISCHER EINGRIFF: Projekt-Schutzschild
         if (t.eventId) {
           const parentEvent = events.find(e => e.id === t.eventId);
-          if (!parentEvent) return; // Projekt gelöscht -> ignorieren
-          if (parentEvent.status === 'PLANUNG' && !parentEvent.isPublished) return; // Entwurf -> ignorieren
-          if (parentEvent.status === 'ABGESCHLOSSEN' || parentEvent.isArchived) return; // Historisch -> ignorieren
+          if (!parentEvent) return; 
+          if (parentEvent.status === 'PLANUNG' && !parentEvent.isPublished) return; 
+          if (parentEvent.status === 'ABGESCHLOSSEN' || parentEvent.isArchived) return; 
         }
 
-        // CHIRURGISCHER EINGRIFF: Unterpunkt-Schutzschild
         if (t.isSubItem && t.parentItemId) {
           const parentTask = allAgendaItems.find(x => x.id === t.parentItemId);
-          if (parentTask && parentTask.status === 'ERLEDIGT') return; // Oberpunkt erledigt -> ignorieren
+          if (parentTask && parentTask.status === 'ERLEDIGT') return; 
         }
 
         const leadDays = Number(t.reminderLeadDays) || 0;
@@ -274,9 +285,6 @@ export const RemindersView: React.FC = () => {
       });
     }
 
-    // --------------------------------------------------------------------------------
-    // 3. Sitzungen (Events)
-    // --------------------------------------------------------------------------------
     if (events) {
       events.forEach(ev => {
         const isReadyForReminder = ev.status !== 'PLANUNG' || ev.isPublished === true;
@@ -315,9 +323,6 @@ export const RemindersView: React.FC = () => {
       });
     }
 
-    // --------------------------------------------------------------------------------
-    // 4. Kalender-Abos (ICS Dateien / Links)
-    // --------------------------------------------------------------------------------
     if (calendarSubscriptions) {
       calendarSubscriptions.forEach(sub => {
         if (sub.isActive && sub.reminderSenderUserId && sub.cachedEvents) {
@@ -531,7 +536,6 @@ export const RemindersView: React.FC = () => {
             </div>
           </div>
           
-          {/* CHIRURGISCHER EINGRIFF: Wir zeigen den Button immer, damit das Poka-Yoke greifen kann, wenn der User Hilfe braucht */}
           <button
             onClick={requestNotificationPermission}
             className={`shrink-0 px-4 py-2 text-white text-xs font-bold rounded-lg shadow-sm transition-colors w-full sm:w-auto ${permissionStatus === 'denied' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-blue-600 hover:bg-blue-700'}`}

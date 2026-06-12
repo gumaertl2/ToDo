@@ -1,10 +1,7 @@
-// 2026-05-10 13:45 - FEATURE: Volltext-Suche in der ersten Kopfzeile (neben 'Aufgabe') hinzugefügt
-// 2026-05-10 14:30 - UX-FEATURE: showMinimalDesktopActions aktiviert (direkter Modal-Zugang via Auge/Stift in der Zeile)
-// 2026-05-10 15:00 - BUGFIX: Suchfeld-Header wird nun IMMER gerendert (verhindert Sackgasse bei 0 Treffern).
-// 2026-05-10 15:05 - UX-FEATURE: Smart Cross-View Search Count (zeigt Treffer der anderen Ansicht an + Wechselbutton).
-// 2026-05-10 15:30 - BUGFIX: Ungenutzte Variablen (tasksWithDesc, allExpanded) für TS-Compiler aus den Props entfernt.
-// 2026-05-12 15:35 - UX-FIX: Spalte 'Nr.' (protocolIndex) aus dem Header und der Zeilenansicht entfernt.
-// 2026-05-13 16:20 - CHIRURGISCHER EINGRIFF: Soft-Delete Props durchreichen & Lösch-Blockade in Papierkorb-Funktion umgebaut.
+// [2026-06-12] - UX-FEATURE: Intelligentes Rendering für die Listenansicht eingebaut. 
+// 1. Aktive ToDos: Werden streng chronologisch (flach) gerendert, um die Dringlichkeits-Sortierung nicht zu zerstören.
+// 2. Archivierte ToDos: Werden hierarchisch (Boss -> Kinder) gebündelt. Kinder sind standardmäßig eingeklappt und können über den Chevron-Toggle geöffnet werden, was die Übersichtlichkeit im Archiv massiv erhöht.
+// [2026-06-12] - BUGFIX: Container-Toggle (Chevron) von Notizen-Toggle isoliert und korrekte Props (subItemCount, isSubItemsCollapsed) an AgendaItemRow übergeben.
 // src/features/Tasks/TasksListView.tsx
 import React from 'react';
 import { Filter, Check, ChevronUp, ChevronDown, Folder, Search, X } from 'lucide-react';
@@ -46,7 +43,6 @@ interface TasksListViewProps {
   searchQuery: string;
   setSearchQuery: (val: string) => void;
   
-  // CHIRURGISCHER EINGRIFF: Neue Props für Papierkorb
   moveToTrash: (taskId: string) => Promise<any>;
   restoreFromTrash: (taskId: string) => Promise<any>;
   deleteTask: (taskId: string) => Promise<any>;
@@ -61,9 +57,11 @@ export const TasksListView: React.FC<TasksListViewProps> = ({
   setIsFilterDropdownOpen,
   setHistoryTask, setEditingItem, setIsItemModalOpen, saveAgendaItem,
   searchQuery, setSearchQuery,
-  // CHIRURGISCHER EINGRIFF: Destructuring der neuen Props
   moveToTrash, restoreFromTrash, deleteTask, canDeleteAnyItem
 }) => {
+
+  // Eigener State für die Archiv-Container (getrennt von den Notizen in expandedIds)
+  const [expandedContainers, setExpandedContainers] = React.useState<Set<string>>(new Set());
 
   const handleScrollPreservedFolderToggle = (e: React.MouseEvent, groupTitle: string) => {
     e.stopPropagation();
@@ -94,7 +92,6 @@ export const TasksListView: React.FC<TasksListViewProps> = ({
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-visible mb-10 pb-4 flex flex-col">
         
         <div className="p-3 grid grid-cols-[60px_1fr_auto] gap-3 items-center bg-gray-50 border-b border-gray-200 text-sm font-semibold text-gray-600 rounded-t-xl hidden md:grid">
-          {/* CHIRURGISCHER EINGRIFF: Sortierbare "Nr." Kopfzeile entfernt, aber Platzhalter-Div erhalten wegen Grid-Layout (60px) */}
           <div className="pl-2"></div>
           
           <div className="flex items-center gap-3">
@@ -227,61 +224,109 @@ export const TasksListView: React.FC<TasksListViewProps> = ({
                     {isCollapsed ? <ChevronDown className="w-4 h-4" style={{ color: groupData.color || '#6b7280' }} /> : <ChevronUp className="w-4 h-4" style={{ color: groupData.color || '#6b7280' }} />}
                   </div>
                   
-                  {!isCollapsed && groupData.tasks.map((task) => {
-                    const isHistorical = historicalTaskIds.has(task.id);
-                    const parentTask = task.parentItemId ? allTasks.find(t => t.id === task.parentItemId) : undefined;
-                    
-                    const isParentVisible = task.parentItemId && groupData.tasks.some(t => t.id === task.parentItemId);
-                    const pTitle = isParentVisible ? undefined : parentTask?.title;
-                    
-                    return (
-                      <AgendaItemRow
-                        key={task.id}
-                        item={task}
-                        index={task.protocolIndex || 0}
-                        displayIndexStr="" /* CHIRURGISCHER EINGRIFF: Anzeige-String leeren, um den Platz für die Einrückung frei zu halten, aber die Zahl auszublenden */
-                        totalItems={groupData.tasks.length}
-                        isExpanded={expandedIds.has(task.id)}
-                        parentContextTitle={pTitle}
-                        onToggleExpand={(id) => {
-                          setExpandedIds(prev => {
-                            const next = new Set(prev);
-                            if (next.has(id)) next.delete(id); else next.add(id);
-                            return next;
-                          });
-                        }}
-                        onEdit={(item) => { 
-                          if (isHistorical) {
-                            setHistoryTask(item as Task);
-                          } else {
-                            setEditingItem(item as Task); 
-                            setIsItemModalOpen(true); 
-                          }
-                        }}
-                        onOpenHistory={(item) => setHistoryTask(item as Task)}
-                        
-                        // CHIRURGISCHER EINGRIFF: Papierkorb-Integration
-                        onDelete={(id, title) => {
-                          if (window.confirm(`Möchtest du "${title || 'Diesen Punkt'}" in den Papierkorb verschieben?`)) {
-                            moveToTrash(id);
-                          }
-                        }}
-                        onRestoreFromTrash={() => restoreFromTrash(task.id)}
-                        onPermanentDelete={() => {
-                          if (window.confirm(`Aufgabe "${task.title || 'Diesen Punkt'}" unwiderruflich löschen?`)) {
-                            deleteTask(task.id);
-                          }
-                        }}
-                        canDeleteAnyItem={canDeleteAnyItem}
+                  {!isCollapsed && (() => {
+                    const renderTaskRow = (task: Task, isChild: boolean, isForceFlat: boolean, childrenCount: number = 0) => {
+                      const isHistorical = historicalTaskIds.has(task.id);
+                      const parentTask = task.parentItemId ? allTasks.find(t => t.id === task.parentItemId) : undefined;
+                      
+                      const pTitle = (task.isSubItem && (!isChild || isForceFlat)) ? parentTask?.title : undefined;
+                      
+                      const showToggle = !isForceFlat && childrenCount > 0;
+                      const isContainerExpanded = expandedContainers.has(task.id);
 
-                        onSaveInline={isHistorical ? async () => {} : async (updatedTask) => { await saveAgendaItem(updatedTask); }}
-                        isTemplateMode={true} 
-                        isReadOnly={isHistorical}
-                        searchQuery={searchQuery}
-                        showMinimalDesktopActions={true} 
-                      />
-                    );
-                  })}
+                      return (
+                        <AgendaItemRow
+                          key={task.id}
+                          item={task}
+                          index={task.protocolIndex || 0}
+                          displayIndexStr="" 
+                          totalItems={groupData.tasks.length}
+                          parentContextTitle={pTitle}
+                          
+                          // Container / SubItems Toggle (Chevron)
+                          subItemCount={showToggle ? childrenCount : undefined}
+                          isSubItemsCollapsed={showToggle ? !isContainerExpanded : undefined}
+                          onToggleSubItems={showToggle ? () => {
+                            setExpandedContainers(prev => {
+                              const next = new Set(prev);
+                              if (next.has(task.id)) next.delete(task.id); else next.add(task.id);
+                              return next;
+                            });
+                          } : undefined}
+                          
+                          // Notes / Description Toggle (+/- Button)
+                          isExpanded={expandedIds.has(task.id)}
+                          onToggleExpand={(id) => {
+                            setExpandedIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(id)) next.delete(id); else next.add(id);
+                              return next;
+                            });
+                          }}
+
+                          onEdit={(item) => { 
+                            if (isHistorical) {
+                              setHistoryTask(item as Task);
+                            } else {
+                              setEditingItem(item as Task); 
+                              setIsItemModalOpen(true); 
+                            }
+                          }}
+                          onOpenHistory={(item) => setHistoryTask(item as Task)}
+                          onDelete={(id, title) => {
+                            if (window.confirm(`Möchtest du "${title || 'Diesen Punkt'}" in den Papierkorb verschieben?`)) {
+                              moveToTrash(id);
+                            }
+                          }}
+                          onRestoreFromTrash={() => restoreFromTrash(task.id)}
+                          onPermanentDelete={() => {
+                            if (window.confirm(`Aufgabe "${task.title || 'Diesen Punkt'}" unwiderruflich löschen?`)) {
+                              deleteTask(task.id);
+                            }
+                          }}
+                          canDeleteAnyItem={canDeleteAnyItem}
+                          onSaveInline={isHistorical ? async () => {} : async (updatedTask) => { await saveAgendaItem(updatedTask); }}
+                          isTemplateMode={true} 
+                          isReadOnly={isHistorical}
+                          searchQuery={searchQuery}
+                          showMinimalDesktopActions={true} 
+                        />
+                      );
+                    };
+
+                    if (!showArchivedTasks) {
+                      return groupData.tasks.map(task => renderTaskRow(task, false, true, 0));
+                    } else {
+                      const rootTasks: Task[] = [];
+                      const childrenMap = new Map<string, Task[]>();
+
+                      groupData.tasks.forEach(task => {
+                        if (task.isSubItem && task.parentItemId) {
+                          const hasParentInGroup = groupData.tasks.some(t => t.id === task.parentItemId);
+                          if (hasParentInGroup) {
+                            if (!childrenMap.has(task.parentItemId)) {
+                              childrenMap.set(task.parentItemId, []);
+                            }
+                            childrenMap.get(task.parentItemId)!.push(task);
+                            return;
+                          }
+                        }
+                        rootTasks.push(task);
+                      });
+
+                      return rootTasks.map(rootTask => {
+                        const children = childrenMap.get(rootTask.id) || [];
+                        const isContainerExpanded = expandedContainers.has(rootTask.id);
+                        
+                        return (
+                          <React.Fragment key={`block-${rootTask.id}`}>
+                            {renderTaskRow(rootTask, false, false, children.length)}
+                            {isContainerExpanded && children.map(child => renderTaskRow(child, true, false, 0))}
+                          </React.Fragment>
+                        );
+                      });
+                    }
+                  })()}
                 </React.Fragment>
               );
             })}

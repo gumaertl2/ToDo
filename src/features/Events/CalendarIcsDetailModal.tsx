@@ -1,3 +1,4 @@
+// [2026-06-12] - BUGFIX: Detailansicht für Kalender-Events korrigiert. Mehrtägige Termine (sowohl normale als auch ganztägige) zeigen nun korrekt das Start- und Enddatum an. Exklusive ICS-Enddaten (00:00 Folgetag) werden optisch sauber um einen Tag zurückgerechnet.
 // [2026-05-30] - UX-FEATURE: 'Dienst übernehmen' Button und 'Edit' Stift-Icon in das Read-Only Modal integriert. 
 // 2026-04-15 21:40 - FEATURE: Google Maps Integration für abonnierte Events im internen Kalender
 // src/features/Events/CalendarIcsDetailModal.tsx
@@ -28,6 +29,44 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
     if (allDay) return dateStr;
     const timeStr = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
     return `${dateStr}, ${timeStr} Uhr`;
+  };
+
+  // CHIRURGISCHER EINGRIFF: Dynamisches Zeit-Modul, das mehrtägige und exklusive Termine abfängt
+  const renderTimeDetails = () => {
+    const startStr = formatDateTime(event.start, event.allDay);
+    
+    if (event.end && event.end.getTime() > event.start.getTime()) {
+      let visualEnd = event.end;
+      
+      // Fix für exklusives Enddatum bei AllDay Events aus ICS (endet technisch um 00:00 am nächsten Tag)
+      if (event.allDay && event.end.getHours() === 0 && event.end.getMinutes() === 0) {
+        visualEnd = new Date(event.end.getTime() - 1000); 
+      }
+      
+      const startDayStr = event.start.toLocaleDateString('de-DE');
+      const endDayStr = visualEnd.toLocaleDateString('de-DE');
+      
+      // Fall 1: Termin geht über mehrere Tage
+      if (startDayStr !== endDayStr) {
+        return (
+          <>
+            <p className="text-sm mt-0.5">{startStr}</p>
+            <p className="text-sm text-gray-500">bis {formatDateTime(visualEnd, event.allDay)}</p>
+          </>
+        );
+      } 
+      // Fall 2: Gleicher Tag, aber mit End-Uhrzeit (nicht ganztägig)
+      else if (!event.allDay) {
+        return (
+          <p className="text-sm mt-0.5">
+            {startStr.split(',')[0]}, {event.start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} - {event.end.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr
+          </p>
+        );
+      }
+    }
+    
+    // Fall 3: Eintägig, keine Endzeit (oder ganztägig an nur einem Tag)
+    return <p className="text-sm mt-0.5">{startStr}</p>;
   };
 
   return (
@@ -64,13 +103,10 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
 
           {/* Zeit */}
           <div className="flex items-start text-gray-700">
-            {event.allDay ? <CalIcon className="w-5 h-5 mr-3 mt-0.5 text-gray-400" /> : <Clock className="w-5 h-5 mr-3 mt-0.5 text-gray-400" />}
+            {event.allDay ? <CalIcon className="w-5 h-5 mr-3 mt-0.5 text-gray-400 shrink-0" /> : <Clock className="w-5 h-5 mr-3 mt-0.5 text-gray-400 shrink-0" />}
             <div>
               <p className="font-medium text-sm">Zeitpunkt</p>
-              <p className="text-sm mt-0.5">{formatDateTime(event.start, event.allDay)}</p>
-              {!event.allDay && event.end && event.end.getTime() !== event.start.getTime() && (
-                <p className="text-sm text-gray-500">bis {formatDateTime(event.end, event.allDay)}</p>
-              )}
+              {renderTimeDetails()}
             </div>
           </div>
 
