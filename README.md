@@ -1,3 +1,4 @@
+// [2026-07-22] - MASTER SYNC: DSGVO Passiv-Mitglieder-Firewall (gebunden an viewEhrungen) reaktiv im Store implementiert und dokumentiert.
 // [2026-06-11] - MASTER SYNC: Domain-Language geklärt. Definition von 'App-Nutzer' (users) und 'Mitglieder & Helfer' (helpers) in TEIL 6 hinzugefügt, um eine saubere Trennung der UX/UI Ansichten (Dashboard) zu garantieren.
 // [2026-06-11] - MASTER SYNC: Architektur-Manifest aktualisiert. Data-Dictionary in TEIL 6 hinzugefügt, um relationale Schlüssel (seriesId, baseItemId, parentItemId, eventId) für zukünftige KI-Assistenten glasklar zu definieren.
 // [2026-06-11] - MASTER SYNC: Architektur-Manifest aktualisiert. Fate-Binding (isHistorical) an der korrekten Stelle (TEIL 3) integriert und vollständiges Feld-Lexikon sowie Lebenszyklus ergänzt.
@@ -187,6 +188,7 @@ Jeder Nutzer in PapaToDo bekommt ein Rollen-Profil (z.B. "Admin", "Vorstand", "H
 * `manageTemplates`: Darf die Vorlagen-Bibliothek administrieren.
 * `manageTeamPins`: Darf sensible Zugangsdaten im Tresor verwalten.
 * `manageCalendar`: Darf externe Feeds abonnieren und Dienste festlegen.
+* `viewEhrungen`: Darf das Jubiläums-Radar einsehen UND fungiert als strikte DSGVO-Firewall für die Einsicht in Daten passiver Mitglieder.
 
 *Nutzer ohne diese Berechtigungen verbleiben in der Read-Only (Leser) Ansicht.*
 
@@ -223,6 +225,7 @@ Um Verwirrung in der UI und Logik zu vermeiden, gibt es eine strikte Trennung:
 ## 🛡️ TEIL 7: DSGVO, Migration & Abgrenzung
 
 * **Ehrungen & Mitgliedsdaten:** PapaToDo ist KEINE vollumfängliche Vereinsverwaltung (dafür gibt es WISO, SPG etc.). Das Tab "Mitglieder & Ehrungen" dient *nur* dem Jubiläums-Radar (z.B. "Wer hat dieses Jahr 25-jähriges?"), damit der Vorstand frühzeitig reagieren kann.
+* **Passiv-Mitglieder-Firewall:** Aus DSGVO-Gründen werden passive Mitglieder zentral und reaktiv im `useClubStore` (UserSlice) herausgefiltert, sofern der Nutzer nicht das `viewEhrungen`-Recht besitzt. Diese Filterung darf niemals in die UI-Schicht verlagert werden, um unbeabsichtigte Datenlecks in der Oberfläche oder durch direkten State-Zugriff zu verhindern.
 * **Mandantenfähigkeit (Club-ID):** PapaToDo ist mandantenfähig vorbereitet. Fast alle Dokumente besitzen ein `clubId` Feld.
 * **Soft-Delete:** Gelöschte Agendapunkte werden zunächst auf `status: 'TRASH'` gesetzt, um das versehentliche Zerstören von alten Protokollen zu verhindern.
 
