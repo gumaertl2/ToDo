@@ -2,6 +2,7 @@
 // [2026-07-23] - SEC-FIX: Primäres E-Mail-Feld gesperrt (Read-Only), um die "Einladungs-Brücke" zum Firebase-Login nicht zu zerstören.
 // [2026-07-23] - FEATURE: Auto-Benachrichtigung an Vorstände bei Stammdaten-Änderungen über das In-App Erinnerungssystem.
 // [2026-07-23] - FEATURE: Eintrittsdatum zu den schreibgeschützten Stammdaten hinzugefügt (Art. 15 DSGVO Transparenz).
+// [2026-07-23] - UX-FIX: Checkbox-Label für DSGVO statisch gemacht und Status-Badge hinzugefügt ("Schrödingers Checkbox" behoben).
 // src/features/Users/MyProfileModal.tsx
 import React, { useState, useMemo } from 'react';
 import { useClubStore } from '../../store/useClubStore';
@@ -155,7 +156,6 @@ export const MyProfileModal: React.FC<Props> = ({ onClose }) => {
                 <span className="block text-xs font-bold text-gray-500 uppercase">Geburtsdatum</span>
                 <span className="font-medium text-gray-900">{myHelper.geburtsdatum ? new Date(myHelper.geburtsdatum).toLocaleDateString('de-DE') : '-'}</span>
               </div>
-              {/* CHIRURGISCHER EINGRIFF: Eintrittsdatum integriert */}
               <div>
                 <span className="block text-xs font-bold text-gray-500 uppercase">Eintrittsdatum</span>
                 <span className="font-medium text-gray-900">{myHelper.eintrittsdatum ? new Date(myHelper.eintrittsdatum).toLocaleDateString('de-DE') : '-'}</span>
@@ -210,21 +210,33 @@ export const MyProfileModal: React.FC<Props> = ({ onClose }) => {
                 <h4 className="font-black text-blue-900 mb-1">Sichtbarkeit im Adressbuch (DSGVO)</h4>
                 <p className="text-sm text-blue-800 mb-4">{DSGVO_CONFIG.consentCheckboxText}</p>
                 
-                <label className="flex items-center cursor-pointer bg-white p-3 rounded-lg border border-blue-100 shadow-sm">
+                <label className="flex items-center cursor-pointer bg-white p-3 rounded-lg border border-blue-100 shadow-sm hover:bg-blue-50 transition-colors">
                   <input
                     type="checkbox" checked={consentConfirmed} onChange={(e) => setConsentConfirmed(e.target.checked)} disabled={isSaving}
                     className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
                   />
-                  <span className="ml-3 font-bold text-gray-800 cursor-pointer">
-                    {consentConfirmed ? 'Ja, ich bin einverstanden (Sichtbar)' : 'Nein, ich möchte unsichtbar bleiben'}
+                  <span className="ml-3 font-bold text-gray-800 cursor-pointer select-none">
+                    Ja, ich bin mit der Sichtbarkeit einverstanden
                   </span>
                 </label>
 
-                {consentConfirmed && myHelper.consentConfirmedAt && (
-                  <div className="mt-3 text-xs text-blue-700 font-medium">
-                    Zustimmung im System erfasst am {new Date(myHelper.consentConfirmedAt).toLocaleDateString('de-DE')}
+                <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-blue-200/50 pt-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-blue-800 font-medium">Dein aktueller Status:</span>
+                    {consentConfirmed ? (
+                      <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded font-bold shadow-sm">Sichtbar</span>
+                    ) : (
+                      <span className="bg-gray-200 text-gray-600 px-2 py-0.5 rounded font-bold shadow-sm">Unsichtbar</span>
+                    )}
                   </div>
-                )}
+                  
+                  {consentConfirmed && myHelper.consentConfirmedAt && (
+                    <div className="text-xs text-blue-700 font-medium">
+                      Zustimmung erfasst am: {new Date(myHelper.consentConfirmedAt).toLocaleDateString('de-DE')}
+                    </div>
+                  )}
+                </div>
+
               </div>
             </div>
           </div>
