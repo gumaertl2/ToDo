@@ -1,3 +1,4 @@
+// [2026-07-23] - TS-FIX: 'title'-Attribut vom Lucide-Icon auf einen umhüllenden span-Tag verschoben (TS2322).
 // [2026-07-23] - SEC-FIX: Harte Lösch-Sperre für 'pro-gast' (Standard-Profil "Mitglied") und 'pro-admin' in handleDelete eingebaut, um System-Crashs durch verwaiste User zu verhindern.
 // [2026-07-23] - UX-FIX: Lösch-Button für unsterbliche System-Rollen wird in der UI nun komplett ausgeblendet, anstatt nur einen Alert zu werfen.
 // 2026-04-18 19:00 - FIX: Neue Reihen für App-Nutzer und Rollen 
@@ -67,8 +68,6 @@ export const RoleMatrixModal: React.FC<Props> = ({ onClose }) => {
   };
 
   const handleDelete = async (profile: RoleProfile) => {
-    // ---> CHIRURGISCHER EINGRIFF: Harte Lösch-Sperre (Narrensicherung) <---
-    // Egal, was in der Datenbank steht, diese beiden IDs sind unsterblich.
     if (profile.isSystemRole || profile.id === 'pro-admin' || profile.id === 'pro-gast') {
       alert("System-Basis-Rollen (wie Admin oder das Standard-Mitglied) sind essenziell und können nicht gelöscht werden.");
       return;
@@ -117,14 +116,17 @@ export const RoleMatrixModal: React.FC<Props> = ({ onClose }) => {
                   Recht / Funktion
                 </th>
                 {roleProfiles.map(p => {
-                  // ---> CHIRURGISCHER EINGRIFF: Erweiterte Prüfung für das Ausblenden des Papierkorbs <---
                   const isImmortal = p.isSystemRole || p.id === 'pro-admin' || p.id === 'pro-gast';
                   return (
                     <th key={p.id} className="bg-gray-100 border-b border-gray-200 p-3 text-center align-top border-l border-gray-50 min-w-[140px] h-[70px]">
                       <div className="flex flex-col h-full justify-start items-center">
                         <span className="font-bold text-gray-800 text-sm flex items-center justify-center leading-tight h-8">
                           {p.name}
-                          {isImmortal && <ShieldAlert className="w-3.5 h-3.5 text-blue-500 ml-1.5 shrink-0" title="System-Rolle" />}
+                          {isImmortal && (
+                            <span title="System-Rolle" className="flex items-center">
+                              <ShieldAlert className="w-3.5 h-3.5 text-blue-500 ml-1.5 shrink-0" />
+                            </span>
+                          )}
                         </span>
                         {!isImmortal && (
                           <button onClick={() => handleDelete(p)} className="mt-1 text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-1 rounded-md transition-colors" title="Profil löschen">
