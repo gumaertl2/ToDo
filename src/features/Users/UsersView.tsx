@@ -1,4 +1,5 @@
-// [2026-07-23] - UX-CLEANUP: "DSGVO Prüfen"-Button und Expired-Ansicht entfernt, da Vereinsmitgliedschaft (und nicht App-Aktivität) das Löschkriterium ist.
+// [2026-07-23] - UX-CLEANUP: Domain-Language angepasst ("App-Nutzer" -> "Vorstand", "Gast" -> "Mitglied").
+// [2026-07-23] - BUGFIX: Ungenutzte Variablen (Trash2, handleSafeDeleteHelper) nach DSGVO-Cleanup entfernt (TS6133 Fix).
 // [2026-05-25] - BUGFIX: 'parentItemContext' an ItemFormModal durchgereicht. Klicks auf Unterpunkte im Tab "Rollen & Ämter" zeigen nun im Modal wieder korrekt den Link zum übergeordneten Oberpunkt (Agenda-Container) an.
 // [2026-05-15] - FEATURE: Deep-Link Support (Auto-Tab-Switch bei fokussiertem Mitglied)
 // [2026-05-15] - BUGFIX: fetchTeams im Lade-Zyklus ergänzt, damit Teams beim Start geladen werden
@@ -11,7 +12,8 @@
 // src/features/Users/UsersView.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import { UserPlus, Trash2, Tag, Upload, Lock, Users } from 'lucide-react';
+// CHIRURGISCHER EINGRIFF: Trash2 entfernt
+import { UserPlus, Tag, Upload, Lock, Users } from 'lucide-react';
 
 import { HelperFormModal } from './HelperFormModal';
 import { UserFormModal } from './UserFormModal';
@@ -33,10 +35,10 @@ import type { Helper, User, Group, AgendaItem, Team } from '../../core/types/mod
 export const UsersView: React.FC = () => {
   const { 
     user, roleProfiles, groups, fetchUsersAndHelpers, fetchTemplatesAndRoutines, fetchEvents, fetchTasks, fetchTeams,
-    saveAgendaItem, deleteHelper, isUsersLoading,
+    saveAgendaItem, isUsersLoading,
     focusedHelperId, 
     allAgendaItems 
-  } = useClubStore();
+  } = useClubStore(); // CHIRURGISCHER EINGRIFF: deleteHelper entfernt
   
   const [activeTab, setActiveTab] = useState<'appusers' | 'mitglieder' | 'teams' | 'rollen' | 'ehrungen'>('appusers');
   
@@ -63,7 +65,8 @@ export const UsersView: React.FC = () => {
 
   const currentProfile = useMemo(() => {
     return roleProfiles.find(p => p.id === user?.roleProfileId) || 
-           roleProfiles.find(p => p.name === 'Gast') || 
+           // CHIRURGISCHER EINGRIFF: 'Gast' zu 'Mitglied' geändert
+           roleProfiles.find(p => p.name === 'Mitglied') || 
            { id: '', permissions: {} as any };
   }, [user, roleProfiles]);
   
@@ -93,11 +96,7 @@ export const UsersView: React.FC = () => {
   const openTaskEditor = (t: AgendaItem) => { setEditingTask(t); setIsTaskModalOpen(true); };
   const openTeamEditor = (t?: Team) => { setEditingTeam(t); setIsTeamModalOpen(true); };
 
-  const handleSafeDeleteHelper = async (h: Helper) => {
-    if (window.confirm(`Möchtest du das Mitglied "${h.name}" wirklich löschen?`)) {
-      if (h.id) await deleteHelper(h.id);
-    }
-  };
+  // CHIRURGISCHER EINGRIFF: handleSafeDeleteHelper restlos entfernt
 
   const toggleGroupExpanded = (id: string) => {
     const next = new Set(expandedGroups);
@@ -117,7 +116,8 @@ export const UsersView: React.FC = () => {
     { id: 'mitglieder', label: 'Mitglieder & Helfer', show: true }, 
     { id: 'teams', label: 'Teams & Gruppen', show: true }, 
     { id: 'ehrungen', label: 'Ehrungen & Jubiläen', show: !!perms.viewEhrungen },
-    { id: 'appusers', label: 'App-Nutzer', show: canManageAppUsers }, 
+    // CHIRURGISCHER EINGRIFF: 'App-Nutzer' zu 'Vorstand' geändert
+    { id: 'appusers', label: 'Vorstand', show: canManageAppUsers }, 
     { id: 'rollen', label: 'Rollen & Ämter', show: canViewRoles },  
   ].filter(tab => tab.show);
 
@@ -132,7 +132,8 @@ export const UsersView: React.FC = () => {
   return (
     <div className="h-full flex flex-col">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2 sm:mb-0">User & Gruppen</h1>
+        {/* CHIRURGISCHER EINGRIFF: Überschrift angepasst */}
+        <h1 className="text-2xl font-bold text-gray-900 mb-2 sm:mb-0">Verein & Rechte</h1>
         
         <div className="flex flex-wrap gap-2 sm:gap-3 justify-end">
           {activeTab === 'mitglieder' && canManageMitglieder && (
@@ -158,7 +159,8 @@ export const UsersView: React.FC = () => {
                 <Lock className="w-4 h-4 mr-2 text-blue-600" /> Rechte-Matrix öffnen
               </button>
               <button onClick={() => openUserEditor()} className="flex items-center px-3 py-1.5 text-sm bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 transition">
-                <UserPlus className="w-4 h-4 mr-2" /> App-Nutzer anlegen
+                {/* CHIRURGISCHER EINGRIFF: Button Text angepasst */}
+                <UserPlus className="w-4 h-4 mr-2" /> Vorstand anlegen
               </button>
             </>
           )}

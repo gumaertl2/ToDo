@@ -1,3 +1,5 @@
+// [2026-07-23] - SEC-FIX: Harte Lösch-Sperre für 'pro-gast' (Standard-Profil "Mitglied") und 'pro-admin' in handleDelete eingebaut, um System-Crashs durch verwaiste User zu verhindern.
+// [2026-07-23] - UX-FIX: Lösch-Button für unsterbliche System-Rollen wird in der UI nun komplett ausgeblendet, anstatt nur einen Alert zu werfen.
 // 2026-04-18 19:00 - FIX: Neue Reihen für App-Nutzer und Rollen 
 // 2026-04-30 10:00 - SEC-FEATURE: Ansichtsschalter für 'Alle Erinnerungen sehen' hinzugefügt
 // 2026-04-30 16:50 - FEATURE: Rechte für Team-PINs (Wettkampf-Tresor) in die Matrix eingefügt
@@ -13,7 +15,6 @@ interface Props {
   onClose: () => void;
 }
 
-// CHIRURGISCHER EINGRIFF: Default Perms an das entschlackte Modell angepasst
 const DEFAULT_PERMS: Partial<RolePermissions> = {
   viewDashboard: true, viewEvents: false, viewTasks: false, viewCalendar: true, viewUsers: false, viewReports: false, 
   viewReminders: true, viewTemplates: false, 
@@ -41,8 +42,6 @@ const PERMISSION_ROWS = [
   { key: 'manageCalendarSetup', label: 'Kalender Abos, Dienste u. Termine verwalten', group: 'Aktionen & Rechte' },
   { key: 'manageEvents', label: 'Sitzungen anlegen & schließen', group: 'Aktionen & Rechte' },
   
-  // CHIRURGISCHER EINGRIFF: createItems, editAnyItem, deleteOwnItems wurden aus dieser Ansicht entfernt.
-  // Das Recht 'deleteAnyItem' dient nun explizit als Erlaubnis für das Leeren des Papierkorbs.
   { key: 'deleteAnyItem', label: 'Alles löschen / Papierkorb (Admin)', group: 'Aktionen & Rechte' }
 ];
 
@@ -68,8 +67,10 @@ export const RoleMatrixModal: React.FC<Props> = ({ onClose }) => {
   };
 
   const handleDelete = async (profile: RoleProfile) => {
-    if (profile.isSystemRole) {
-      alert("System-Rollen (wie ADMIN) können nicht gelöscht werden.");
+    // ---> CHIRURGISCHER EINGRIFF: Harte Lösch-Sperre (Narrensicherung) <---
+    // Egal, was in der Datenbank steht, diese beiden IDs sind unsterblich.
+    if (profile.isSystemRole || profile.id === 'pro-admin' || profile.id === 'pro-gast') {
+      alert("System-Basis-Rollen (wie Admin oder das Standard-Mitglied) sind essenziell und können nicht gelöscht werden.");
       return;
     }
     if (window.confirm(`Möchtest du das Profil "${profile.name}" wirklich löschen?`)) {
@@ -115,21 +116,25 @@ export const RoleMatrixModal: React.FC<Props> = ({ onClose }) => {
                 <th className="bg-gray-100 border-b border-gray-200 p-3 text-left font-bold text-gray-700 w-64 sticky left-0 z-40 shadow-[1px_0_0_rgba(0,0,0,0.1)]">
                   Recht / Funktion
                 </th>
-                {roleProfiles.map(p => (
-                  <th key={p.id} className="bg-gray-100 border-b border-gray-200 p-3 text-center align-top border-l border-gray-50 min-w-[140px] h-[70px]">
-                    <div className="flex flex-col h-full justify-start items-center">
-                      <span className="font-bold text-gray-800 text-sm flex items-center justify-center leading-tight h-8">
-                        {p.name}
-                        {p.isSystemRole && <ShieldAlert className="w-3.5 h-3.5 text-blue-500 ml-1.5 shrink-0" />}
-                      </span>
-                      {!p.isSystemRole && (
-                        <button onClick={() => handleDelete(p)} className="mt-1 text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-1 rounded-md transition-colors" title="Profil löschen">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </th>
-                ))}
+                {roleProfiles.map(p => {
+                  // ---> CHIRURGISCHER EINGRIFF: Erweiterte Prüfung für das Ausblenden des Papierkorbs <---
+                  const isImmortal = p.isSystemRole || p.id === 'pro-admin' || p.id === 'pro-gast';
+                  return (
+                    <th key={p.id} className="bg-gray-100 border-b border-gray-200 p-3 text-center align-top border-l border-gray-50 min-w-[140px] h-[70px]">
+                      <div className="flex flex-col h-full justify-start items-center">
+                        <span className="font-bold text-gray-800 text-sm flex items-center justify-center leading-tight h-8">
+                          {p.name}
+                          {isImmortal && <ShieldAlert className="w-3.5 h-3.5 text-blue-500 ml-1.5 shrink-0" title="System-Rolle" />}
+                        </span>
+                        {!isImmortal && (
+                          <button onClick={() => handleDelete(p)} className="mt-1 text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-1 rounded-md transition-colors" title="Profil löschen">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
