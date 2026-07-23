@@ -1,3 +1,4 @@
+// [2026-07-23] - BUGFIX: Wenn sich die ICS-URL ändert, werden alte cachedEvents sofort gelöscht (Verhindert "Geister-Termine" bei fehlerhaftem Folge-Sync).
 // [2026-05-16] - UX-FIX: Umstellung auf Master-Detail-Ansicht (Einklappen der Liste bei Neu/Bearbeiten) für maximale Übersicht.
 // [2026-05-16] - FEATURE: SmartEntityPicker für Omni-Channel In-App Erinnerungen & WhatsApp Absender auch für Abos integriert.
 // 2026-04-15 20:55 - FIX: Firebase "undefined" Error beim Speichern von Abos behoben
@@ -17,7 +18,6 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
   const { users, calendarSubscriptions, addCalendarSubscription, updateCalendarSubscription, deleteCalendarSubscription, syncSubscription } = useClubStore();
   
   const [editingId, setEditingId] = useState<string | null>(null);
-  // NEU: Steuert, ob das Formular (Neu / Bearbeiten) im Vollbild des Modals geöffnet ist
   const [isFormOpen, setIsFormOpen] = useState(calendarSubscriptions.length === 0);
   
   const [name, setName] = useState('');
@@ -32,7 +32,6 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
 
-  // Zuweisungen für Absender und Empfänger
   const [reminderSenderUserId, setReminderSenderUserId] = useState('');
   const [reminderRecipientUserIds, setReminderRecipientUserIds] = useState<string[]>([]);
   const [reminderRecipientGroupIds, setReminderRecipientGroupIds] = useState<string[]>([]);
@@ -125,10 +124,23 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
       const existingSub = calendarSubscriptions.find(s => s.id === editingId);
       if (!existingSub) return;
       
+      let updatedCachedEvents = existingSub.cachedEvents;
+      let updatedLastSyncedAt = existingSub.lastSyncedAt;
+
+      // ---> CHIRURGISCHER EINGRIFF: Cache-Reset bei URL-Änderung <---
+      if (importType === 'url' && existingSub.url !== url.trim()) {
+        updatedCachedEvents = [];
+        updatedLastSyncedAt = undefined;
+      } else if (importType === 'file' && parsedEvents) {
+        updatedCachedEvents = parsedEvents;
+        updatedLastSyncedAt = Date.now();
+      }
+      
       const mergedObj = {
         ...existingSub,
         ...subPayload,
-        ...(importType === 'file' && parsedEvents ? { cachedEvents: parsedEvents, lastSyncedAt: Date.now() } : {})
+        cachedEvents: updatedCachedEvents,
+        lastSyncedAt: updatedLastSyncedAt
       };
 
       const safeSub = Object.fromEntries(Object.entries(mergedObj).filter(([_, v]) => v !== undefined)) as unknown as CalendarSubscription;
@@ -219,7 +231,7 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
     setReminderLeadDays(sub.reminderLeadDays?.toString() || '1');
     setReminderCustomText(sub.reminderCustomText || '');
     
-    setIsFormOpen(true); // Klappt das Formular im Vollbild auf
+    setIsFormOpen(true);
   };
 
   const cancelEdit = () => {
@@ -261,7 +273,6 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
     <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
         
-        {/* Header-Bar mit dynamischen Schaltflächen */}
         <div className="p-5 border-b border-gray-200 flex items-center justify-between bg-gray-50 shrink-0">
           <div className="flex items-center gap-2">
             {isFormOpen && calendarSubscriptions.length > 0 && (
@@ -290,7 +301,6 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
           </div>
         </div>
         
-        {/* DETAIL-ANSICHT: Das Formular füllt das Modal vollständig aus */}
         {isFormOpen ? (
           <div className="p-6 overflow-y-auto flex-1 custom-scrollbar space-y-4">
             {error && (
@@ -332,7 +342,6 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
                   {fileName && importType === 'file' && <p className="text-[10px] text-gray-500 mt-1 truncate">Datei: {fileName}</p>}
                 </div>
 
-                {/* Omni-Channel Benachrichtigung */}
                 <div className="md:col-span-12 bg-green-50/50 p-3 rounded-lg border border-green-100 mt-2">
                   <h4 className="text-xs font-bold text-green-900 flex items-center mb-3">
                     <MessageCircle className="w-3.5 h-3.5 mr-1.5" />
@@ -340,7 +349,6 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
                   </h4>
                   
                   <div className="space-y-4">
-                    {/* Absender */}
                     <div className="bg-white p-2.5 rounded-lg border border-green-100 shadow-sm">
                       <label className="block text-[10px] font-bold text-green-700 mb-1.5 flex items-center">
                         <User className="w-3 h-3 mr-1" /> Wer verschickt die Erinnerung? (Absender)
@@ -375,7 +383,6 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
 
                     {reminderSenderUserId && (
                       <>
-                        {/* Empfänger */}
                         <div className="bg-white p-2.5 rounded-lg border border-green-100 shadow-sm">
                           <label className="block text-[10px] font-bold text-green-700 mb-1.5 flex items-center">
                             <Users className="w-3 h-3 mr-1" /> Wer soll erinnert werden? (Empfänger)
@@ -402,7 +409,6 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
                           </div>
                         </div>
 
-                        {/* Timing & Text */}
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                           <div className="col-span-1">
                             <label className="block text-[10px] font-bold text-green-700 mb-1">Tage vorher?</label>
@@ -462,7 +468,6 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
             </div>
           </div>
         ) : (
-          /* MASTER-ANSICHT: Zeigt ausschließlich die Liste der aktiven Abos an */
           <div className="p-6 overflow-y-auto flex-1 bg-white custom-scrollbar">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-sm font-bold text-gray-700">Verknüpfte Feeds & Dateien ({calendarSubscriptions.length})</h3>
