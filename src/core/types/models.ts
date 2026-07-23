@@ -1,3 +1,4 @@
+// [2026-07-22] - SCHEMA: Audit-Trail Felder (consentConfirmedAt & consentConfirmedBy) für DSGVO-Clickwrap hinzugefügt.
 // [2026-06-11] - ARCHITEKTUR-FIX: Feld 'isHistorical' zu AgendaItem hinzugefügt (Fate-Binding). Löst das Container-Kosmetik-Problem und verhindert Waisenkinder.
 // [2026-05-31] - FEATURE: 'completedAt' zu AgendaItem hinzugefügt, um das tatsächliche Erledigungsdatum von der Frist (dueDate) zu trennen.
 // [2026-05-21] - BUGFIX: isPublic zu ClubEvent hinzugefügt, um "Auf Homepage zeigen" strikt von "Agenda veröffentlicht" (isPublished) zu trennen.
@@ -118,7 +119,13 @@ export interface Helper extends BaseDocument {
   geburtsdatum?: string; 
   eintrittsdatum?: string;
   memberStatus?: 'AKTIV' | 'PASSIV' | 'JUGEND';
+  
   consentConfirmed: boolean;
+  // CHIRURGISCHER EINGRIFF: DSGVO Clickwrap Versionierung & Audit Trail
+  dsgvoConsentVersion?: number;
+  consentConfirmedAt?: number;
+  consentConfirmedBy?: 'USER' | 'ADMIN';
+
   lastActivityAt: number;
   retentionExpiresAt: number;
 

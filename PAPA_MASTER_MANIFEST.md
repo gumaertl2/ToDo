@@ -1,0 +1,130 @@
+# PapaToDo 🎯  DER VOLLSTÄNDIGE DATEI-BAUM
+
+├── .DS_Store
+├── .env.development
+├── .env.local
+├── .env.production
+├── .gitignore
+├── .npmrc
+  ├── project.json
+  ├── README.txt
+  ├── calendar.ts
+  ├── .DS_Store
+    ├── .DS_Store
+    ├── index-CmTLipOL.js
+    ├── index-Cxj1GXOl.css
+  ├── favicon.svg
+  ├── icons.svg
+  ├── index.html
+  ├── papatodo-logo.png
+├── eslint.config.js
+├── externer link.txt
+├── Firebase Rules org.txt
+├── firestore.rules
+├── HANDBUCH.md
+├── index.html
+├── package-lock.json
+├── package.json
+├── PAPA_MASTER_MANIFEST.md
+  ├── manifest.json
+  ├── papatodo-logo.png
+├── README.md
+  ├── .DS_Store
+  ├── App.css
+  ├── App.tsx
+    ├── hero.png
+    ├── react.svg
+    ├── vite.svg
+    ├── dsgvoConfig.ts
+    ├── .DS_Store
+      ├── models.ts
+      ├── shared.ts
+    ├── .DS_Store
+      ├── OrphanCleanupModal.tsx
+      ├── AuthGuard.tsx
+      ├── DsgvoClickwrap.tsx
+      ├── LoginView.tsx
+      ├── DashboardView.tsx
+      ├── WelcomeDashboard.tsx
+      ├── .DS_Store
+      ├── CalendarBulkEventModal.tsx
+      ├── CalendarEventFormModal.tsx
+      ├── CalendarExportModal.tsx
+      ├── CalendarIcsDetailModal.tsx
+      ├── CalendarSubscriptionModal.tsx
+      ├── CalendarView.tsx
+      ├── EventAgendaList.tsx
+      ├── EventDetailHeader.tsx
+      ├── EventDetailView.tsx
+      ├── EventFormModal.tsx
+      ├── EventsView.tsx
+      ├── EventTemplateSidebar.tsx
+      ├── ProtocolEditor.tsx
+      ├── PublicCalendarEmbed.tsx
+      ├── HelpView.tsx
+      ├── .DS_Store
+      ├── AppLayout.tsx
+      ├── .DS_Store
+      ├── RemindersView.tsx
+      ├── ReportsView.tsx
+      ├── .DS_Store
+      ├── AgendaItemRow.tsx
+        ├── .DS_Store
+          ├── InlineEditors.tsx
+          ├── ItemMetadata.tsx
+          ├── ItemStatusSection.tsx
+          ├── RowContextMenu.tsx
+          ├── AssigneePicker.tsx
+          ├── ReminderSettings.tsx
+          ├── RoutineSettings.tsx
+        ├── SmartEntityPicker.tsx
+      ├── ItemCard.tsx
+      ├── ItemFormModal.tsx
+      ├── RichText.tsx
+        ├── textUtils.tsx
+      ├── KanbanBoard.tsx
+      ├── TaskCard.tsx
+      ├── TaskHistoryModal.tsx
+      ├── TasksListView.tsx
+      ├── TasksToolbar.tsx
+      ├── TasksView.tsx
+      ├── TeamPinsView.tsx
+      ├── TemplatesView.tsx
+      ├── .DS_Store
+        ├── EditableCell.tsx
+        ├── QuickAddHelperRow.tsx
+      ├── CsvImportModal.tsx
+      ├── GroupFormModal.tsx
+      ├── HelperFormModal.tsx
+      ├── RoleMatrixModal.tsx
+        ├── AppUserTab.tsx
+        ├── EhrungenTab.tsx
+        ├── MitgliederTab.tsx
+        ├── RollenTab.tsx
+        ├── TeamsTab.tsx
+        ├── VorstandTab.tsx
+      ├── TeamFormModal.tsx
+      ├── UserFormModal.tsx
+      ├── UserSuccessionModal.tsx
+      ├── UsersView.tsx
+  ├── index.css
+  ├── main.tsx
+    ├── DataProcessor.ts
+    ├── firebase.ts
+    ├── .DS_Store
+      ├── .DS_Store
+      ├── createAuthSlice.ts
+      ├── createCalendarSlice.ts
+      ├── createEventSlice.ts
+      ├── createTaskSlice.ts
+      ├── createTeamPinsSlice.ts
+      ├── createTeamSlice.ts
+      ├── createTemplateSlice.ts
+      ├── createUserSlice.ts
+    ├── useClubStore.ts
+├── tsconfig.app.json
+├── tsconfig.json
+├── tsconfig.node.json
+├── vercel.json
+├── vite.config.ts
+

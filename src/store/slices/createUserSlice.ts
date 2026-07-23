@@ -1,4 +1,4 @@
-// [2026-07-22] - CHIRURGISCHER EINGRIFF: Passive Mitglieder Firewall basierend auf 'viewEhrungen' Berechtigung implementiert.
+// [2026-07-22] - CHIRURGISCHER EINGRIFF: DSGVO Passiv-Mitglieder-Firewall (Schwärzungs-Logik) an Clickwrap-Zustimmungen gekoppelt.
 // src/store/slices/createUserSlice.ts
 import type { StateCreator } from 'zustand';
 import type { User, Helper, Group, RoleProfile } from '../../core/types/models';
@@ -62,9 +62,35 @@ export const createUserSlice: StateCreator<StoreState, [], [], UserSlice> = (set
       }
     }
 
-    const filtered = hasViewEhrungen 
-      ? allHelpers 
-      : allHelpers.filter(h => h.memberStatus !== 'PASSIV');
+    // CHIRURGISCHER EINGRIFF: Die DSGVO Clickwrap Firewall (Schwärzungs-Logik)
+    let filtered = allHelpers;
+
+    if (!hasViewEhrungen) {
+      const myHelper = currentUser ? allHelpers.find(h => h.email?.toLowerCase() === currentUser.email?.toLowerCase()) : null;
+      const myConsent = myHelper?.consentConfirmed === true;
+      
+      filtered = allHelpers.map(h => {
+        // Ausnahmen: Den eigenen Datensatz darf man immer vollständig sehen
+        if (h.id === myHelper?.id) return h;
+
+        // Gegenseitigkeits-Prinzip:
+        // 1. Wenn ich selbst nicht zugestimmt habe, sehe ich bei NIEMANDEM die Daten.
+        // 2. Wenn der andere nicht zugestimmt hat, sehe ich SEINE Daten nicht (auch wenn ich zugestimmt habe).
+        const canSeeDetails = myConsent && h.consentConfirmed === true;
+
+        if (!canSeeDetails) {
+          return {
+            ...h,
+            telefon: '',
+            telefonEltern: '',
+            email: '',
+            emailEltern: ''
+          };
+        }
+        
+        return h;
+      });
+    }
 
     set({ helpers: filtered });
   };

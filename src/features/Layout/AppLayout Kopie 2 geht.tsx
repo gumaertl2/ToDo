@@ -1,4 +1,3 @@
-// [2026-07-22] - FEATURE: 'Mein Profil' Button in Desktop-Sidebar und Mobile-Menu integriert (Self-Service).
 // [2026-07-22] - FEATURE: DSGVO Clickwrap in AppLayout integriert als unumgängliche UI-Schranke.
 // [2026-06-11] - UX-FEATURE: ToDo-Badge von "/todos" auf "/" (Start) verschoben. Da das WelcomeDashboard nun die Kommandozentrale ist, leuchtet das "[Fällig im Zeitraum] / [Gesamt]" Badge jetzt direkt am Home-Icon auf.
 // [2026-06-11] - UX-FEATURE: ToDo-Badge an WelcomeDashboard-Logik angeglichen. Nutzt den Lookahead-Zeitraum (localStorage) und färbt sich rot bei überfälligen Aufgaben.
@@ -13,11 +12,10 @@ import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { 
    Users, Calendar, ClipboardList, CheckSquare, LogOut, 
    LayoutDashboard, BookOpen, CalendarDays, Pin, PinOff,
-  MessageCircle, BarChart2, Menu, X, Key, Home, UserCircle
+  MessageCircle, BarChart2, Menu, X, Key, Home 
 } from 'lucide-react';
 import { useClubStore } from '../../store/useClubStore';
 import { DsgvoClickwrap } from '../Auth/DsgvoClickwrap';
-import { MyProfileModal } from '../Users/MyProfileModal';
 
 export const AppLayout: React.FC = () => {
   const { 
@@ -35,9 +33,6 @@ export const AppLayout: React.FC = () => {
   const [isHovered, setIsHovered] = useState(false);
   const [sidebarTouchStart, setSidebarTouchStart] = useState<number | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  
-  // CHIRURGISCHER EINGRIFF: State für das Profil-Modal
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   const currentProfile = useMemo(() => {
     return roleProfiles.find(p => p.id === user?.roleProfileId) || 
@@ -198,6 +193,7 @@ export const AppLayout: React.FC = () => {
   const shouldShowBadge = canViewAllReminders ? reminderCounts.allCount > 0 : reminderCounts.myCount > 0;
   const badgeText = canViewAllReminders ? `${reminderCounts.myCount}/${reminderCounts.allCount}` : `${reminderCounts.myCount}`;
 
+  // CHIRURGISCHER EINGRIFF: Lookahead-Wert reaktiv auslesen, getriggert durch Routen-Wechsel
   const tasksLookahead = useMemo(() => {
     const saved = localStorage.getItem('dashboard_tasks_lookahead');
     return saved !== null ? parseInt(saved, 10) : 14;
@@ -329,6 +325,7 @@ export const AppLayout: React.FC = () => {
             {badgeText}
           </span>
         )}
+        {/* CHIRURGISCHER EINGRIFF: Badge von /todos auf / (Start) verschoben */}
         {item.to === '/' && taskCounts.total > 0 && (
           <span className={`absolute -top-1.5 -right-3 text-white text-[10px] font-bold px-1.5 min-w-[16px] h-4 rounded-full flex items-center justify-center border border-white whitespace-nowrap shadow-sm ${taskCounts.overdue > 0 ? 'bg-red-500' : 'bg-blue-500'}`}>
             {taskCounts.inLookahead}/{taskCounts.total}
@@ -344,10 +341,8 @@ export const AppLayout: React.FC = () => {
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-gray-100 flex-col landscape:flex-row lg:!flex-row print:!h-auto print:!bg-white print:!block">
       
+      {/* DSGVO Clickwrap Barriere */}
       <DsgvoClickwrap />
-      
-      {/* CHIRURGISCHER EINGRIFF: Self-Service Profil Modal rendern */}
-      {isProfileModalOpen && <MyProfileModal onClose={() => setIsProfileModalOpen(false)} />}
 
       <aside 
         onMouseEnter={handleMouseEnter}
@@ -392,19 +387,7 @@ export const AppLayout: React.FC = () => {
           )}
         </nav>
         
-        <div className="p-3 border-t border-gray-200 overflow-hidden shrink-0 space-y-1">
-          {/* CHIRURGISCHER EINGRIFF: Profil Button im Desktop Sidebar */}
-          <button
-            onClick={() => setIsProfileModalOpen(true)}
-            title={!isExpanded ? "Mein Profil" : undefined}
-            className="flex items-center w-full p-3 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors whitespace-nowrap"
-          >
-            <UserCircle className="w-5 h-5 shrink-0" />
-            <span className={`ml-3 font-bold transition-all duration-300 overflow-hidden ${isExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
-              Mein Profil
-            </span>
-          </button>
-          
+        <div className="p-3 border-t border-gray-200 overflow-hidden shrink-0">
           <button
             onClick={() => logout()}
             title={!isExpanded ? "Abmelden" : undefined}
@@ -442,6 +425,7 @@ export const AppLayout: React.FC = () => {
                     {badgeText}
                   </span>
                 )}
+                {/* CHIRURGISCHER EINGRIFF: Badge von /todos auf / (Start) verschoben */}
                 {item.to === '/' && taskCounts.total > 0 && (
                   <span className={`absolute -top-1.5 -right-3 text-white text-[10px] font-bold px-1.5 min-w-[16px] h-4 rounded-full flex items-center justify-center border-2 border-white whitespace-nowrap shadow-sm ${taskCounts.overdue > 0 ? 'bg-red-500' : 'bg-blue-500'}`}>
                     {taskCounts.inLookahead}/{taskCounts.total}
@@ -472,8 +456,8 @@ export const AppLayout: React.FC = () => {
       {isMobileMenuOpen && (
         <div className="lg:hidden fixed inset-0 z-[60] flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/50 transition-opacity" onClick={() => setIsMobileMenuOpen(false)}></div>
-          <div className="bg-white rounded-t-3xl w-full p-5 relative animate-in slide-in-from-bottom-full duration-300 shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3 shrink-0">
+          <div className="bg-white rounded-t-3xl w-full p-5 relative animate-in slide-in-from-bottom-full duration-300 shadow-2xl">
+            <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
               <div className="flex items-center">
                 <h2 className="text-xl font-bold text-gray-800">Mehr Funktionen</h2>
               </div>
@@ -482,7 +466,7 @@ export const AppLayout: React.FC = () => {
               </button>
             </div>
             
-            <div className="space-y-1 mb-6 flex-1 overflow-y-auto">
+            <div className="space-y-1 mb-6">
               {[...(mainNavItems.length > 4 ? mainNavItems.slice(4) : []), ...setupNavItems].map(item => (
                 <NavLink
                   key={item.to}
@@ -500,24 +484,13 @@ export const AppLayout: React.FC = () => {
               ))}
             </div>
             
-            {/* CHIRURGISCHER EINGRIFF: Profil Button im Mobile Menu */}
-            <div className="shrink-0 space-y-2 pt-2 border-t border-gray-100">
-              <button
-                onClick={() => { setIsMobileMenuOpen(false); setIsProfileModalOpen(true); }}
-                className="flex items-center w-full p-4 text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors font-bold justify-center"
-              >
-                <UserCircle className="w-5 h-5 mr-2" />
-                Mein Profil
-              </button>
-              
-              <button
-                onClick={() => { setIsMobileMenuOpen(false); logout(); }}
-                className="flex items-center w-full p-4 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-colors font-bold justify-center"
-              >
-                <LogOut className="w-5 h-5 mr-2" />
-                Abmelden
-              </button>
-            </div>
+            <button
+              onClick={() => { setIsMobileMenuOpen(false); logout(); }}
+              className="flex items-center w-full p-4 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-colors font-bold justify-center"
+            >
+              <LogOut className="w-5 h-5 mr-2" />
+              Abmelden
+            </button>
           </div>
         </div>
       )}
