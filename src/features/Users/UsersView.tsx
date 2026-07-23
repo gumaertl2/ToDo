@@ -1,3 +1,4 @@
+// [2026-07-23] - UX-CLEANUP: "DSGVO Prüfen"-Button und Expired-Ansicht entfernt, da Vereinsmitgliedschaft (und nicht App-Aktivität) das Löschkriterium ist.
 // [2026-05-25] - BUGFIX: 'parentItemContext' an ItemFormModal durchgereicht. Klicks auf Unterpunkte im Tab "Rollen & Ämter" zeigen nun im Modal wieder korrekt den Link zum übergeordneten Oberpunkt (Agenda-Container) an.
 // [2026-05-15] - FEATURE: Deep-Link Support (Auto-Tab-Switch bei fokussiertem Mitglied)
 // [2026-05-15] - BUGFIX: fetchTeams im Lade-Zyklus ergänzt, damit Teams beim Start geladen werden
@@ -10,7 +11,7 @@
 // src/features/Users/UsersView.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import { UserPlus, ShieldAlert, Trash2, Tag, Upload, Lock, Users } from 'lucide-react';
+import { UserPlus, Trash2, Tag, Upload, Lock, Users } from 'lucide-react';
 
 import { HelperFormModal } from './HelperFormModal';
 import { UserFormModal } from './UserFormModal';
@@ -19,22 +20,22 @@ import { ItemFormModal } from '../Shared/ItemFormModal';
 import { CsvImportModal } from './CsvImportModal';
 import { RoleMatrixModal } from './RoleMatrixModal';
 import { UserSuccessionModal } from './UserSuccessionModal'; 
-import { TeamFormModal } from './TeamFormModal'; // NEU: Option B
+import { TeamFormModal } from './TeamFormModal'; 
 
 import { AppUserTab } from './tabs/AppUserTab';
 import { MitgliederTab } from './tabs/MitgliederTab';
 import { RollenTab } from './tabs/RollenTab';
 import { EhrungenTab } from './tabs/EhrungenTab';
-import { TeamsTab } from './tabs/TeamsTab'; // NEU: Option B
+import { TeamsTab } from './tabs/TeamsTab'; 
 
-import type { Helper, User, Group, AgendaItem, Team } from '../../core/types/models'; // NEU: Team Interface
+import type { Helper, User, Group, AgendaItem, Team } from '../../core/types/models'; 
 
 export const UsersView: React.FC = () => {
   const { 
     user, roleProfiles, groups, fetchUsersAndHelpers, fetchTemplatesAndRoutines, fetchEvents, fetchTasks, fetchTeams,
-    saveAgendaItem, cleanupExpiredHelpers, deleteHelper, isUsersLoading,
-    focusedHelperId, // NEU: Leuchtturm-Signal für Navigation
-    allAgendaItems // CHIRURGISCHER EINGRIFF: Wir brauchen den Master-Pool, um Oberpunkte zu finden
+    saveAgendaItem, deleteHelper, isUsersLoading,
+    focusedHelperId, 
+    allAgendaItems 
   } = useClubStore();
   
   const [activeTab, setActiveTab] = useState<'appusers' | 'mitglieder' | 'teams' | 'rollen' | 'ehrungen'>('appusers');
@@ -59,8 +60,6 @@ export const UsersView: React.FC = () => {
   const [isMatrixModalOpen, setIsMatrixModalOpen] = useState(false);
   
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [expiredHelpers, setExpiredHelpers] = useState<Helper[]>([]);
-  const [showExpired, setShowExpired] = useState(false);
 
   const currentProfile = useMemo(() => {
     return roleProfiles.find(p => p.id === user?.roleProfileId) || 
@@ -74,9 +73,6 @@ export const UsersView: React.FC = () => {
   const canViewRoles = perms.viewRoles !== undefined ? perms.viewRoles : isSysAdmin;
   const canManageMitglieder = !!perms.manageMitglieder;
 
-  // FEATURE: Contextual Navigation
-  // Sobald ein Mitglied irgendwo (z.B. im Teams-Tab) fokussiert wird, 
-  // springen wir automatisch zum Mitglieder-Tab.
   useEffect(() => {
     if (focusedHelperId) {
       setActiveTab('mitglieder');
@@ -88,7 +84,7 @@ export const UsersView: React.FC = () => {
     fetchTemplatesAndRoutines();
     fetchEvents();
     fetchTasks();
-    fetchTeams(); // NEU: Teams laden!
+    fetchTeams(); 
   }, [fetchUsersAndHelpers, fetchTemplatesAndRoutines, fetchEvents, fetchTasks, fetchTeams]);
 
   const openHelperEditor = (h?: Helper) => { setEditingHelper(h); setIsHelperModalOpen(true); };
@@ -96,12 +92,6 @@ export const UsersView: React.FC = () => {
   const openGroupEditor = (g?: Group) => { setEditingGroup(g); setIsGroupModalOpen(true); };
   const openTaskEditor = (t: AgendaItem) => { setEditingTask(t); setIsTaskModalOpen(true); };
   const openTeamEditor = (t?: Team) => { setEditingTeam(t); setIsTeamModalOpen(true); };
-
-  const handleCheckGDPR = () => {
-    const expired = cleanupExpiredHelpers();
-    setExpiredHelpers(expired);
-    setShowExpired(true);
-  };
 
   const handleSafeDeleteHelper = async (h: Helper) => {
     if (window.confirm(`Möchtest du das Mitglied "${h.name}" wirklich löschen?`)) {
@@ -137,7 +127,6 @@ export const UsersView: React.FC = () => {
     }
   }, [availableTabs, activeTab]);
 
-  // CHIRURGISCHER EINGRIFF: Wir suchen den Oberpunkt, falls die geöffnete Aufgabe ein Unterpunkt ist
   const editingParentTask = editingTask?.parentItemId ? allAgendaItems.find(t => t.id === editingTask.parentItemId) : undefined;
 
   return (
@@ -148,11 +137,6 @@ export const UsersView: React.FC = () => {
         <div className="flex flex-wrap gap-2 sm:gap-3 justify-end">
           {activeTab === 'mitglieder' && canManageMitglieder && (
             <>
-              {canManageAppUsers && !showExpired && (
-                <button onClick={handleCheckGDPR} className="flex items-center px-3 py-1.5 text-sm bg-yellow-100 text-yellow-800 font-bold rounded-lg shadow-sm hover:bg-yellow-200 transition">
-                  <ShieldAlert className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">DSGVO prüfen</span>
-                </button>
-              )}
               <button onClick={() => setIsCsvModalOpen(true)} className="flex items-center px-3 py-1.5 text-sm bg-white text-gray-700 font-bold border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 transition">
                 <Upload className="w-4 h-4 mr-2 text-blue-600" /> CSV Import
               </button>
@@ -196,7 +180,7 @@ export const UsersView: React.FC = () => {
         {availableTabs.map(tab => (
           <button 
             key={tab.id} 
-            onClick={() => { setActiveTab(tab.id as any); setShowExpired(false); }} 
+            onClick={() => setActiveTab(tab.id as any)} 
             className={`py-2 px-4 font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === tab.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
           >
             {tab.label}
@@ -204,61 +188,38 @@ export const UsersView: React.FC = () => {
         ))}
       </div>
 
-      {showExpired && canManageAppUsers ? (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-bold text-yellow-900 flex items-center"><ShieldAlert className="w-5 h-5 mr-2" /> Abgelaufene Profile zur Löschung ({expiredHelpers.length})</h3>
-            <button onClick={() => setShowExpired(false)} className="text-sm text-yellow-800 underline">Zurück</button>
+      <div className={`bg-white rounded-xl shadow-sm border border-gray-200 flex-1 overflow-hidden flex flex-col ${activeTab === 'ehrungen' ? 'bg-transparent border-none shadow-none' : ''}`}>
+        {isUsersLoading ? (
+          <div className="p-8 text-center text-gray-500 animate-pulse font-bold">Lade Daten...</div>
+        ) : (
+          <div className="divide-y divide-gray-200 flex-1 overflow-y-auto">
+            {activeTab === 'appusers' && (
+              <AppUserTab 
+                openUserEditor={openUserEditor} 
+                openMatrixEditor={() => setIsMatrixModalOpen(true)} 
+                openSuccessionEditor={(u: User) => setSuccessionUser(u)} 
+                isAdmin={canManageAppUsers} 
+              />
+            )}
+            {activeTab === 'mitglieder' && <MitgliederTab openHelperEditor={openHelperEditor} canManageMitglieder={canManageMitglieder} />}
+            {activeTab === 'teams' && <TeamsTab openTeamEditor={openTeamEditor} canManageMitglieder={canManageMitglieder} />}
+            {activeTab === 'rollen' && <RollenTab isAdmin={canManageAppUsers} expandedGroups={expandedGroups} toggleGroupExpanded={toggleGroupExpanded} openGroupEditor={openGroupEditor} openTaskEditor={openTaskEditor} />}
+            {activeTab === 'ehrungen' && <EhrungenTab />}
           </div>
-          {expiredHelpers.length === 0 ? <p className="text-yellow-800">Keine abgelaufenen Profile gefunden. Alles DSGVO-konform!</p> : (
-            <div className="space-y-3">
-              {expiredHelpers.map((h) => (
-                <div key={h.id} className="flex justify-between items-center bg-white p-3 rounded shadow-sm border border-yellow-100">
-                  <div>
-                    <div className="font-bold text-gray-900">{h.name}</div>
-                    <div className="text-sm text-gray-500">Letzte Aktivität: {new Date(h.lastActivityAt || 0).toLocaleDateString()}</div>
-                  </div>
-                  <button onClick={() => handleSafeDeleteHelper(h)} className="p-2 text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-5 h-5" /></button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className={`bg-white rounded-xl shadow-sm border border-gray-200 flex-1 overflow-hidden flex flex-col ${activeTab === 'ehrungen' ? 'bg-transparent border-none shadow-none' : ''}`}>
-          {isUsersLoading ? (
-            <div className="p-8 text-center text-gray-500 animate-pulse font-bold">Lade Daten...</div>
-          ) : (
-            <div className="divide-y divide-gray-200 flex-1 overflow-y-auto">
-              {activeTab === 'appusers' && (
-                <AppUserTab 
-                  openUserEditor={openUserEditor} 
-                  openMatrixEditor={() => setIsMatrixModalOpen(true)} 
-                  openSuccessionEditor={(u: User) => setSuccessionUser(u)} 
-                  isAdmin={canManageAppUsers} 
-                />
-              )}
-              {activeTab === 'mitglieder' && <MitgliederTab openHelperEditor={openHelperEditor} canManageMitglieder={canManageMitglieder} />}
-              {activeTab === 'teams' && <TeamsTab openTeamEditor={openTeamEditor} canManageMitglieder={canManageMitglieder} />}
-              {activeTab === 'rollen' && <RollenTab isAdmin={canManageAppUsers} expandedGroups={expandedGroups} toggleGroupExpanded={toggleGroupExpanded} openGroupEditor={openGroupEditor} openTaskEditor={openTaskEditor} />}
-              {activeTab === 'ehrungen' && <EhrungenTab />}
-            </div>
-          )}
-        </div>
-      )}
+        )}
+      </div>
 
       {isHelperModalOpen && <HelperFormModal onClose={() => setIsHelperModalOpen(false)} existingHelper={editingHelper} />}
       {isUserModalOpen && <UserFormModal onClose={() => setIsUserModalOpen(false)} existingUser={editingUser} />}
       {isGroupModalOpen && <GroupFormModal onClose={() => setIsGroupModalOpen(false)} existingGroup={editingGroup} />}
       {isTeamModalOpen && <TeamFormModal onClose={() => setIsTeamModalOpen(false)} existingTeam={editingTeam} />}
       
-      {/* CHIRURGISCHER EINGRIFF: parentItemContext wird nun korrekt übergeben */}
       {isTaskModalOpen && editingTask && (
         <ItemFormModal 
           isOpen={isTaskModalOpen} 
           existingItem={editingTask} 
           parentItemContext={editingParentTask}
-          onNavigateToParent={() => {}} // Stub: Aktiviert den Button visuell, wir springen in der UsersView aber nicht um.
+          onNavigateToParent={() => {}} 
           onClose={() => setIsTaskModalOpen(false)} 
           onSave={async (data) => { await saveAgendaItem(data); fetchTasks(); setIsTaskModalOpen(false); }} 
         />

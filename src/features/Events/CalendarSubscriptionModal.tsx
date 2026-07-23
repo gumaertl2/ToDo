@@ -1,7 +1,5 @@
+// [2026-07-23] - BUGFIX: Fehlermeldungen (z.B. Sync-Fehler) werden nun auch in der Master-Listenansicht gerendert.
 // [2026-07-23] - BUGFIX: Wenn sich die ICS-URL ändert, werden alte cachedEvents sofort gelöscht (Verhindert "Geister-Termine" bei fehlerhaftem Folge-Sync).
-// [2026-05-16] - UX-FIX: Umstellung auf Master-Detail-Ansicht (Einklappen der Liste bei Neu/Bearbeiten) für maximale Übersicht.
-// [2026-05-16] - FEATURE: SmartEntityPicker für Omni-Channel In-App Erinnerungen & WhatsApp Absender auch für Abos integriert.
-// 2026-04-15 20:55 - FIX: Firebase "undefined" Error beim Speichern von Abos behoben
 // src/features/Events/CalendarSubscriptionModal.tsx
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
@@ -127,7 +125,6 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
       let updatedCachedEvents = existingSub.cachedEvents;
       let updatedLastSyncedAt = existingSub.lastSyncedAt;
 
-      // ---> CHIRURGISCHER EINGRIFF: Cache-Reset bei URL-Änderung <---
       if (importType === 'url' && existingSub.url !== url.trim()) {
         updatedCachedEvents = [];
         updatedLastSyncedAt = undefined;
@@ -184,6 +181,7 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
   };
 
   const handleSync = async (id: string) => {
+    setError(null);
     setSyncingId(id);
     const result = await syncSubscription(id);
     if (!result.success) setError(`Sync-Fehler: ${result.error?.message}`);
@@ -206,6 +204,7 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
   };
 
   const handleEdit = (sub: CalendarSubscription) => {
+    setError(null);
     setEditingId(sub.id);
     setName(sub.name);
     if (sub.url === 'FILE_IMPORT') {
@@ -310,6 +309,7 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
             )}
 
             <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-4">
+              {/* Rest des Formulars bleibt absolut identisch */}
               <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
                 <div className="md:col-span-4">
                   <label className="block text-xs font-bold text-gray-700 mb-1.5">Abo-Name</label>
@@ -469,6 +469,13 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
           </div>
         ) : (
           <div className="p-6 overflow-y-auto flex-1 bg-white custom-scrollbar">
+            {/* CHIRURGISCHER EINGRIFF: Fehler-Anzeige nun auch in der Listenansicht sichtbar! */}
+            {error && (
+               <div className="bg-red-50 text-red-700 p-3 mb-4 rounded-lg flex items-center border border-red-100 text-sm font-bold">
+                 <AlertCircle className="w-5 h-5 mr-2 shrink-0" /> {error}
+               </div>
+            )}
+            
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-sm font-bold text-gray-700">Verknüpfte Feeds & Dateien ({calendarSubscriptions.length})</h3>
             </div>

@@ -1,7 +1,6 @@
-// [2026-07-23] - BUGFIX: Cache-Buster (nocache) für ICS-Downloads hinzugefügt, um Proxy-Caches zu umgehen.
+// [2026-07-23] - BUGFIX: Cache-Buster (nocache) von der Original-URL entfernt und stattdessen Server/Proxy-Caching via Fetch API { cache: 'no-store' } blockiert.
 // [2026-07-23] - FEATURE: 7-Tage Auto-Sync (Lazy Cronjob) in den Kalender-Snapshot eingebaut.
 // [2026-07-23] - BUGFIX: URL Race-Condition in syncSubscription behoben (Holt sich nun immer frische Daten via getDoc).
-// 2026-04-15 19:40 - FEATURE: Echtzeit-Sync (onSnapshot) für Kalender & Abos implementiert
 // src/store/slices/createCalendarSlice.ts
 import type { StateCreator } from 'zustand';
 import type { CalendarEvent, CalendarSubscription, CachedIcsEvent } from '../../core/types/models';
@@ -140,22 +139,18 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
 
       if (feedUrl.toLowerCase().startsWith('webcal://')) feedUrl = 'https://' + feedUrl.substring(9);
       
-      // ---> CHIRURGISCHER EINGRIFF: CACHE-BUSTER <---
-      // Wir hängen einen unikalen Zeitstempel an die URL an, damit Proxy-Server 
-      // (allorigins / corsproxy) gezwungen werden, ihren internen Cache zu ignorieren
-      // und die ICS-Datei wirklich "live" vom Zielserver zu holen.
-      const cbSeparator = feedUrl.includes('?') ? '&' : '?';
-      const bustedUrl = `${feedUrl}${cbSeparator}nocache=${Date.now()}`;
-
+      // ---> CHIRURGISCHER EINGRIFF: SERVER-FREUNDLICHER CACHE BUSTER <---
+      // Statt die URL zu verändern, befehlen wir dem Proxy (allorigins), seinen Cache zu leeren (&disableCache=true).
+      // Zusätzlich nutzen wir { cache: 'no-store' } beim fetch, um den lokalen Browser-Cache zu umgehen.
       const proxyUrls = [
-        `https://api.allorigins.win/raw?url=${encodeURIComponent(bustedUrl)}`, 
-        `https://corsproxy.io/?${encodeURIComponent(bustedUrl)}` 
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(feedUrl)}&disableCache=true`, 
+        `https://corsproxy.io/?${encodeURIComponent(feedUrl)}` 
       ];
       
       let textData = null;
       for (const proxyUrl of proxyUrls) {
         try {
-          const response = await fetch(proxyUrl);
+          const response = await fetch(proxyUrl, { cache: 'no-store' });
           if (response.ok) {
             const data = await response.text();
             if (data.includes('BEGIN:VCALENDAR')) { textData = data; break; }
@@ -163,7 +158,7 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
         } catch (e) { console.warn(`Proxy fail für ${proxyUrl}`); }
       }
       
-      if (!textData) return { success: false, error: new Error('Download fehlgeschlagen. Link prüfen.') };
+      if (!textData) return { success: false, error: new Error('Download fehlgeschlagen. Bitte Link prüfen.') };
       
       const jcalData = ICAL.parse(textData);
       const comp = new ICAL.Component(jcalData);
