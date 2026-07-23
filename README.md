@@ -1,3 +1,4 @@
+// [2026-07-23] - MASTER SYNC: DSGVO Clickwrap, Nutzer-Self-Service (Mein Profil) und Auto-Benachrichtigungen für Stammdaten-Updates dokumentiert.
 // [2026-07-22] - MASTER SYNC: DSGVO Passiv-Mitglieder-Firewall (gebunden an viewEhrungen) reaktiv im Store implementiert und dokumentiert.
 // [2026-06-11] - MASTER SYNC: Domain-Language geklärt. Definition von 'App-Nutzer' (users) und 'Mitglieder & Helfer' (helpers) in TEIL 6 hinzugefügt, um eine saubere Trennung der UX/UI Ansichten (Dashboard) zu garantieren.
 // [2026-06-11] - MASTER SYNC: Architektur-Manifest aktualisiert. Data-Dictionary in TEIL 6 hinzugefügt, um relationale Schlüssel (seriesId, baseItemId, parentItemId, eventId) für zukünftige KI-Assistenten glasklar zu definieren.
@@ -164,17 +165,21 @@ PapaToDo kann externe Kalender (z.B. vom BFV oder Google) abonnieren. An diese i
 Der gesamte Kalender kann via iFrame/Web-Link schreibgeschützt für alle Vereinsmitglieder (ohne Login) freigegeben werden.
 
 ### 8. Soft-Delete (Trash) & Papierkorb-Management
-
 Gelöschte Elemente (Agenda-Punkte, Aufgaben) werden nicht physisch aus der Datenbank entfernt, sondern erhalten den Status `TRASH` und einen `deletedAt` Zeitstempel. Sie werden in der regulären Agenda und im Kanban-Board ausgeblendet, können aber von Administratoren über die `OrphanCleanupModal` wiederhergestellt oder endgültig (hard-delete) bereinigt werden.
 
 ### 9. Desktop Power-Features (Kontextmenü & Inline-Editoren)
-
 Für ein blitzschnelles Arbeiten am Desktop wurden Power-Features integriert:
 * **Native Rechtsklick-Kontextmenüs (`RowContextMenu`):** Erlaubt die Bearbeitung, Positionierung und das Einfügen neuer Zeilen ohne Mauswege.
 * **Inline-Editoren (`InlineEditors`):** Bearbeitung von Titeln, Beschreibungen und Dauer direkt in der Liste.
 * **Volltext- & Ähnlichkeitssuche:** Ein globales Suchfeld im Agenda-Header filtert den Baum in Echtzeit. Treffer in Titeln oder Notizen (`RichTextRenderer`) werden visuell gelb (`<mark>`) hervorgehoben.
 * **Safe-Edit Fokus-Schutz:** Eine komplexe Interceptor-Logik verhindert den Fokus-Klau und Datenüberschreibungen zwischen Inline-Editoren (onBlur-Speichern) und Modal-Overlays.
 * **Smart-Sorting & Sub-Item Drag&Drop:** Neu angelegte Punkte erhalten strikt die `protocolIndex = max + 1` und fügen sich nahtlos in die Hierarchie ein. Unterpunkte sind vollständig drag-and-drop-fähig.
+
+### 10. Mitglieder-Self-Service & Stammdaten
+* **"Mein Profil" (Self-Service):** Mitglieder können ihre Kontaktdaten (Telefon, E-Mail der Eltern, etc.) sowie ihre DSGVO-Einstellungen jederzeit selbstständig in der App aktualisieren.
+* **Transparenz nach Art. 15 DSGVO:** Nutzer haben jederzeit vollen Lese-Zugriff auf die vom Verein über sie gespeicherten Stammdaten (Name, App-Alias, Mitgliedsstatus, Geburts- und Eintrittsdatum).
+* **Auto-Benachrichtigungen:** Ändert ein Mitglied seine Kontaktdaten im Self-Service, generiert das System automatisch eine In-App-Erinnerung (Aufgabe) an alle Vorstandsmitglieder (Recht: `manageMitglieder`), damit diese die Daten in externen Systemen (Kasse, DTTB) synchronisieren können.
+* **Login-Sicherheit:** Das primäre E-Mail-Feld ist im Self-Service gesperrt (Read-Only), um die unzerstörbare Brücke zum Firebase-Authentication-Login zu garantieren.
 
 ---
 
@@ -222,12 +227,18 @@ Um Verwirrung in der UI und Logik zu vermeiden, gibt es eine strikte Trennung:
 
 ---
 
-## 🛡️ TEIL 7: DSGVO, Migration & Abgrenzung
+## 🛡️ TEIL 7: DSGVO, Datenschutz & Abgrenzung
 
-* **Ehrungen & Mitgliedsdaten:** PapaToDo ist KEINE vollumfängliche Vereinsverwaltung (dafür gibt es WISO, SPG etc.). Das Tab "Mitglieder & Ehrungen" dient *nur* dem Jubiläums-Radar (z.B. "Wer hat dieses Jahr 25-jähriges?"), damit der Vorstand frühzeitig reagieren kann.
-* **Passiv-Mitglieder-Firewall:** Aus DSGVO-Gründen werden passive Mitglieder zentral und reaktiv im `useClubStore` (UserSlice) herausgefiltert, sofern der Nutzer nicht das `viewEhrungen`-Recht besitzt. Diese Filterung darf niemals in die UI-Schicht verlagert werden, um unbeabsichtigte Datenlecks in der Oberfläche oder durch direkten State-Zugriff zu verhindern.
-* **Mandantenfähigkeit (Club-ID):** PapaToDo ist mandantenfähig vorbereitet. Fast alle Dokumente besitzen ein `clubId` Feld.
-* **Soft-Delete:** Gelöschte Agendapunkte werden zunächst auf `status: 'TRASH'` gesetzt, um das versehentliche Zerstören von alten Protokollen zu verhindern.
+Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der europäischen Datenschutzgrundverordnung (DSGVO) aufgebaut:
+
+*   **Digitaler Clickwrap:** Beim ersten Login (oder nach einer Aktualisierung der Richtlinien) muss jeder Nutzer aktiv der App-Sichtbarkeit zustimmen oder diese ablehnen. 
+*   **Lückenloser Audit-Trail:** Jede DSGVO-Entscheidung wird mit einem präzisen Zeitstempel (`consentConfirmedAt`) und dem Akteur (`USER` oder `ADMIN`) manipulationssicher in der Datenbank protokolliert.
+*   **Opt-In Sichtbarkeit:** Lehnt ein Nutzer die Sichtbarkeit ab, wird sein Profil für andere App-Nutzer strikt geschwärzt (Read-Only Firewall im Store). Die App bleibt für ihn jedoch vollumfänglich nutzbar.
+*   **Admin-Override & Reset:** Admins können analog vorliegende (papierhafte) Zustimmungen im System erfassen oder den DSGVO-Status eines Mitglieds komplett zurücksetzen, um bei dessen nächstem Login einen neuen Clickwrap zu erzwingen.
+*   **Einfacher Widerruf:** Die DSGVO-Zustimmung kann vom Nutzer jederzeit mit einem Klick über das eigene Profil widerrufen oder nachträglich erteilt werden (Art. 7 Abs. 3 DSGVO).
+*   **Passiv-Mitglieder-Firewall:** Aus DSGVO-Gründen werden passive Mitglieder zentral und reaktiv im `useClubStore` (UserSlice) herausgefiltert, sofern der Nutzer nicht das `viewEhrungen`-Recht besitzt. Diese Filterung darf niemals in die UI-Schicht verlagert werden, um unbeabsichtigte Datenlecks in der Oberfläche oder durch direkten State-Zugriff zu verhindern.
+*   **Ehrungen & Mitgliedsdaten:** PapaToDo ist KEINE vollumfängliche Vereinsverwaltung (dafür gibt es WISO, SPG etc.). Das Tab "Mitglieder & Ehrungen" dient *nur* dem Jubiläums-Radar (z.B. "Wer hat dieses Jahr 25-jähriges?"), damit der Vorstand frühzeitig reagieren kann.
+*   **Mandantenfähigkeit (Club-ID):** PapaToDo ist mandantenfähig vorbereitet. Fast alle Dokumente besitzen ein `clubId` Feld.
 
 ---
 
@@ -237,6 +248,7 @@ Um Verwirrung in der UI und Logik zu vermeiden, gibt es eine strikte Trennung:
 * `.gitignore`, `eslint.config.js`, `package.json`, `tsconfig.json`: Standard Vite/Node Konfigurationen.
 * `vercel.json`: Deployment Konfiguration für Client-Side Routing (Rewrites auf `index.html`).
 * `vite.config.ts`: Vite Bundler Konfiguration.
+* `src/config/dsgvoConfig.ts`: Konfigurationsdatei für DSGVO-Texte und Versions-Tracking.
 * `api/calendar.ts`: Serverless Vercel Function (Backend) für das Abonnieren und Parsen externer `.ics` Kalender-Feeds. Vermeidet CORS-Probleme im Browser.
 
 ### State Management (Store)
@@ -246,7 +258,7 @@ Um Verwirrung in der UI und Logik zu vermeiden, gibt es eine strikte Trennung:
 ### Features & UI
 
 * **Admin:** `OrphanCleanupModal.tsx` (Papierkorb-Verwaltung und Soft-Delete Cleanup).
-* **Auth:** `AuthGuard.tsx` (Routenschutz), `LoginView.tsx` (Firebase Auth).
+* **Auth:** `AuthGuard.tsx` (Routenschutz), `LoginView.tsx` (Firebase Auth), `DsgvoClickwrap.tsx` (Privacy-Gate).
 * **Dashboard:** `WelcomeDashboard.tsx` (Die rollenbasierte Kommandozentrale).
 * **Events:** `CalendarView.tsx` (Interner Kalender), `EventDetailView.tsx` (Live-Protokollführung), `ProtocolEditor.tsx`, `EventsView.tsx`.
   * *Kalender-Tools:* `CalendarBulkEventModal.tsx`, `CalendarExportModal.tsx`, `CalendarIcsDetailModal.tsx`, `CalendarSubscriptionModal.tsx`.
@@ -257,7 +269,7 @@ Um Verwirrung in der UI und Logik zu vermeiden, gibt es eine strikte Trennung:
 * **Tasks:** `TasksView.tsx` (Board/Liste), `KanbanBoard.tsx`, `TasksListView.tsx`, `TaskHistoryModal.tsx`.
 * **TeamPins:** `TeamPinsView.tsx` (Wettkampf-Tresor & PIN-Freigabe).
 * **Templates:** `TemplatesView.tsx` (Vorlagen-Management).
-* **Users:** `UsersView.tsx` (Nutzer & Helfer), `UserSuccessionModal.tsx` (Amtsübergabe), `tabs/` (Mitglieder, Rollen, Ehrungen, App-Nutzer).
+* **Users:** `UsersView.tsx` (Nutzer & Helfer), `UserSuccessionModal.tsx` (Amtsübergabe), `MyProfileModal.tsx` (Nutzer Self-Service), `tabs/` (Mitglieder, Rollen, Ehrungen, App-Nutzer).
   * *`tabs/RollenTab.tsx`:* Nutzt eine dynamische Baumstruktur mit **Kontext-Erhalt** und **+/- Filter**, um Daueraufgaben übersichtlich darzustellen.
 * **Shared:** `ItemFormModal.tsx` (Universal-Editor), `AgendaItemRow.tsx` (Listenansicht), `ItemCard.tsx` (Kanban-Ansicht), `RichText.tsx`.
   * *AgendaItem Sub-Komponenten:* Desktop Power-Features (`InlineEditors.tsx`, `ItemMetadata.tsx`, `ItemStatusSection.tsx`, `RowContextMenu.tsx`).
@@ -274,5 +286,5 @@ Um Verwirrung in der UI und Logik zu vermeiden, gibt es eine strikte Trennung:
 4.  `npm run dev` startet den lokalen Vite-Server.
 5.  `npm run build` führt einen strengen TypeScript Check (`tsc -b`) aus und baut das Production-Bundle.
 
-*Stand: 11.06.2026 - Protokoll: WelcomeDashboard, Domain Language & Fate-Binding*
+*Stand: 23.07.2026 - Protokoll: WelcomeDashboard, Domain Language, Fate-Binding & DSGVO-Self-Service*
 // --- END OF FILE ---

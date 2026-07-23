@@ -1,10 +1,13 @@
+// [2026-07-23] - FEATURE: 7-Tage Auto-Sync (Lazy Cronjob) in den Kalender-Snapshot eingebaut.
+// [2026-07-23] - BUGFIX: URL Race-Condition in syncSubscription behoben (Holt sich nun immer frische Daten via getDoc).
 // 2026-04-15 19:40 - FEATURE: Echtzeit-Sync (onSnapshot) für Kalender & Abos implementiert
 // src/store/slices/createCalendarSlice.ts
 import type { StateCreator } from 'zustand';
 import type { CalendarEvent, CalendarSubscription, CachedIcsEvent } from '../../core/types/models';
 import { DataProcessor } from '../../services/DataProcessor';
 import type { Result } from '../../core/types/shared';
-import { collection, onSnapshot, doc, deleteDoc, writeBatch } from 'firebase/firestore';
+// CHIRURGISCHER EINGRIFF: getDoc und updateDoc hinzugefügt
+import { collection, onSnapshot, doc, deleteDoc, writeBatch, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import ICAL from 'ical.js';
 
@@ -49,7 +52,27 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
     const sSub = onSnapshot(collection(db, 'calendar_subscriptions'), (snap) => {
       const subs: CalendarSubscription[] = [];
       snap.forEach((d) => subs.push({ ...d.data(), id: d.id } as CalendarSubscription));
-      set({ calendarSubscriptions: subs.sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999)), isCalendarLoading: false });
+      
+      const sortedSubs = subs.sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+      set({ calendarSubscriptions: sortedSubs, isCalendarLoading: false });
+
+      // ---> CHIRURGISCHER EINGRIFF: AUTOMATISCHER 7-TAGE SYNC (LAZY CRONJOB) <---
+      const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+      const now = Date.now();
+      
+      sortedSubs.forEach(sub => {
+        if (sub.isActive && sub.url !== 'FILE_IMPORT') {
+          // Prüfen, ob noch nie synchronisiert wurde oder der letzte Sync > 7 Tage her ist
+          if (!sub.lastSyncedAt || (now - sub.lastSyncedAt > SEVEN_DAYS)) {
+            // Optimistic Lock: Wir setzen den Zeitstempel sofort hart in der Datenbank hoch, 
+            // damit andere Handys, die in derselben Sekunde online gehen, nicht auch anfangen zu laden.
+            updateDoc(doc(db, 'calendar_subscriptions', sub.id), { lastSyncedAt: now }).then(() => {
+              // Dann den echten Download auslösen
+              get().syncSubscription(sub.id);
+            }).catch(err => console.warn("Fehler beim Auto-Sync Lock:", err));
+          }
+        }
+      });
     });
 
     set({ unsubCalendarEvents: eSub, unsubCalendarSubs: sSub });
@@ -109,12 +132,24 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
   },
 
   syncSubscription: async (id) => {
-    const sub = get().calendarSubscriptions.find(s => s.id === id);
-    if (!sub) return { success: false, error: new Error('Abo nicht gefunden') };
     try {
+      // ---> CHIRURGISCHER EINGRIFF: URL RACE-CONDITION FIX <---
+      // Wir vertrauen NICHT auf den lokalen Store (get().calendarSubscriptions), 
+      // da dieser nach einem Link-Update Bruchteile von Sekunden hinterherhinken kann.
+      // Wir holen das Abo frisch aus der Datenbank!
+      const docRef = doc(db, 'calendar_subscriptions', id);
+      const docSnap = await getDoc(docRef);
+      
+      if (!docSnap.exists()) return { success: false, error: new Error('Abo nicht in Datenbank gefunden') };
+      
+      const sub = { ...docSnap.data(), id: docSnap.id } as CalendarSubscription;
+      
       let feedUrl = sub.url.trim();
+      if (feedUrl === 'FILE_IMPORT') return { success: false, error: new Error('Lokale Dateien werden nicht synchronisiert') };
+
       if (feedUrl.toLowerCase().startsWith('webcal://')) feedUrl = 'https://' + feedUrl.substring(9);
       const proxyUrls = [`https://api.allorigins.win/raw?url=${encodeURIComponent(feedUrl)}`, `https://corsproxy.io/?${encodeURIComponent(feedUrl)}` ];
+      
       let textData = null;
       for (const proxyUrl of proxyUrls) {
         try {
@@ -123,26 +158,42 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
             const data = await response.text();
             if (data.includes('BEGIN:VCALENDAR')) { textData = data; break; }
           }
-        } catch (e) { console.warn(`Proxy fail`); }
+        } catch (e) { console.warn(`Proxy fail für ${proxyUrl}`); }
       }
-      if (!textData) return { success: false, error: new Error('Download fehlgeschlagen') };
+      
+      if (!textData) return { success: false, error: new Error('Download fehlgeschlagen. Link prüfen.') };
       
       const jcalData = ICAL.parse(textData);
       const comp = new ICAL.Component(jcalData);
       const vevents = comp.getAllSubcomponents('vevent');
       const cachedEvents: CachedIcsEvent[] = [];
+      
       vevents.forEach((vevent: any) => {
         const event = new ICAL.Event(vevent);
         if (!event.startDate) return; 
         const s = event.startDate;
         const startDate = new Date(s.year, s.month - 1, s.day, s.hour, s.minute).getTime();
         let endDate = startDate;
-        if (event.endDate) { const e = event.endDate; endDate = new Date(e.year, e.month - 1, e.day, e.hour, e.minute).getTime(); }
-        cachedEvents.push({ uid: event.uid, title: event.summary || 'Ohne Titel', description: event.description || '', location: event.location || '', startTime: startDate, endTime: endDate, isAllDay: s.isDate });
+        if (event.endDate) { 
+          const e = event.endDate; 
+          endDate = new Date(e.year, e.month - 1, e.day, e.hour, e.minute).getTime(); 
+        }
+        cachedEvents.push({ 
+          uid: event.uid, 
+          title: event.summary || 'Ohne Titel', 
+          description: event.description || '', 
+          location: event.location || '', 
+          startTime: startDate, 
+          endTime: endDate, 
+          isAllDay: s.isDate 
+        });
       });
       
+      // Neue Events speichern und Zeitstempel final aktualisieren
       return await DataProcessor.saveDocument<CalendarSubscription>('calendar_subscriptions', sub.id, { ...sub, cachedEvents, lastSyncedAt: Date.now() });
-    } catch (error) { return { success: false, error: error as Error }; }
+    } catch (error) { 
+      return { success: false, error: error as Error }; 
+    }
   }
 });
 // --- END OF FILE ---
