@@ -1,6 +1,6 @@
+// [2026-07-23] - BUGFIX: Auto-Sync (Lazy Cronjob) wird nun NUR für eingeloggte User ausgeführt. Verhindert eine tödliche "Optimistic Update Rollback"-Endlosschleife für ungeloggte Gäste.
 // [2026-07-23] - BUGFIX: Cache-Buster (nocache) von der Original-URL entfernt und stattdessen Server/Proxy-Caching via Fetch API { cache: 'no-store' } blockiert.
 // [2026-07-23] - FEATURE: 7-Tage Auto-Sync (Lazy Cronjob) in den Kalender-Snapshot eingebaut.
-// [2026-07-23] - BUGFIX: URL Race-Condition in syncSubscription behoben (Holt sich nun immer frische Daten via getDoc).
 // src/store/slices/createCalendarSlice.ts
 import type { StateCreator } from 'zustand';
 import type { CalendarEvent, CalendarSubscription, CachedIcsEvent } from '../../core/types/models';
@@ -46,6 +46,8 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
       const events: CalendarEvent[] = [];
       snap.forEach((d) => events.push({ ...d.data(), id: d.id } as CalendarEvent));
       set({ calendarEvents: events });
+    }, (error) => {
+      console.error("Firebase Sync Fehler (Events):", error);
     });
 
     const sSub = onSnapshot(collection(db, 'calendar_subscriptions'), (snap) => {
@@ -55,18 +57,27 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
       const sortedSubs = subs.sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
       set({ calendarSubscriptions: sortedSubs, isCalendarLoading: false });
 
-      const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
-      const now = Date.now();
+      // ---> CHIRURGISCHER EINGRIFF: GAST-SCHUTZ (Endlosschleifen-Blocker) <---
+      // Wir holen uns den aktuellen User aus dem Store. Nur wenn jemand eingeloggt ist,
+      // dürfen wir Schreibbefehle (updateDoc) abfeuern, um Permission-Rollbacks zu vermeiden.
+      const currentUser = (get() as any).user;
       
-      sortedSubs.forEach(sub => {
-        if (sub.isActive && sub.url !== 'FILE_IMPORT') {
-          if (!sub.lastSyncedAt || (now - sub.lastSyncedAt > SEVEN_DAYS)) {
-            updateDoc(doc(db, 'calendar_subscriptions', sub.id), { lastSyncedAt: now }).then(() => {
-              get().syncSubscription(sub.id);
-            }).catch(err => console.warn("Fehler beim Auto-Sync Lock:", err));
+      if (currentUser) {
+        const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        
+        sortedSubs.forEach(sub => {
+          if (sub.isActive && sub.url !== 'FILE_IMPORT') {
+            if (!sub.lastSyncedAt || (now - sub.lastSyncedAt > SEVEN_DAYS)) {
+              updateDoc(doc(db, 'calendar_subscriptions', sub.id), { lastSyncedAt: now }).then(() => {
+                get().syncSubscription(sub.id);
+              }).catch(err => console.warn("Fehler beim Auto-Sync Lock (wird ignoriert):", err));
+            }
           }
-        }
-      });
+        });
+      }
+    }, (error) => {
+      console.error("Firebase Sync Fehler (Subscriptions):", error);
     });
 
     set({ unsubCalendarEvents: eSub, unsubCalendarSubs: sSub });
@@ -139,9 +150,6 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
 
       if (feedUrl.toLowerCase().startsWith('webcal://')) feedUrl = 'https://' + feedUrl.substring(9);
       
-      // ---> CHIRURGISCHER EINGRIFF: SERVER-FREUNDLICHER CACHE BUSTER <---
-      // Statt die URL zu verändern, befehlen wir dem Proxy (allorigins), seinen Cache zu leeren (&disableCache=true).
-      // Zusätzlich nutzen wir { cache: 'no-store' } beim fetch, um den lokalen Browser-Cache zu umgehen.
       const proxyUrls = [
         `https://api.allorigins.win/raw?url=${encodeURIComponent(feedUrl)}&disableCache=true`, 
         `https://corsproxy.io/?${encodeURIComponent(feedUrl)}` 
