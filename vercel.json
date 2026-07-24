@@ -1,4 +1,3 @@
-// [2026-07-24] - BUGFIX: Cache-Control Header für index.html und sw.js hinzugefügt, um Vercel-Caching zu umgehen und PWA-Updates zu erzwingen.
 {
   "headers": [
     {
@@ -27,4 +26,3 @@
     }
   ]
 }
-// --- END OF FILE ---
