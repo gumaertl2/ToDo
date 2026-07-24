@@ -1,3 +1,4 @@
+// [2026-07-24] - ARCHITECTURE-FIX: Build-Error (TS2339) behoben. Sichtbarkeitsprüfung für `assignedTeamIds` umgedreht, da die Team-Zugehörigkeit im Helper-Modell (`teamIds`) und nicht im Team-Modell gespeichert wird.
 // [2026-07-24] - ARCHITECTURE-FIX: Team-PINs nutzen nun dynamische `assignedTeamIds` anstelle von statisch aufgelösten Helfern (SSOT), sodass Team-Änderungen sofort live greifen.
 // [2026-05-16] - UX-FIX: Festen Höhen-Container entfernt und showBadges={true} aktiviert für einklappbare Such-UX.
 // [2026-05-15] - REFACTOR: App-Nutzer-Spalte im Formular entfernt (Sichtbarkeit nur noch über Teams/Helfer geregelt)
@@ -17,7 +18,7 @@ import { SmartEntityPicker } from '../Shared/components/SmartEntityPicker';
 export const TeamPinsView: React.FC = () => {
   const { 
     teamPins, fetchTeamPins, saveTeamPin, deleteTeamPin, 
-    user, roleProfiles, helpers, teams
+    user, roleProfiles, helpers 
   } = useClubStore();
 
   const [showAll, setShowAll] = useState(false);
@@ -42,18 +43,19 @@ export const TeamPinsView: React.FC = () => {
   const visiblePins = useMemo(() => {
     if (showAll && canManage) return teamPins;
     
-    // Wir prüfen zur Sicherheit, ob der aktuelle Benutzer auch einen Helfer-Eintrag (Gast) hat
-    const currentUserHelperId = helpers.find(h => h.email?.toLowerCase() === user?.email?.toLowerCase())?.id;
+    // Wir suchen das Helper-Profil des aktuell eingeloggten Users
+    const currentUserHelper = helpers.find(h => h.email?.toLowerCase() === user?.email?.toLowerCase());
+    const currentUserHelperId = currentUserHelper?.id;
     
-    // Wir ermitteln live alle Teams, in denen der aktuelle Helfer Mitglied ist
-    const currentUserTeamIds = teams.filter(t => t.memberIds?.includes(currentUserHelperId || '')).map(t => t.id);
+    // Die Teams, in denen der aktuelle User Mitglied ist (aus seinem Helper-Profil gelesen)
+    const currentUserTeamIds = currentUserHelper?.teamIds || [];
 
     return teamPins.filter(pin => 
       (pin.assignedUserIds && pin.assignedUserIds.includes(user?.id || '')) || 
       (currentUserHelperId && pin.assignedHelperIds?.includes(currentUserHelperId)) ||
       (pin.assignedTeamIds && pin.assignedTeamIds.some(teamId => currentUserTeamIds.includes(teamId)))
     );
-  }, [teamPins, showAll, canManage, user, helpers, teams]);
+  }, [teamPins, showAll, canManage, user, helpers]);
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
