@@ -1,3 +1,4 @@
+// [2026-07-24] - UX-FEATURE: "App reparieren" (Hard Reset) Button im Profil hinzugefügt, um Service Worker und Caches bei Update-Problemen hart zurückzusetzen.
 // [2026-07-23] - FEATURE: DSGVO Self-Service für Nutzer integriert. Erlaubt die eigenständige Änderung von Kontaktdaten und DSGVO-Einwilligung.
 // [2026-07-23] - SEC-FIX: Primäres E-Mail-Feld gesperrt (Read-Only), um die "Einladungs-Brücke" zum Firebase-Login nicht zu zerstören.
 // [2026-07-23] - FEATURE: Auto-Benachrichtigung an Vorstände bei Stammdaten-Änderungen über das In-App Erinnerungssystem.
@@ -6,7 +7,7 @@
 // src/features/Users/MyProfileModal.tsx
 import React, { useState, useMemo } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import { X, Save, ShieldCheck, AlertCircle, Info, Lock } from 'lucide-react';
+import { X, Save, ShieldCheck, AlertCircle, Info, Lock, RefreshCw } from 'lucide-react';
 import { DSGVO_CONFIG } from '../../config/dsgvoConfig';
 import type { AgendaItem } from '../../core/types/models';
 
@@ -30,6 +31,7 @@ export const MyProfileModal: React.FC<Props> = ({ onClose }) => {
   
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
 
   if (!myHelper) {
     return (
@@ -43,6 +45,44 @@ export const MyProfileModal: React.FC<Props> = ({ onClose }) => {
       </div>
     );
   }
+
+  const performHardReset = async () => {
+    if (!window.confirm("App wirklich reparieren? Dabei wird der Offline-Speicher gelöscht und alle Daten frisch vom Server geladen. Du musst dafür kurz online sein.")) {
+      return;
+    }
+
+    setIsResetting(true);
+
+    try {
+      // 1. Service Worker deregistrieren
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const registration of registrations) {
+          await registration.unregister();
+        }
+      }
+
+      // 2. Alle Browser-Caches leeren
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        for (const key of keys) {
+          await caches.delete(key);
+        }
+      }
+
+      // 3. LocalStorage & SessionStorage putzen
+      localStorage.clear();
+      sessionStorage.clear();
+
+      // 4. Hard-Reload
+      window.location.href = '/';
+      
+    } catch (error) {
+      console.error("Fehler beim Reset:", error);
+      alert("Reset fehlgeschlagen. Bitte schließe die App komplett und öffne sie neu.");
+      setIsResetting(false);
+    }
+  };
 
   const handleSave = async () => {
     setError(null);
@@ -238,6 +278,25 @@ export const MyProfileModal: React.FC<Props> = ({ onClose }) => {
                 </div>
 
               </div>
+            </div>
+          </div>
+
+          {/* CHIRURGISCHER EINGRIFF: Fehlerbehebung / Hard-Reset Sektion */}
+          <div className="border-t border-gray-100 pt-6">
+            <h3 className="font-bold text-gray-800 mb-4">Fehlerbehebung / System</h3>
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div>
+                <h4 className="font-bold text-orange-900 text-sm">App reparieren (Cache leeren)</h4>
+                <p className="text-xs text-orange-800 mt-1">Hilft bei Darstellungsproblemen, veralteten Terminen oder wenn die App nach einem Update hängt. Erfordert eine aktive Internetverbindung.</p>
+              </div>
+              <button 
+                onClick={performHardReset}
+                disabled={isResetting || isSaving}
+                className="shrink-0 flex items-center justify-center px-4 py-2 bg-white text-orange-700 border border-orange-200 font-bold rounded-lg hover:bg-orange-50 transition-colors shadow-sm disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isResetting ? 'animate-spin' : ''}`} />
+                {isResetting ? 'Repariere...' : 'App reparieren'}
+              </button>
             </div>
           </div>
 
