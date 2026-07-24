@@ -1,3 +1,4 @@
+// [2026-07-24] - ARCHITECTURE-FIX: Team-PINs nutzen nun dynamische `assignedTeamIds` anstelle von statisch aufgelösten Helfern (SSOT), sodass Team-Änderungen sofort live greifen.
 // [2026-05-16] - UX-FIX: Festen Höhen-Container entfernt und showBadges={true} aktiviert für einklappbare Such-UX.
 // [2026-05-15] - REFACTOR: App-Nutzer-Spalte im Formular entfernt (Sichtbarkeit nur noch über Teams/Helfer geregelt)
 // [2026-05-15] - REFACTOR: Eigene Helfer-Suche durch universellen SmartEntityPicker ersetzt
@@ -16,7 +17,7 @@ import { SmartEntityPicker } from '../Shared/components/SmartEntityPicker';
 export const TeamPinsView: React.FC = () => {
   const { 
     teamPins, fetchTeamPins, saveTeamPin, deleteTeamPin, 
-    user, roleProfiles, helpers 
+    user, roleProfiles, helpers, teams
   } = useClubStore();
 
   const [showAll, setShowAll] = useState(false);
@@ -25,9 +26,6 @@ export const TeamPinsView: React.FC = () => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
-  
-  // State für die Team-Markierungen innerhalb des SmartEntityPickers
-  const [modalTeamIds, setModalTeamIds] = useState<string[]>([]);
 
   useEffect(() => {
     fetchTeamPins();
@@ -40,18 +38,22 @@ export const TeamPinsView: React.FC = () => {
 
   const canManage = !!currentProfile.permissions?.manageTeamPins || !!user?.permissions?.manageTeamPins;
 
-  // Filter-Logik: Eigene vs. Alle (User & Helfer)
+  // Filter-Logik: Eigene vs. Alle (User & Helfer & Dynamische Teams)
   const visiblePins = useMemo(() => {
     if (showAll && canManage) return teamPins;
     
     // Wir prüfen zur Sicherheit, ob der aktuelle Benutzer auch einen Helfer-Eintrag (Gast) hat
-    const currentUserHelperId = helpers.find(h => h.email.toLowerCase() === user?.email.toLowerCase())?.id;
+    const currentUserHelperId = helpers.find(h => h.email?.toLowerCase() === user?.email?.toLowerCase())?.id;
+    
+    // Wir ermitteln live alle Teams, in denen der aktuelle Helfer Mitglied ist
+    const currentUserTeamIds = teams.filter(t => t.memberIds?.includes(currentUserHelperId || '')).map(t => t.id);
 
     return teamPins.filter(pin => 
-      pin.assignedUserIds.includes(user?.id || '') || 
-      (currentUserHelperId && pin.assignedHelperIds?.includes(currentUserHelperId))
+      (pin.assignedUserIds && pin.assignedUserIds.includes(user?.id || '')) || 
+      (currentUserHelperId && pin.assignedHelperIds?.includes(currentUserHelperId)) ||
+      (pin.assignedTeamIds && pin.assignedTeamIds.some(teamId => currentUserTeamIds.includes(teamId)))
     );
-  }, [teamPins, showAll, canManage, user, helpers]);
+  }, [teamPins, showAll, canManage, user, helpers, teams]);
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -66,7 +68,6 @@ export const TeamPinsView: React.FC = () => {
   };
 
   const openForm = (pin?: TeamPin) => {
-    setModalTeamIds([]); // Team-Auswahl zurücksetzen
     setEditingPin(pin ? { ...pin } : {
       id: `pin-${Date.now()}`,
       schemaVersion: '1.0',
@@ -75,8 +76,9 @@ export const TeamPinsView: React.FC = () => {
       gameEntryPinsText: '',
       assignedUserIds: [],
       assignedGroupIds: [],
-      assignedHelperIds: []
-    });
+      assignedHelperIds: [],
+      assignedTeamIds: []
+    } as TeamPin);
     setIsFormOpen(true);
   };
 
@@ -279,19 +281,22 @@ export const TeamPinsView: React.FC = () => {
                       selections={{
                         userIds: [],
                         groupIds: [],
-                        teamIds: modalTeamIds,
+                        teamIds: editingPin.assignedTeamIds || [],
                         helperIds: editingPin.assignedHelperIds || []
                       }}
                       onChange={(sel) => {
-                        setModalTeamIds(sel.teamIds);
-                        setEditingPin({ ...editingPin, assignedHelperIds: sel.helperIds });
+                        setEditingPin({ 
+                          ...editingPin, 
+                          assignedTeamIds: sel.teamIds,
+                          assignedHelperIds: sel.helperIds 
+                        });
                       }}
                       allowedTypes={['TEAM', 'HELPER']}
-                      showBadges={true} // MAGIC: Zeigt die Quer-Badges über dem Suchfeld an!
+                      showBadges={true}
                       placeholder="Team oder Mitglied suchen..."
                     />
                   </div>
-                  <p className="text-xs text-gray-500 mt-2">Klicke einfach auf die Personen, denen der PIN angezeigt werden soll.</p>
+                  <p className="text-xs text-gray-500 mt-2">Klicke einfach auf die Personen oder Teams, denen der PIN angezeigt werden soll.</p>
                 </div>
               </div>
 
