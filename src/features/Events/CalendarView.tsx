@@ -1,3 +1,4 @@
+ // [2026-07-24] - UX-FEATURE: Persistente Speicherung der Kalender-Filter (Abos, leere Tage, Historie) im localStorage eingebaut.
 // [2026-05-30] - UX-FEATURE: Bestätigungsdialog (confirm) vor Dienst-Übernahme eingebaut. Liest den aktuellen Dienstleistenden aus dem Titel aus, um die Abfrage zu personalisieren.
 // [2026-05-30] - BUGFIX: Visuelles Feedback bei "Dienst übernehmen" hinzugefügt. Der Titel des Termins wird nun automatisch mit dem Alias des neuen Helfers aktualisiert.
 // [2026-05-30] - UX-OPTIMIERUNG: Einheitlicher Workflow für alle Nutzer. Jeder Klick auf einen Termin öffnet nun zuerst das detailreiche CalendarIcsDetailModal.
@@ -78,8 +79,10 @@ export const CalendarView: React.FC = () => {
   const [tempTitle, setTempTitle] = useState('');
 
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
-  const [showEmptyDays, setShowEmptyDays] = useState(false);
-  const [showPastEvents, setShowPastEvents] = useState(false);
+  
+  // UX-FEATURE: Persistente Speicherung der Anzeige-Optionen
+  const [showEmptyDays, setShowEmptyDays] = useState(() => localStorage.getItem('papatodo_show_empty_days') === 'true');
+  const [showPastEvents, setShowPastEvents] = useState(() => localStorage.getItem('papatodo_show_past_events') === 'true');
 
   const [currentView, setCurrentView] = useState<'month' | 'week' | 'day' | 'agenda' | 'termine' | 'dienste'>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -104,9 +107,20 @@ export const CalendarView: React.FC = () => {
     fetchEvents(); 
   }, [fetchCalendarData, fetchEvents]);
 
+  // UX-FEATURE: Initiales Laden der versteckten Abos aus dem localStorage
   useEffect(() => {
-    const ids = ['manual', 'dienste', ...calendarSubscriptions.map(s => s.id)];
-    setActiveFilters(ids);
+    const allIds = ['manual', 'dienste', ...calendarSubscriptions.map(s => s.id)];
+    try {
+      const storedHidden = localStorage.getItem('papatodo_hidden_subs');
+      if (storedHidden) {
+        const hiddenIds = JSON.parse(storedHidden) as string[];
+        setActiveFilters(allIds.filter(id => !hiddenIds.includes(id)));
+      } else {
+        setActiveFilters(allIds);
+      }
+    } catch (e) {
+      setActiveFilters(allIds);
+    }
   }, [calendarSubscriptions]);
 
   const handleCopyLink = () => {
@@ -123,14 +137,31 @@ export const CalendarView: React.FC = () => {
     setIsEditingTitle(false);
   };
 
+  // UX-FEATURE: Speichern der ausgeblendeten Filter im localStorage
   const toggleFilter = (id: string) => {
-    setActiveFilters(prev => prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]);
+    setActiveFilters(prev => {
+      const next = prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id];
+      const allIds = ['manual', 'dienste', ...calendarSubscriptions.map(s => s.id)];
+      const hidden = allIds.filter(x => !next.includes(x));
+      localStorage.setItem('papatodo_hidden_subs', JSON.stringify(hidden));
+      return next;
+    });
   };
 
   const handleViewChange = (v: any) => {
     setCurrentView(v);
-    if (v === 'dienste' && !activeFilters.includes('dienste')) setActiveFilters(prev => [...prev, 'dienste']);
-    if (v === 'termine' && !activeFilters.includes('manual')) setActiveFilters(prev => [...prev, 'manual']);
+    setActiveFilters(prev => {
+      let next = [...prev];
+      if (v === 'dienste' && !next.includes('dienste')) next.push('dienste');
+      if (v === 'termine' && !next.includes('manual')) next.push('manual');
+      
+      if (next.length !== prev.length) {
+        const allIds = ['manual', 'dienste', ...calendarSubscriptions.map(s => s.id)];
+        const hidden = allIds.filter(x => !next.includes(x));
+        localStorage.setItem('papatodo_hidden_subs', JSON.stringify(hidden));
+      }
+      return next;
+    });
   };
 
   const handleNavPrev = () => {
@@ -516,14 +547,20 @@ export const CalendarView: React.FC = () => {
         
         {['agenda', 'termine', 'dienste'].includes(currentView) && (
           <label className="flex items-center space-x-2 text-sm cursor-pointer">
-            <input type="checkbox" checked={showEmptyDays} onChange={(e) => setShowEmptyDays(e.target.checked)} className="rounded w-4 h-4 text-gray-600 focus:ring-gray-500"/>
+            <input type="checkbox" checked={showEmptyDays} onChange={(e) => {
+              setShowEmptyDays(e.target.checked);
+              localStorage.setItem('papatodo_show_empty_days', String(e.target.checked));
+            }} className="rounded w-4 h-4 text-gray-600 focus:ring-gray-500"/>
             <span className="text-gray-600 font-bold">Leere Tage zeigen</span>
           </label>
         )}
 
         {['termine', 'dienste'].includes(currentView) && (
           <label className="flex items-center space-x-2 text-sm cursor-pointer">
-            <input type="checkbox" checked={showPastEvents} onChange={(e) => setShowPastEvents(e.target.checked)} className="rounded w-4 h-4 text-purple-600 focus:ring-purple-500"/>
+            <input type="checkbox" checked={showPastEvents} onChange={(e) => {
+              setShowPastEvents(e.target.checked);
+              localStorage.setItem('papatodo_show_past_events', String(e.target.checked));
+            }} className="rounded w-4 h-4 text-purple-600 focus:ring-purple-500"/>
             <span className="text-gray-600 font-bold">Historie zeigen</span>
           </label>
         )}
