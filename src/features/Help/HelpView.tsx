@@ -1,3 +1,4 @@
+// [2026-07-24] - UX-FIX: Handbuch um DSGVO Self-Service, dynamische Team-PINs, persistente Kalender-Filter und den Hard-Reset (Cache leeren) erweitert.
 // [2026-05-31] - UX-FEATURE: Best-Practice Workflow (Self-Service für Dienste) in Kalender-Sektion (Teil 2) integriert.
 // [2026-05-31] - UX-FIX: Generische Vereinsbeispiele im gesamten Handbuch konsequent auf Tischtennis-Beispiele (Hallendienst, Getränkeversorgung, Spielbälle, Vereinsmeisterschaft) umgestellt.
 // [2026-05-30] - UX-FIX: Sprachliche Kalibrierung (Nüchterner, professioneller SOP-Ton statt Marketing-Sprech). Euphorie-Wörter ("Magie", "Königsdisziplin", "chirurgisch") entfernt. Komplexe Begriffe ("Endlos-Projekt", "Führender Oberpunkt", "Succession") mit kurzen Definitionen versehen. Einleitung auf primäre Zielgruppe (Vorstand/Admin) fokussiert.
@@ -123,10 +124,16 @@ export const HelpView: React.FC = () => {
               <li><strong>ToDos:</strong> Welche meiner Aufgaben sind aktuell fällig?</li>
             </ul>
 
-            <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-lg">
+            <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-lg mb-6">
               <h4 className="font-bold text-indigo-900 mb-2">Grundprinzip: Persönliche Verantwortung & Silo-Datenschutz</h4>
               <p className="text-sm text-indigo-800 mb-3"><strong>Verantwortung ist bei uns immer persönlich, nicht anonym.</strong> Jede Aufgabe wird zwingend einer konkreten Person zugeordnet (die wiederum ein Amt bekleiden kann). Verlässt jemand sein Amt, sorgt die geregelte Aufgabenübergabe (Succession-Workflow) dafür, dass alle offenen Punkte nahtlos an den Nachfolger übertragen werden.</p>
               <p className="text-sm text-indigo-800">Zudem bietet PapaToDo konsequenten Datenschutz (Participation-First). Einfache Nutzer sehen auf ihrem Dashboard ausschließlich Aufgaben und Termine, die sie direkt betreffen. Interne Vorstandsthemen und Fremd-Sitzungen bleiben unsichtbar. Administratoren behalten durch erweiterte Rechte den Gesamtüberblick.</p>
+            </div>
+
+            <div className="bg-gray-50 border border-gray-200 p-5 rounded-lg">
+              <h4 className="font-bold text-gray-900 mb-2">System-Updates & Fehlerbehebung (App reparieren)</h4>
+              <p className="text-sm text-gray-800 mb-2">Da PapaToDo als offline-fähige App (PWA) konzipiert ist, speichert das Gerät Daten lokal zwischen, um Ladezeiten zu minimieren. Bei Darstellungsproblemen oder nach systemseitigen Updates kann dieser Zwischenspeicher veralten.</p>
+              <p className="text-sm text-gray-800">Nutzer finden in ihrem <strong>Profil</strong> ganz unten die Funktion <strong>"App reparieren (Cache leeren)"</strong>. Diese erzwingt eine sofortige Bereinigung des Speichers und lädt alle Daten frisch vom Server. Hierfür ist eine aktive Internetverbindung zwingend erforderlich.</p>
             </div>
           </HelpSection>
 
@@ -138,8 +145,18 @@ export const HelpView: React.FC = () => {
             <h4 className="font-bold text-gray-900 text-lg mb-3 mt-6">Die Anwender-Perspektive</h4>
             <p className="text-sm mb-4">Nutzer finden im Kalender-Modul alle relevanten Vereinsereignisse. Sie können Team-PINs und Telefonnummern der Mannschaftsführer abrufen, um bei Ausfällen direkt reagieren zu können. Zudem sind alle Schichtdienste (z.B. Hallendienst) transparent einsehbar.</p>
 
+            <div className="bg-blue-50 border border-blue-100 p-5 rounded-lg mb-6">
+              <h4 className="font-bold text-blue-900 mb-2">Personalisierte Ansicht (Persistente Filter)</h4>
+              <p className="text-sm text-blue-800">Der Kalender speichert die individuellen Filter-Einstellungen (welche Abos, Termine, Historie oder leere Tage angezeigt werden) dauerhaft im Browser des jeweiligen Nutzers. Ein Neuladen der App setzt diese Präferenzen nicht zurück.</p>
+            </div>
+
             <h4 className="font-bold text-gray-900 text-lg mb-3 mt-6">Aufgaben der Administratoren</h4>
             <p className="text-sm mb-4">Admins können externe iCal/ics Links abonnieren und Dienste organisieren. Klicken Sie dazu auf ein importiertes Heimspiel und fügen Sie Interne Dienste (Aufbau, Verkauf) an das Event an. Teilen Sie Personen aus der Vereinsliste zu und aktivieren Sie bei Bedarf automatische Erinnerungen.</p>
+
+            <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-lg mb-6">
+              <h4 className="font-bold text-indigo-900 mb-2">Wettkampf-Tresor (Dynamische Team-PINs)</h4>
+              <p className="text-sm text-indigo-800">Der Zugriff auf nuScore-Zugangsdaten wird über den Wettkampf-Tresor gesteuert. Die Zuweisung der Sichtbarkeitsrechte erfolgt nach dem <em>Single Source of Truth (SSOT)</em> Prinzip dynamisch an ganze Teams, nicht an starre Personenlisten. Tritt ein neues Mitglied einem Team bei, erhält es fortan vollautomatisch Zugriff auf die hinterlegten PINs dieser Mannschaft.</p>
+            </div>
 
             <div className="bg-orange-50 border border-orange-100 p-5 rounded-lg mt-6">
               <h4 className="font-bold text-orange-900 mb-2">Best Practice: Der Self-Service für Dienste</h4>
@@ -273,7 +290,13 @@ export const HelpView: React.FC = () => {
 
             <p className="mb-4 text-sm leading-relaxed">PapaToDo steuert Berechtigungen über vordefinierte <strong>Rollen-Profile</strong>, anstatt über individuelle Zuweisungen. Administratoren definieren im Tab "Rollen-Profile" die benötigten Rechte (z.B. "Aufgaben verwalten") und weisen dieses Profil den jeweiligen Nutzergruppen zu.</p>
 
-            <div className="bg-red-50 border border-red-100 p-5 rounded-lg mb-6 mt-6">
+            <div className="bg-green-50 border border-green-100 p-5 rounded-lg mb-6 mt-6">
+              <h4 className="font-bold text-green-900 mb-2">DSGVO Self-Service & Stammdaten-Updates</h4>
+              <p className="text-sm text-green-800 mb-2">Jedes Mitglied ist angehalten, seine Kontaktdaten und die DSGVO-Zustimmung zur Adressbuch-Sichtbarkeit selbstständig im eigenen <strong>Profil</strong> zu verwalten.</p>
+              <p className="text-sm text-green-800">Sobald ein Nutzer seine Daten ändert, generiert das System automatisch eine formelle Info-Aufgabe für die Administratorensebene. Dies stellt sicher, dass geänderte Telefonnummern oder E-Mail-Adressen zeitnah in die externen Hauptsysteme (Kasse, Verband) übertragen werden.</p>
+            </div>
+
+            <div className="bg-red-50 border border-red-100 p-5 rounded-lg mb-6">
               <h4 className="font-bold text-red-900 mb-2">Super-Admin Rechte verwalten</h4>
               <p className="text-sm text-red-800">Die Berechtigung <strong>manageUsers</strong> ist die höchste administrative Stufe im System. Sie autorisiert das Anlegen neuer Mitglieder, das Zurücksetzen von Passwörtern und die Zuweisung von Admin-Rechten. Diese Berechtigung sollte strikt auf maximal zwei Personen im Verein limitiert werden.</p>
             </div>
