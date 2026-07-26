@@ -1,4 +1,6 @@
- // [2026-07-24] - UX-FEATURE: Persistente Speicherung der Kalender-Filter (Abos, leere Tage, Historie) im localStorage eingebaut.
+// [2026-07-26] - BUGFIX: Dienstübernahme (Takeover) macht nun einen harten Schnitt und leert alle Platzhalter-Arrays (Admin), um Geister-Teilnehmer zu entfernen.
+// [2026-07-26] - BUGFIX: Domain-Language Fallback ('Gast' -> 'Mitglied') korrigiert, um Profil-Berechtigungen im Kalender wiederherzustellen.
+// [2026-07-24] - UX-FEATURE: Persistente Speicherung der Kalender-Filter (Abos, leere Tage, Historie) im localStorage eingebaut.
 // [2026-05-30] - UX-FEATURE: Bestätigungsdialog (confirm) vor Dienst-Übernahme eingebaut. Liest den aktuellen Dienstleistenden aus dem Titel aus, um die Abfrage zu personalisieren.
 // [2026-05-30] - BUGFIX: Visuelles Feedback bei "Dienst übernehmen" hinzugefügt. Der Titel des Termins wird nun automatisch mit dem Alias des neuen Helfers aktualisiert.
 // [2026-05-30] - UX-OPTIMIERUNG: Einheitlicher Workflow für alle Nutzer. Jeder Klick auf einen Termin öffnet nun zuerst das detailreiche CalendarIcsDetailModal.
@@ -65,7 +67,7 @@ export const CalendarView: React.FC = () => {
 
   const currentProfile = useMemo(() => {
     return roleProfiles.find(p => p.id === user?.roleProfileId) || 
-           roleProfiles.find(p => p.name === 'Gast') || 
+           roleProfiles.find(p => p.name === 'Mitglied') || 
            { permissions: {} as any };
   }, [user, roleProfiles]);
   const canManageSetup = !!currentProfile.permissions.manageCalendarSetup;
@@ -80,7 +82,6 @@ export const CalendarView: React.FC = () => {
 
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   
-  // UX-FEATURE: Persistente Speicherung der Anzeige-Optionen
   const [showEmptyDays, setShowEmptyDays] = useState(() => localStorage.getItem('papatodo_show_empty_days') === 'true');
   const [showPastEvents, setShowPastEvents] = useState(() => localStorage.getItem('papatodo_show_past_events') === 'true');
 
@@ -107,7 +108,6 @@ export const CalendarView: React.FC = () => {
     fetchEvents(); 
   }, [fetchCalendarData, fetchEvents]);
 
-  // UX-FEATURE: Initiales Laden der versteckten Abos aus dem localStorage
   useEffect(() => {
     const allIds = ['manual', 'dienste', ...calendarSubscriptions.map(s => s.id)];
     try {
@@ -137,7 +137,6 @@ export const CalendarView: React.FC = () => {
     setIsEditingTitle(false);
   };
 
-  // UX-FEATURE: Speichern der ausgeblendeten Filter im localStorage
   const toggleFilter = (id: string) => {
     setActiveFilters(prev => {
       const next = prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id];
@@ -742,11 +741,6 @@ export const CalendarView: React.FC = () => {
             }
 
             try {
-              const updatedHelperIds = [...((ev as any).participantHelperIds || [])];
-              if (!updatedHelperIds.includes(myHelper.id)) {
-                updatedHelperIds.push(myHelper.id);
-              }
-              
               // Sichtbaren Titel sofort anpassen!
               let newTitle = ev.title;
               const displayName = myHelper.alias || myHelper.name;
@@ -756,10 +750,18 @@ export const CalendarView: React.FC = () => {
                 newTitle = newTitle.trim() + ': ' + displayName;
               }
 
+              // CHIRURGISCHER EINGRIFF: Harter Schnitt! (Alle anderen Empfänger leeren)
               await updateCalendarEvent({ 
                 ...ev, 
                 title: newTitle,
-                participantHelperIds: updatedHelperIds 
+                participantHelperIds: [myHelper.id],
+                participantUserIds: [],
+                participantGroupIds: [],
+                participantTeamIds: [],
+                reminderRecipientHelperIds: [myHelper.id],
+                reminderRecipientUserIds: [],
+                reminderRecipientGroupIds: [],
+                reminderRecipientTeamIds: []
               } as any);
               
               setIsIcsDetailModalOpen(false);

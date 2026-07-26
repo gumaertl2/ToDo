@@ -1,3 +1,4 @@
+// [2026-07-26] - BUGFIX: Domain-Language Fallback ('Gast' -> 'Mitglied') korrigiert, um Menü-Sichtbarkeit wiederherzustellen.
 // [2026-07-22] - FEATURE: 'Mein Profil' Button in Desktop-Sidebar und Mobile-Menu integriert (Self-Service).
 // [2026-07-22] - FEATURE: DSGVO Clickwrap in AppLayout integriert als unumgängliche UI-Schranke.
 // [2026-06-11] - UX-FEATURE: ToDo-Badge von "/todos" auf "/" (Start) verschoben. Da das WelcomeDashboard nun die Kommandozentrale ist, leuchtet das "[Fällig im Zeitraum] / [Gesamt]" Badge jetzt direkt am Home-Icon auf.
@@ -36,12 +37,12 @@ export const AppLayout: React.FC = () => {
   const [sidebarTouchStart, setSidebarTouchStart] = useState<number | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  // CHIRURGISCHER EINGRIFF: State für das Profil-Modal
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   const currentProfile = useMemo(() => {
     return roleProfiles.find(p => p.id === user?.roleProfileId) || 
-           roleProfiles.find(p => p.name === 'Gast') || 
+           // CHIRURGISCHER EINGRIFF: Fallback von 'Gast' auf 'Mitglied' geändert
+           roleProfiles.find(p => p.name === 'Mitglied') || 
            { permissions: {} as any };
   }, [user, roleProfiles]);
 
@@ -346,7 +347,6 @@ export const AppLayout: React.FC = () => {
       
       <DsgvoClickwrap />
       
-      {/* CHIRURGISCHER EINGRIFF: Self-Service Profil Modal rendern */}
       {isProfileModalOpen && <MyProfileModal onClose={() => setIsProfileModalOpen(false)} />}
 
       <aside 
@@ -364,7 +364,7 @@ export const AppLayout: React.FC = () => {
               <Home className="w-5 h-5 text-blue-600 mr-2 group-hover:text-blue-700 transition-colors" strokeWidth={2.5} />
               <h1 className="text-xl font-bold text-blue-600 group-hover:text-blue-700 transition-colors">PapaToDo</h1>
             </NavLink>
-            <div className="text-sm text-gray-500 mt-0.5 truncate">Hallo {user?.name || 'Gast'}</div>
+            <div className="text-sm text-gray-500 mt-0.5 truncate">Hallo {user?.name || 'Mitglied'}</div>
           </div>
           <button
             onClick={() => setIsPinned(!isPinned)}
@@ -393,7 +393,6 @@ export const AppLayout: React.FC = () => {
         </nav>
         
         <div className="p-3 border-t border-gray-200 overflow-hidden shrink-0 space-y-1">
-          {/* CHIRURGISCHER EINGRIFF: Profil Button im Desktop Sidebar */}
           <button
             onClick={() => setIsProfileModalOpen(true)}
             title={!isExpanded ? "Mein Profil" : undefined}
@@ -500,7 +499,6 @@ export const AppLayout: React.FC = () => {
               ))}
             </div>
             
-            {/* CHIRURGISCHER EINGRIFF: Profil Button im Mobile Menu */}
             <div className="shrink-0 space-y-2 pt-2 border-t border-gray-100">
               <button
                 onClick={() => { setIsMobileMenuOpen(false); setIsProfileModalOpen(true); }}

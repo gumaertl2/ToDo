@@ -1,3 +1,4 @@
+// [2026-07-26] - BUGFIX: Der Generator erkennt nun beim Bearbeiten bestehender Serien automatisch den korrekten Rhythmus (Wochen, Tage, Monate) und liest die zugehörigen Wochentage aus.
 // [2026-06-09] - BUGFIX: Der Dienstplan-Generator speichert nun zwingend die ausgewählte Helfer-ID im Feld 'reminderRecipientHelperIds', unabhängig davon, ob ein WhatsApp-Sender konfiguriert ist. Dadurch kann das Dashboard Dienste fehlerfrei dem persönlichen Profil des Nutzers zuordnen.
 // [2026-05-30] - UX-FIX: Abgeschnittene Suchergebnis-Liste in der letzten Zeile behoben. Dem Zuweisungs-Container wurde unten Platz (pb-48) eingeräumt, damit das Dropdown immer aufklappen kann.
 // 2026-04-13 22:20 - FIX: Vercel Build Errors (Unused Imports)
@@ -112,11 +113,35 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose, existingSerie
         setReminderCustomText(first.reminderCustomText || '');
         setBaseTitle(first.title.includes(': ') ? first.title.split(': ')[0] : first.title);
 
+        // CHIRURGISCHER EINGRIFF: Intelligente Rhythmus-Erkennung (Tage vs. Wochen vs. Monate)
+        const diffMs = (first.endTime || first.startTime) - first.startTime;
+        let detectedRhythm: 'Wochen' | 'Tage' | 'Monate' = 'Wochen';
+        
+        if (diffMs === 0) {
+          detectedRhythm = 'Tage';
+          setRhythm('Tage');
+          // Wochentage aus den ersten 7 Tagen der Serie auslesen
+          setSelectedWeekDays(Array.from(new Set(seriesEvents.map(e => new Date(e.startTime).getDay()))));
+        } else if (diffMs > 20 * 24 * 60 * 60 * 1000) {
+          detectedRhythm = 'Monate';
+          setRhythm('Monate');
+        } else {
+          detectedRhythm = 'Wochen';
+          setRhythm('Wochen');
+        }
+
         const loaded: Record<string, string> = {};
         seriesEvents.forEach(ev => {
-          const key = startOfWeek(new Date(ev.startTime), { weekStartsOn: 1 }).toISOString();
+          let key = '';
+          // Der Key für das Zuweisungs-Grid muss mit dem Rhythmus übereinstimmen!
+          if (detectedRhythm === 'Wochen') {
+            key = startOfWeek(new Date(ev.startTime), { weekStartsOn: 1 }).toISOString();
+          } else if (detectedRhythm === 'Tage') {
+            key = new Date(ev.startTime).toISOString();
+          } else {
+            key = startOfMonth(new Date(ev.startTime)).toISOString();
+          }
           
-          // CHIRURGISCHER EINGRIFF: Wir lesen die echte Helper-ID aus. Falls es alte Daten sind, nutzen wir einen Fallback über den Text-Titel.
           if (ev.reminderRecipientHelperIds && ev.reminderRecipientHelperIds.length > 0) {
              loaded[key] = ev.reminderRecipientHelperIds[0];
           } else if (ev.title.includes(': ')) {
@@ -173,7 +198,7 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose, existingSerie
 
     items.forEach((item, index) => {
       const helperId = assignments[item.id];
-      if (!helperId) return; // Überspringen, wenn in dieser Zeile niemand ausgewählt wurde
+      if (!helperId) return; 
 
       const helper = helpers.find(h => h.id === helperId);
       const assigneeAlias = helper ? (helper.alias || helper.name) : 'Unbekannt';
@@ -188,7 +213,6 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose, existingSerie
         reminderSenderUserId: reminderSenderUserId || undefined,
         reminderLeadDays: reminderSenderUserId ? parseInt(reminderLeadDays, 10) : undefined,
         reminderCustomText: reminderSenderUserId ? reminderCustomText.trim() : undefined,
-        // HIER IST DER FIX: Die ID wird jetzt als Empfänger mitgespeichert, damit das Dashboard den Dienst erkennt!
         reminderRecipientHelperIds: [helperId]
       };
 

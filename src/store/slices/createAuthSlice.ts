@@ -1,3 +1,4 @@
+// [2026-07-26] - BUGFIX: 'Gast' Hardcoding beim resolveUserProfile Fallback auf 'Mitglied' korrigiert.
 // [2026-06-11] - TYP-SICHERHEIT: Globalen StoreState importiert und (set as any) im Logout entfernt. Der Store-Reset ist jetzt 100% typensicher.
 // [2026-06-11] - ARCHITEKTUR-FIX: Massives Code-Duplikat für Profil-Ermittlung in zentrale 'resolveUserProfile'-Funktion ausgelagert. Logout-Funktion auf dynamisches 'unsubscribeAll'-Muster umgestellt.
 // [2026-05-14 14:15] - FEATURE: Gastzugänge loggen nun hasAppAccess und lastAppLoginAt ins Helfer-Profil
@@ -13,7 +14,6 @@ import { onAuthStateChanged, signOut, signInWithEmailAndPassword, sendPasswordRe
 import { collection, query, where, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
 import type { Result } from '../../core/types/shared';
 
-// CHIRURGISCHER EINGRIFF: Import des globalen States, damit TypeScript das volle Bild hat
 import type { StoreState } from '../useClubStore';
 
 export interface AuthSlice {
@@ -62,7 +62,8 @@ async function resolveUserProfile(firebaseUser: { uid: string, email: string | n
           schemaVersion: '1.0',
           name: helperData.name || 'Helfer',
           amt: 'Externer Helfer',
-          rolle: 'Gast',
+          // CHIRURGISCHER EINGRIFF: Die Rolle heißt nun Mitglied, nicht mehr Gast
+          rolle: 'Mitglied',
           email: normalizedEmail,
           telefon: helperData.telefon || '',
           groupIds: [],
@@ -88,7 +89,6 @@ async function resolveUserProfile(firebaseUser: { uid: string, email: string | n
   return userData;
 }
 
-// CHIRURGISCHER EINGRIFF: Die Definition ist nun mit StoreState gekoppelt, nicht mehr nur isoliert mit AuthSlice
 export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set, get) => ({
   user: null,
   isAuthenticated: false,
@@ -134,7 +134,6 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
         try {
           await sendEmailVerification(userCredential.user);
         } catch (e) {
-          // Firebase Rate-Limit ignorieren
         }
         await signOut(auth);
         throw new Error("Dein Account ist noch nicht aktiviert. Wir haben dir gerade einen NEUEN Bestätigungslink gesendet! (Bitte prüfe auch deinen Spam-Ordner).");
@@ -181,7 +180,6 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
 
     await signOut(auth);
     
-    // CHIRURGISCHER EINGRIFF: 'as any' entfernt. TypeScript bewacht diesen Block ab sofort.
     set({ 
       user: null, 
       isAuthenticated: false,

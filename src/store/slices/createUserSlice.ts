@@ -1,3 +1,6 @@
+// [2026-07-26] - SEC-FIX: Rechte-Prüfung in updateFilteredHelpers repariert. (Fehlerhaftes Überschreiben von Rollen-Profilen durch leere User-Rechte behoben, was Admins blockiert hat).
+// [2026-07-26] - BUGFIX: Initiales Systemprofil 'pro-gast' von 'Gast' auf 'Mitglied' umbenannt.
+// [2026-07-26] - SEC-FIX: Harter DSGVO-Filter eingebaut: Passive Mitglieder werden für normale App-Nutzer (ohne 'manageMitglieder' oder 'viewEhrungen') nun komplett aus dem lokalen Store gefiltert.
 // [2026-07-22] - CHIRURGISCHER EINGRIFF: DSGVO Passiv-Mitglieder-Firewall (Schwärzungs-Logik) an Clickwrap-Zustimmungen gekoppelt.
 // src/store/slices/createUserSlice.ts
 import type { StateCreator } from 'zustand';
@@ -50,32 +53,43 @@ export const createUserSlice: StateCreator<StoreState, [], [], UserSlice> = (set
     const globalState = get();
     const currentUser = globalState.user;
     
-    let hasViewEhrungen = false;
+    // 1. Berechtigungen des aktuellen Nutzers ermitteln
+    let canSeeAllMembers = false;
+    
     if (currentUser) {
-      if (currentUser.permissions && currentUser.permissions.viewEhrungen !== undefined) {
-        hasViewEhrungen = !!currentUser.permissions.viewEhrungen;
-      } else if (currentUser.roleProfileId) {
-        const profile = globalState.roleProfiles?.find(p => p.id === currentUser.roleProfileId);
-        if (profile) {
-          hasViewEhrungen = !!profile.permissions.viewEhrungen;
-        }
-      }
+      const profile = globalState.roleProfiles?.find(p => p.id === currentUser.roleProfileId);
+      const rolePerms = profile?.permissions || {} as any;
+      const userPerms = currentUser.permissions || {} as any;
+      
+      // CHIRURGISCHER EINGRIFF: Saubere Fallback-Logik (User-Rechte stechen Rollen-Rechte, aber nur wenn sie explizit definiert sind)
+      const hasManage = userPerms.manageMitglieder !== undefined ? !!userPerms.manageMitglieder : !!rolePerms.manageMitglieder;
+      const hasEhrungen = userPerms.viewEhrungen !== undefined ? !!userPerms.viewEhrungen : !!rolePerms.viewEhrungen;
+      
+      canSeeAllMembers = hasManage || hasEhrungen;
     }
 
-    // CHIRURGISCHER EINGRIFF: Die DSGVO Clickwrap Firewall (Schwärzungs-Logik)
     let filtered = allHelpers;
+    const myHelper = currentUser ? allHelpers.find(h => h.email?.toLowerCase() === currentUser.email?.toLowerCase()) : null;
 
-    if (!hasViewEhrungen) {
-      const myHelper = currentUser ? allHelpers.find(h => h.email?.toLowerCase() === currentUser.email?.toLowerCase()) : null;
+    // 2. STUFE 1: Harte Filterung der passiven Mitglieder für unberechtigte Nutzer
+    if (!canSeeAllMembers) {
+      filtered = filtered.filter(h => {
+        // Ausnahme: Den eigenen Datensatz darf man immer sehen, auch wenn man passiv ist
+        if (myHelper && h.id === myHelper.id) return true;
+        // Für alle anderen: Nur Nicht-Passive durchlassen
+        return h.memberStatus !== 'PASSIV';
+      });
+    }
+
+    // 3. STUFE 2: DSGVO Clickwrap-Schwärzung (für die aktiven Mitglieder, die durch den Filter kamen)
+    if (!canSeeAllMembers) {
       const myConsent = myHelper?.consentConfirmed === true;
       
-      filtered = allHelpers.map(h => {
-        // Ausnahmen: Den eigenen Datensatz darf man immer vollständig sehen
-        if (h.id === myHelper?.id) return h;
+      filtered = filtered.map(h => {
+        // Ausnahme: Den eigenen Datensatz darf man immer vollständig sehen
+        if (myHelper && h.id === myHelper.id) return h;
 
-        // Gegenseitigkeits-Prinzip:
-        // 1. Wenn ich selbst nicht zugestimmt habe, sehe ich bei NIEMANDEM die Daten.
-        // 2. Wenn der andere nicht zugestimmt hat, sehe ich SEINE Daten nicht (auch wenn ich zugestimmt habe).
+        // Gegenseitigkeits-Prinzip
         const canSeeDetails = myConsent && h.consentConfirmed === true;
 
         if (!canSeeDetails) {
@@ -132,7 +146,7 @@ export const createUserSlice: StateCreator<StoreState, [], [], UserSlice> = (set
               permissions: { viewDashboard: true, viewEvents: false, viewTasks: true, viewCalendar: true, viewUsers: true, viewReports: false, viewReminders: true, viewTemplates: false, viewAppUsers: false, viewRoles: false, viewEhrungen: false, viewAllReminders: false, viewTeamPins: true, manageTeamPins: false, manageMitglieder: false, manageCalendarSetup: false, manageEvents: false, deleteAnyItem: false } 
             },
             { 
-              id: 'pro-gast', schemaVersion: '1.0', name: 'Gast', 
+              id: 'pro-gast', schemaVersion: '1.0', name: 'Mitglied', 
               permissions: { viewDashboard: true, viewEvents: false, viewTasks: false, viewCalendar: true, viewUsers: false, viewReports: false, viewReminders: false, viewTemplates: false, viewAppUsers: false, viewRoles: false, viewEhrungen: false, viewAllReminders: false, viewTeamPins: false, manageTeamPins: false, manageMitglieder: false, manageCalendarSetup: false, manageEvents: false, deleteAnyItem: false } 
             }
           ];
