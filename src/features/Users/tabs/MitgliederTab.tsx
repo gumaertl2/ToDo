@@ -1,3 +1,6 @@
+// [2026-07-27] - UX-FEATURE: Persistente Filter-Speicherung (localStorage) für die Mitgliederansicht integriert (Status, Teams, Eltern-Info).
+// [2026-07-27] - SEC-FEATURE: Frontend-Türsteher für das neue Recht 'viewJugend' implementiert.
+// [2026-07-26] - SEC-FIX: Harte RBAC-Filterung für passive Mitglieder im Frontend eingebaut. Normale Mitglieder ohne 'manageMitglieder' oder 'viewEhrungen' können passive Mitglieder nicht mehr sehen, selbst wenn der UI-Filter aktiv ist.
 // [2026-05-15] - FEATURE: Deep-Link Auto-Scroll (Springt zu fokussiertem Mitglied & Highlight)
 // [2026-05-15] - FEATURE: Option B - Bulk-Editor für Team-Zuweisung (Checkboxen ganz links neben dem Namen) integriert
 // 2026-04-19 14:50 - FIX: ReferenceError (X-Icon) & RBAC-Sichtbarkeit für Geburt/Eintritt
@@ -28,37 +31,47 @@ interface MitgliederTabProps {
 }
 
 export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, canManageMitglieder }) => {
-  // CHIRURGISCHER EINGRIFF: focusedHelperId aus dem Store importieren
-  const { helpers, updateHelper, deleteHelper, addHelper, user, teams, focusedHelperId, setFocusedHelperId } = useClubStore();
+  const { helpers, updateHelper, deleteHelper, addHelper, user, teams, focusedHelperId, setFocusedHelperId, roleProfiles } = useClubStore();
+  
   const [sortConfig, setSortConfig] = useState<{ key: keyof Helper; direction: SortDirection }>({ key: 'name', direction: 'asc' });
-  const [statusFilter, setStatusFilter] = useState<Set<'AKTIV' | 'PASSIV' | 'JUGEND'>>(new Set(['AKTIV', 'PASSIV', 'JUGEND']));
   const [searchTerm, setSearchTerm] = useState('');
   
-  // State für den Bulk-Editor
-  const [selectedTeamFilter, setSelectedTeamFilter] = useState('');
+  // CHIRURGISCHER EINGRIFF: Persistenz via localStorage
+  const [statusFilter, setStatusFilter] = useState<Set<'AKTIV' | 'PASSIV' | 'JUGEND'>>(() => {
+    const saved = localStorage.getItem('papatodo_mitglieder_statusFilter');
+    if (saved) return new Set(JSON.parse(saved));
+    return new Set(['AKTIV', 'PASSIV', 'JUGEND']);
+  });
   
-  const [showParentInfo, setShowParentInfo] = useState(false);
+  const [selectedTeamFilter, setSelectedTeamFilter] = useState(() => localStorage.getItem('papatodo_mitglieder_selectedTeamFilter') || '');
+  const [showParentInfo, setShowParentInfo] = useState(() => localStorage.getItem('papatodo_mitglieder_showParentInfo') === 'true');
+
+  useEffect(() => { localStorage.setItem('papatodo_mitglieder_statusFilter', JSON.stringify(Array.from(statusFilter))); }, [statusFilter]);
+  useEffect(() => { localStorage.setItem('papatodo_mitglieder_selectedTeamFilter', selectedTeamFilter); }, [selectedTeamFilter]);
+  useEffect(() => { localStorage.setItem('papatodo_mitglieder_showParentInfo', String(showParentInfo)); }, [showParentInfo]);
 
   const currentMonth = new Date().getMonth() + 1;
   
   const hasSensitiveAccess = canManageMitglieder || !!user?.permissions?.viewEhrungen;
 
-  // CHIRURGISCHER EINGRIFF: useEffect für Deep-Link Auto-Scroll
+  const currentProfile = useMemo(() => {
+    return roleProfiles.find(p => p.id === user?.roleProfileId) || 
+           roleProfiles.find(p => p.name === 'Mitglied') || 
+           { permissions: {} as any };
+  }, [user, roleProfiles]);
+
+  const hasJugendAccess = canManageMitglieder || !!user?.permissions?.viewJugend || !!currentProfile.permissions.viewJugend;
+
   useEffect(() => {
     if (focusedHelperId) {
-      // Kleines Delay, damit der DOM Zeit hat, die Liste aufzubauen
       setTimeout(() => {
         const rowElement = document.getElementById(`helper-row-${focusedHelperId}`);
         if (rowElement) {
           rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          
-          // Füge eine Highlight-Klasse hinzu
           rowElement.classList.add('bg-yellow-100', 'transition-all', 'duration-500');
-          
-          // Entferne sie nach 2 Sekunden wieder sanft
           setTimeout(() => {
             rowElement.classList.remove('bg-yellow-100');
-            setFocusedHelperId(null); // Signal zurücksetzen
+            setFocusedHelperId(null); 
           }, 2000);
         }
       }, 100);
@@ -110,9 +123,17 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
   };
 
   const filteredAndSortedHelpers = useMemo(() => {
+    const myEmail = user?.email?.toLowerCase() || '';
+    const myHelperId = helpers.find(h => h.email?.toLowerCase() === myEmail)?.id;
+
     const filtered = helpers.filter(h => {
+      const isMyOwnRecord = myHelperId && h.id === myHelperId;
+
+      if (!hasSensitiveAccess && h.memberStatus === 'PASSIV' && !isMyOwnRecord) return false;
+      if (!hasJugendAccess && h.memberStatus === 'JUGEND' && !isMyOwnRecord) return false;
+
       const matchStatus = statusFilter.has(h.memberStatus || 'AKTIV');
-      if (!matchStatus) return false;
+      if (!matchStatus && !isMyOwnRecord) return false;
       
       if (!searchTerm.trim()) return true;
       const lowerSearch = searchTerm.toLowerCase();
@@ -128,7 +149,6 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
 
     const sortable = [...filtered];
     sortable.sort((a, b) => {
-      // Wenn ein Team ausgewählt ist, schwimmen die Team-Mitglieder nach ganz oben
       if (selectedTeamFilter) {
         const aInTeam = a.teamIds?.includes(selectedTeamFilter) ? 1 : 0;
         const bInTeam = b.teamIds?.includes(selectedTeamFilter) ? 1 : 0;
@@ -185,7 +205,7 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
       return 0;
     });
     return sortable;
-  }, [helpers, sortConfig, statusFilter, searchTerm, selectedTeamFilter]);
+  }, [helpers, sortConfig, statusFilter, searchTerm, selectedTeamFilter, hasSensitiveAccess, hasJugendAccess, user]);
 
   const handleInlineUpdateHelper = async (h: Helper, field: keyof Helper, newValue: string) => {
     let safeVal = newValue.trim();
@@ -322,6 +342,9 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
         <div className="flex flex-wrap items-center gap-2 flex-1">
           <Filter className="w-4 h-4 text-gray-400 ml-1" />
           {(['AKTIV', 'PASSIV', 'JUGEND'] as const).map(status => {
+            if (status === 'PASSIV' && !hasSensitiveAccess) return null;
+            if (status === 'JUGEND' && !hasJugendAccess) return null;
+
             const isActive = statusFilter.has(status);
             let activeClass = isActive ? (status === 'PASSIV' ? 'bg-gray-200 text-gray-700 border-gray-300 shadow-sm' : status === 'JUGEND' ? 'bg-purple-100 text-purple-700 border-purple-200 shadow-sm' : 'bg-green-100 text-green-700 border-green-200 shadow-sm') : 'bg-white border-gray-200 text-gray-400 hover:bg-gray-50';
             return (
@@ -473,7 +496,7 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
               return (
                 <tr 
                   key={h.id} 
-                  id={`helper-row-${h.id}`} // CHIRURGISCHER EINGRIFF: ID für das Auto-Scroll
+                  id={`helper-row-${h.id}`}
                   className={`transition-colors ${isSelectedTeamMember ? 'bg-blue-50/40 hover:bg-blue-50' : 'hover:bg-gray-50'}`}
                 >
                   <td className="px-2 sm:px-3 py-1.5 whitespace-nowrap w-px">

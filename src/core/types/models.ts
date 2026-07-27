@@ -1,3 +1,4 @@
+// [2026-07-27] - SEC-FEATURE: Neues dediziertes Recht 'viewJugend' für den DSGVO-konformen Schutz von Minderjährigen-Daten hinzugefügt.
 // [2026-07-22] - SCHEMA: Audit-Trail Felder (consentConfirmedAt & consentConfirmedBy) für DSGVO-Clickwrap hinzugefügt.
 // [2026-06-11] - ARCHITEKTUR-FIX: Feld 'isHistorical' zu AgendaItem hinzugefügt (Fate-Binding). Löst das Container-Kosmetik-Problem und verhindert Waisenkinder.
 // [2026-05-31] - FEATURE: 'completedAt' zu AgendaItem hinzugefügt, um das tatsächliche Erledigungsdatum von der Frist (dueDate) zu trennen.
@@ -45,9 +46,9 @@ export interface RolePermissions {
   viewRoles: boolean;    
   
   viewEhrungen: boolean;
+  viewJugend: boolean; // CHIRURGISCHER EINGRIFF: DSGVO Schutz Minderjährige
   viewAllReminders: boolean;
   
-  // CHIRURGISCHER EINGRIFF: Rechte für den Wettkampf-Tresor
   viewTeamPins: boolean;
   manageTeamPins: boolean;
   
@@ -55,7 +56,6 @@ export interface RolePermissions {
   manageCalendarSetup: boolean;
   manageEvents: boolean;
   
-  // CHIRURGISCHER EINGRIFF: Ungenutzte Rechte entfernt. 'deleteAnyItem' bleibt für endgültiges Löschen aus dem Papierkorb.
   deleteAnyItem: boolean;
 }
 
@@ -76,9 +76,9 @@ export interface UserPermissions {
   canManageRoles: boolean;
   
   viewEhrungen?: boolean;
+  viewJugend?: boolean; // CHIRURGISCHER EINGRIFF: DSGVO Schutz Minderjährige
   viewAllReminders?: boolean;
   
-  // CHIRURGISCHER EINGRIFF: Auch hier als optionale Map-Eigenschaften ergänzt
   viewTeamPins?: boolean;
   manageTeamPins?: boolean;
   
@@ -108,20 +108,19 @@ export interface Group extends BaseDocument {
 }
 
 export interface Helper extends BaseDocument {
-  teamIds?: string[]; // Neu: Verknüpfung zu organisatorischen Teams (Option B)
+  teamIds?: string[];
   name: string;
   alias: string;
   bezug: string;
   email: string;
   telefon: string;
   telefonEltern?: string; 
-  emailEltern?: string; // CHIRURGISCHER EINGRIFF: Neues Feld für die Eltern-Email
+  emailEltern?: string;
   geburtsdatum?: string; 
   eintrittsdatum?: string;
   memberStatus?: 'AKTIV' | 'PASSIV' | 'JUGEND';
   
   consentConfirmed: boolean;
-  // CHIRURGISCHER EINGRIFF: DSGVO Clickwrap Versionierung & Audit Trail
   dsgvoConsentVersion?: number;
   consentConfirmedAt?: number;
   consentConfirmedBy?: 'USER' | 'ADMIN';
@@ -129,7 +128,6 @@ export interface Helper extends BaseDocument {
   lastActivityAt: number;
   retentionExpiresAt: number;
 
-  // CHIRURGISCHER EINGRIFF: App-Zugangs Tracking
   hasAppAccess?: boolean;
   lastAppLoginAt?: number;
 }
@@ -145,7 +143,7 @@ export interface ClubEvent extends BaseDocument {
   reminderSentAt?: number;         
   reminderCustomText?: string;     
   isPublished: boolean; 
-  isPublic?: boolean; // CHIRURGISCHER EINGRIFF: Neues Feld für Homepage-Sichtbarkeit
+  isPublic?: boolean; 
   seriesId?: string;    
   isArchived?: boolean; 
   participantUserIds: string[];
@@ -162,7 +160,6 @@ export interface ClubEvent extends BaseDocument {
   plannedEndTime?: number;
   actualEndTime?: number;
   isRecurring?: boolean;
-  // CHIRURGISCHER EINGRIFF: half_yearly hinzugefügt
   recurrencePattern?: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
   startDate?: number;
   endDate?: number;
@@ -173,7 +170,6 @@ export interface ClubEvent extends BaseDocument {
 export type Event = ClubEvent;
 
 export type ItemType = 'AGENDA' | 'INFO' | 'BESCHLUSS' | 'AUFGABE' | 'VORLAGE';
-// CHIRURGISCHER EINGRIFF: Status 'TRASH' hinzugefügt
 export type ItemStatus = 'OFFEN' | 'IN_ARBEIT' | 'ERLEDIGT' | 'TRASH';
 export type TaskStatus = ItemStatus;
 
@@ -196,7 +192,7 @@ export interface AgendaItem extends BaseDocument {
   status: ItemStatus;
   progress: number; 
   dueDate?: number; 
-  completedAt?: number; // CHIRURGISCHER EINGRIFF: Neues Feld für echtes Erledigungsdatum
+  completedAt?: number;
   assigneeUserIds: string[];  
   assigneeGroupIds: string[]; 
   assigneeHelperIds?: string[];
@@ -207,14 +203,12 @@ export interface AgendaItem extends BaseDocument {
   comments: ItemComment[];
   checkliste: { id: string; text: string; isDone: boolean }[];
   
-  // CHIRURGISCHER EINGRIFF: Veraltete Vorlauf-Logik auf "Relativ-Planung" umgebaut
-  mustBeDoneBeforeEvent?: boolean; // Lassen wir aus Kompatibilitätsgründen zur alten Datenbank drin, nutzen es aber nicht mehr
+  mustBeDoneBeforeEvent?: boolean; 
   leadTimeValue?: number;
   leadTimeUnit?: 'days_before' | 'days_after' | 'same_day';
   
   isDueNextMeeting?: boolean;
   isRoutine?: boolean;
-  // CHIRURGISCHER EINGRIFF: half_yearly hinzugefügt
   routinePattern?: 'every_meeting' | 'weekly' | 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
   routineEndDate?: number;
   postponedToDate?: number;
@@ -227,10 +221,8 @@ export interface AgendaItem extends BaseDocument {
   parentItemId?: string;
   isTemplate?: boolean;
   
-  // ---> CHIRURGISCHER EINGRIFF: FATE-BINDING <---
-  isHistorical?: boolean; // Markiert Unterpunkte und Oberpunkte, deren Zyklus versiegelt ist
+  isHistorical?: boolean; 
   
-  // CHIRURGISCHER EINGRIFF: Soft-Delete Tracking
   deletedAt?: number;
   deletedBy?: string;
 }
@@ -261,7 +253,6 @@ export interface CalendarSubscription extends BaseDocument {
   reminderLeadDays?: number;       
   reminderCustomText?: string;
   
-  // CHIRURGISCHER EINGRIFF: Empfänger-Arrays für In-App Erinnerungen bei Abos
   reminderRecipientUserIds?: string[];
   reminderRecipientGroupIds?: string[];
   reminderRecipientTeamIds?: string[];
@@ -285,7 +276,6 @@ export interface CalendarEvent extends BaseDocument {
   reminderSentAt?: number;         
   reminderCustomText?: string;     
 
-  // CHIRURGISCHER EINGRIFF: Empfänger-Arrays für In-App Erinnerungen bei Terminen
   reminderRecipientUserIds?: string[];
   reminderRecipientGroupIds?: string[];
   reminderRecipientTeamIds?: string[];
@@ -293,14 +283,14 @@ export interface CalendarEvent extends BaseDocument {
 }
 
 export interface TeamPin extends BaseDocument {
-  teamName: string;                 // z.B. "Herren 1"
-  signaturePinsText: string;        // Der Copy-Paste Text für Unterschriften
-  signatureUrl?: string;            // Optionaler Link zum Portal
-  gameEntryPinsText: string;        // Der Copy-Paste Text für Spieleingaben
-  gameEntryUrl?: string;            // Optionaler Link zum Portal
-  assignedUserIds: string[];        // Sichtbarkeit (Mannschaftsführer)
-  assignedGroupIds: string[];       // Sichtbarkeit (Ganze Mannschaft)
+  teamName: string;                 
+  signaturePinsText: string;        
+  signatureUrl?: string;            
+  gameEntryPinsText: string;        
+  gameEntryUrl?: string;            
+  assignedUserIds: string[];        
+  assignedGroupIds: string[];       
   assignedHelperIds?: string[];
-  assignedTeamIds?: string[];     // CHIRURGISCHER EINGRIFF: Sichtbarkeit (Gäste / Offline-Mitglieder)
+  assignedTeamIds?: string[];     
 }
 // --- END OF FILE ---

@@ -1,3 +1,4 @@
+// [2026-07-27] - SEC-FEATURE: Ansichtsschalter 'viewJugend' für den Schutz von Minderjährigen-Daten hinzugefügt.
 // [2026-07-23] - TS-FIX: 'title'-Attribut vom Lucide-Icon auf einen umhüllenden span-Tag verschoben (TS2322).
 // [2026-07-23] - SEC-FIX: Harte Lösch-Sperre für 'pro-gast' (Standard-Profil "Mitglied") und 'pro-admin' in handleDelete eingebaut, um System-Crashs durch verwaiste User zu verhindern.
 // [2026-07-23] - UX-FIX: Lösch-Button für unsterbliche System-Rollen wird in der UI nun komplett ausgeblendet, anstatt nur einen Alert zu werfen.
@@ -20,7 +21,7 @@ const DEFAULT_PERMS: Partial<RolePermissions> = {
   viewDashboard: true, viewEvents: false, viewTasks: false, viewCalendar: true, viewUsers: false, viewReports: false, 
   viewReminders: true, viewTemplates: false, 
   viewAppUsers: false, viewRoles: false, 
-  viewEhrungen: false, viewAllReminders: false, viewTeamPins: false, manageTeamPins: false, manageMitglieder: false, manageCalendarSetup: false, manageEvents: false, deleteAnyItem: false
+  viewEhrungen: false, viewJugend: false, viewAllReminders: false, viewTeamPins: false, manageTeamPins: false, manageMitglieder: false, manageCalendarSetup: false, manageEvents: false, deleteAnyItem: false
 };
 
 const PERMISSION_ROWS = [
@@ -33,6 +34,7 @@ const PERMISSION_ROWS = [
   { key: 'viewTemplates', label: 'Vorlagen & Routinen sehen', group: 'Sichtbarkeit (Menü & Tabs)' },
   { key: 'viewReports', label: 'Reports sehen', group: 'Sichtbarkeit (Menü & Tabs)' },
   { key: 'viewEhrungen', label: 'Ehrungen sehen', group: 'Sichtbarkeit (Menü & Tabs)' },
+  { key: 'viewJugend', label: 'Jugend-Daten sehen', group: 'Sichtbarkeit (Menü & Tabs)' },
   { key: 'viewTeamPins', label: 'Wettkampf-Codes sehen', group: 'Sichtbarkeit (Menü & Tabs)' },
   { key: 'viewRoles', label: 'Rollen & Ämter sehen', group: 'Sichtbarkeit (Menü & Tabs)' },
 

@@ -1,3 +1,4 @@
+// [2026-07-27] - SEC-FEATURE: Neues Recht 'viewJugend' in Standard-Profile und die harte Filter-Pipeline integriert (DSGVO-Schutz Minderjährige).
 // [2026-07-26] - SEC-FIX: Rechte-Prüfung in updateFilteredHelpers repariert. (Fehlerhaftes Überschreiben von Rollen-Profilen durch leere User-Rechte behoben, was Admins blockiert hat).
 // [2026-07-26] - BUGFIX: Initiales Systemprofil 'pro-gast' von 'Gast' auf 'Mitglied' umbenannt.
 // [2026-07-26] - SEC-FIX: Harter DSGVO-Filter eingebaut: Passive Mitglieder werden für normale App-Nutzer (ohne 'manageMitglieder' oder 'viewEhrungen') nun komplett aus dem lokalen Store gefiltert.
@@ -53,43 +54,48 @@ export const createUserSlice: StateCreator<StoreState, [], [], UserSlice> = (set
     const globalState = get();
     const currentUser = globalState.user;
     
-    // 1. Berechtigungen des aktuellen Nutzers ermitteln
     let canSeeAllMembers = false;
+    let canSeePassiv = false;
+    let canSeeJugend = false;
     
     if (currentUser) {
       const profile = globalState.roleProfiles?.find(p => p.id === currentUser.roleProfileId);
       const rolePerms = profile?.permissions || {} as any;
       const userPerms = currentUser.permissions || {} as any;
       
-      // CHIRURGISCHER EINGRIFF: Saubere Fallback-Logik (User-Rechte stechen Rollen-Rechte, aber nur wenn sie explizit definiert sind)
       const hasManage = userPerms.manageMitglieder !== undefined ? !!userPerms.manageMitglieder : !!rolePerms.manageMitglieder;
       const hasEhrungen = userPerms.viewEhrungen !== undefined ? !!userPerms.viewEhrungen : !!rolePerms.viewEhrungen;
+      const hasJugend = userPerms.viewJugend !== undefined ? !!userPerms.viewJugend : !!rolePerms.viewJugend;
       
-      canSeeAllMembers = hasManage || hasEhrungen;
+      canSeePassiv = hasManage || hasEhrungen;
+      canSeeJugend = hasManage || hasJugend;
+      canSeeAllMembers = canSeePassiv && canSeeJugend; // Nur wer beides darf, überspringt die Filter komplett
     }
 
     let filtered = allHelpers;
     const myHelper = currentUser ? allHelpers.find(h => h.email?.toLowerCase() === currentUser.email?.toLowerCase()) : null;
 
-    // 2. STUFE 1: Harte Filterung der passiven Mitglieder für unberechtigte Nutzer
+    // 2. STUFE 1: Harte Filterung der passiven Mitglieder und Jugendlichen
     if (!canSeeAllMembers) {
       filtered = filtered.filter(h => {
-        // Ausnahme: Den eigenen Datensatz darf man immer sehen, auch wenn man passiv ist
+        // Ausnahme: Den eigenen Datensatz darf man immer sehen
         if (myHelper && h.id === myHelper.id) return true;
-        // Für alle anderen: Nur Nicht-Passive durchlassen
-        return h.memberStatus !== 'PASSIV';
+        
+        // Firewall-Regeln
+        if (!canSeePassiv && h.memberStatus === 'PASSIV') return false;
+        if (!canSeeJugend && h.memberStatus === 'JUGEND') return false;
+        
+        return true;
       });
     }
 
     // 3. STUFE 2: DSGVO Clickwrap-Schwärzung (für die aktiven Mitglieder, die durch den Filter kamen)
-    if (!canSeeAllMembers) {
+    if (!canSeePassiv) { // Schwärzung betrifft nur einfache Nutzer
       const myConsent = myHelper?.consentConfirmed === true;
       
       filtered = filtered.map(h => {
-        // Ausnahme: Den eigenen Datensatz darf man immer vollständig sehen
         if (myHelper && h.id === myHelper.id) return h;
 
-        // Gegenseitigkeits-Prinzip
         const canSeeDetails = myConsent && h.consentConfirmed === true;
 
         if (!canSeeDetails) {
@@ -131,23 +137,23 @@ export const createUserSlice: StateCreator<StoreState, [], [], UserSlice> = (set
           const defaults: RoleProfile[] = [
             { 
               id: 'pro-admin', schemaVersion: '1.0', name: 'ADMIN', isSystemRole: true, 
-              permissions: { viewDashboard: true, viewEvents: true, viewTasks: true, viewCalendar: true, viewUsers: true, viewReports: true, viewReminders: true, viewTemplates: true, viewAppUsers: true, viewRoles: true, viewEhrungen: true, viewAllReminders: true, viewTeamPins: true, manageTeamPins: true, manageMitglieder: true, manageCalendarSetup: true, manageEvents: true, deleteAnyItem: true } 
+              permissions: { viewDashboard: true, viewEvents: true, viewTasks: true, viewCalendar: true, viewUsers: true, viewReports: true, viewReminders: true, viewTemplates: true, viewAppUsers: true, viewRoles: true, viewEhrungen: true, viewJugend: true, viewAllReminders: true, viewTeamPins: true, manageTeamPins: true, manageMitglieder: true, manageCalendarSetup: true, manageEvents: true, deleteAnyItem: true } 
             },
             { 
               id: 'pro-vorstand', schemaVersion: '1.0', name: 'Vorstand', 
-              permissions: { viewDashboard: true, viewEvents: true, viewTasks: true, viewCalendar: true, viewUsers: true, viewReports: true, viewReminders: true, viewTemplates: true, viewAppUsers: false, viewRoles: false, viewEhrungen: true, viewAllReminders: true, viewTeamPins: true, manageTeamPins: true, manageMitglieder: true, manageCalendarSetup: true, manageEvents: true, deleteAnyItem: true } 
+              permissions: { viewDashboard: true, viewEvents: true, viewTasks: true, viewCalendar: true, viewUsers: true, viewReports: true, viewReminders: true, viewTemplates: true, viewAppUsers: false, viewRoles: false, viewEhrungen: true, viewJugend: true, viewAllReminders: true, viewTeamPins: true, manageTeamPins: true, manageMitglieder: true, manageCalendarSetup: true, manageEvents: true, deleteAnyItem: true } 
             },
             { 
               id: 'pro-bereichsleiter', schemaVersion: '1.0', name: 'Bereichsleiter', 
-              permissions: { viewDashboard: true, viewEvents: true, viewTasks: true, viewCalendar: true, viewUsers: true, viewReports: true, viewReminders: true, viewTemplates: true, viewAppUsers: false, viewRoles: false, viewEhrungen: true, viewAllReminders: false, viewTeamPins: false, manageTeamPins: false, manageMitglieder: true, manageCalendarSetup: false, manageEvents: false, deleteAnyItem: false } 
+              permissions: { viewDashboard: true, viewEvents: true, viewTasks: true, viewCalendar: true, viewUsers: true, viewReports: true, viewReminders: true, viewTemplates: true, viewAppUsers: false, viewRoles: false, viewEhrungen: true, viewJugend: true, viewAllReminders: false, viewTeamPins: false, manageTeamPins: false, manageMitglieder: true, manageCalendarSetup: false, manageEvents: false, deleteAnyItem: false } 
             },
             { 
               id: 'pro-teamleiter', schemaVersion: '1.0', name: 'Mannschaftsführer / Trainer', 
-              permissions: { viewDashboard: true, viewEvents: false, viewTasks: true, viewCalendar: true, viewUsers: true, viewReports: false, viewReminders: true, viewTemplates: false, viewAppUsers: false, viewRoles: false, viewEhrungen: false, viewAllReminders: false, viewTeamPins: true, manageTeamPins: false, manageMitglieder: false, manageCalendarSetup: false, manageEvents: false, deleteAnyItem: false } 
+              permissions: { viewDashboard: true, viewEvents: false, viewTasks: true, viewCalendar: true, viewUsers: true, viewReports: false, viewReminders: true, viewTemplates: false, viewAppUsers: false, viewRoles: false, viewEhrungen: false, viewJugend: true, viewAllReminders: false, viewTeamPins: true, manageTeamPins: false, manageMitglieder: false, manageCalendarSetup: false, manageEvents: false, deleteAnyItem: false } 
             },
             { 
               id: 'pro-gast', schemaVersion: '1.0', name: 'Mitglied', 
-              permissions: { viewDashboard: true, viewEvents: false, viewTasks: false, viewCalendar: true, viewUsers: false, viewReports: false, viewReminders: false, viewTemplates: false, viewAppUsers: false, viewRoles: false, viewEhrungen: false, viewAllReminders: false, viewTeamPins: false, manageTeamPins: false, manageMitglieder: false, manageCalendarSetup: false, manageEvents: false, deleteAnyItem: false } 
+              permissions: { viewDashboard: true, viewEvents: false, viewTasks: false, viewCalendar: true, viewUsers: false, viewReports: false, viewReminders: false, viewTemplates: false, viewAppUsers: false, viewRoles: false, viewEhrungen: false, viewJugend: false, viewAllReminders: false, viewTeamPins: false, manageTeamPins: false, manageMitglieder: false, manageCalendarSetup: false, manageEvents: false, deleteAnyItem: false } 
             }
           ];
           defaults.forEach(p => batch.set(doc(db, 'role_profiles', p.id), p));
