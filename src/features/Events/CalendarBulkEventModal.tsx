@@ -1,3 +1,6 @@
+// [2026-07-27] - UX-FEATURE: 'X'-Button (Löschen) zum HelperSearchSelect hinzugefügt, damit man versehentlich zugewiesene Schichten wieder leeren kann (was automatisch wieder zum "N.N." Platzhalter führt).
+// [2026-07-27] - UX-FEATURE: Platzhalter "N.N." für leere Schichten eingebaut, um "Dienst übernehmen" (Self-Service) im Kalender zu ermöglichen.
+// [2026-07-27] - UX-FEATURE: 'Enter-to-Jump' Workflow im HelperSearchSelect integriert (Frictionless Design). Bei eindeutigem Suchtreffer wählt Enter den Helfer und öffnet automatisch das Dropdown der nächsten Zeile.
 // [2026-07-26] - BUGFIX: Der Generator erkennt nun beim Bearbeiten bestehender Serien automatisch den korrekten Rhythmus (Wochen, Tage, Monate) und liest die zugehörigen Wochentage aus.
 // [2026-06-09] - BUGFIX: Der Dienstplan-Generator speichert nun zwingend die ausgewählte Helfer-ID im Feld 'reminderRecipientHelperIds', unabhängig davon, ob ein WhatsApp-Sender konfiguriert ist. Dadurch kann das Dashboard Dienste fehlerfrei dem persönlichen Profil des Nutzers zuordnen.
 // [2026-05-30] - UX-FIX: Abgeschnittene Suchergebnis-Liste in der letzten Zeile behoben. Dem Zuweisungs-Container wurde unten Platz (pb-48) eingeräumt, damit das Dropdown immer aufklappen kann.
@@ -47,22 +50,68 @@ const HelperSearchSelect: React.FC<{
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filtered.length === 1) {
+        onSelect(filtered[0].id);
+        setIsOpen(false);
+        setSearchTerm('');
+        
+        setTimeout(() => {
+          const allToggles = Array.from(document.querySelectorAll('.helper-search-toggle')) as HTMLElement[];
+          if (containerRef.current) {
+            const myToggle = containerRef.current.querySelector('.helper-search-toggle');
+            const myIndex = allToggles.indexOf(myToggle as HTMLElement);
+            if (myIndex !== -1 && myIndex + 1 < allToggles.length) {
+              const nextToggle = allToggles[myIndex + 1];
+              nextToggle.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              nextToggle.click();
+            }
+          }
+        }, 50);
+      }
+    }
+  };
+
   return (
     <div className="relative" ref={containerRef}>
       <div 
-        className={`flex items-center justify-between p-2 border rounded bg-white cursor-pointer ${disabled ? 'opacity-50' : 'hover:border-orange-400 border-gray-300'}`}
+        className={`helper-search-toggle flex items-center justify-between p-2 border rounded bg-white cursor-pointer ${disabled ? 'opacity-50' : 'hover:border-orange-400 border-gray-300'}`}
         onClick={() => !disabled && setIsOpen(!isOpen)}
       >
         <span className={displayValue ? 'text-gray-900 font-bold text-sm' : 'text-gray-400 italic text-sm'}>
           {displayValue || 'Helfer (Alias) wählen...'}
         </span>
-        <ChevronDown className="w-4 h-4 text-gray-400" />
+        {valueId && !disabled ? (
+          <div 
+            className="p-1 hover:bg-gray-100 rounded transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect('');
+              setIsOpen(false);
+            }}
+            title="Zuweisung entfernen"
+          >
+            <X className="w-4 h-4 text-gray-400 hover:text-red-500" />
+          </div>
+        ) : (
+          <ChevronDown className="w-4 h-4 text-gray-400" />
+        )}
       </div>
       {isOpen && (
         <div className="absolute z-[100] mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden">
           <div className="p-2 border-b bg-gray-50 flex items-center">
             <Search className="w-3.5 h-3.5 text-gray-400 mr-2" />
-            <input type="text" autoFocus className="w-full bg-transparent text-sm outline-none" placeholder="Suche Alias..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            <input 
+              type="text" 
+              autoFocus 
+              className="w-full bg-transparent text-sm outline-none" 
+              placeholder="Suche Alias (Enter zum Wählen)..." 
+              value={searchTerm} 
+              onChange={e => setSearchTerm(e.target.value)} 
+              onKeyDown={handleKeyDown}
+            />
           </div>
           <div className="max-h-48 overflow-y-auto">
             {filtered.length > 0 ? filtered.map(h => (
@@ -113,14 +162,12 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose, existingSerie
         setReminderCustomText(first.reminderCustomText || '');
         setBaseTitle(first.title.includes(': ') ? first.title.split(': ')[0] : first.title);
 
-        // CHIRURGISCHER EINGRIFF: Intelligente Rhythmus-Erkennung (Tage vs. Wochen vs. Monate)
         const diffMs = (first.endTime || first.startTime) - first.startTime;
         let detectedRhythm: 'Wochen' | 'Tage' | 'Monate' = 'Wochen';
         
         if (diffMs === 0) {
           detectedRhythm = 'Tage';
           setRhythm('Tage');
-          // Wochentage aus den ersten 7 Tagen der Serie auslesen
           setSelectedWeekDays(Array.from(new Set(seriesEvents.map(e => new Date(e.startTime).getDay()))));
         } else if (diffMs > 20 * 24 * 60 * 60 * 1000) {
           detectedRhythm = 'Monate';
@@ -133,7 +180,6 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose, existingSerie
         const loaded: Record<string, string> = {};
         seriesEvents.forEach(ev => {
           let key = '';
-          // Der Key für das Zuweisungs-Grid muss mit dem Rhythmus übereinstimmen!
           if (detectedRhythm === 'Wochen') {
             key = startOfWeek(new Date(ev.startTime), { weekStartsOn: 1 }).toISOString();
           } else if (detectedRhythm === 'Tage') {
@@ -198,10 +244,8 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose, existingSerie
 
     items.forEach((item, index) => {
       const helperId = assignments[item.id];
-      if (!helperId) return; 
-
-      const helper = helpers.find(h => h.id === helperId);
-      const assigneeAlias = helper ? (helper.alias || helper.name) : 'Unbekannt';
+      const helper = helperId ? helpers.find(h => h.id === helperId) : null;
+      const assigneeAlias = helper ? (helper.alias || helper.name) : (helperId ? 'Unbekannt' : 'N.N.');
 
       const common = {
         schemaVersion: '1.0',
@@ -213,7 +257,7 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose, existingSerie
         reminderSenderUserId: reminderSenderUserId || undefined,
         reminderLeadDays: reminderSenderUserId ? parseInt(reminderLeadDays, 10) : undefined,
         reminderCustomText: reminderSenderUserId ? reminderCustomText.trim() : undefined,
-        reminderRecipientHelperIds: [helperId]
+        reminderRecipientHelperIds: helperId ? [helperId] : []
       };
 
       if (rhythm === 'Wochen') {
@@ -225,7 +269,7 @@ export const CalendarBulkEventModal: React.FC<Props> = ({ onClose, existingSerie
       }
     });
 
-    if (eventsToCreate.length === 0) { setError('Keine Zuweisungen vorgenommen.'); return; }
+    if (eventsToCreate.length === 0) { setError('Fehler bei der Event-Generierung.'); return; }
     setIsSaving(true);
     if (existingSeriesId) await deleteCalendarSeries(existingSeriesId);
     const safeEvents = eventsToCreate.map(e => Object.fromEntries(Object.entries(e).filter(([_, v]) => v !== undefined)) as CalendarEvent);
