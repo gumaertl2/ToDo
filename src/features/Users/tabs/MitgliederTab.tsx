@@ -1,3 +1,4 @@
+// [2026-07-28] - TS-FIX: 'title'-Attribut bei Lucide-Icons (FileSignature, ShieldAlert) auf umhüllenden span-Tag verschoben (TS2322).
 // [2026-07-28] - UX-FEATURE: Aktenlage-Icons (DSGVO Papier & Jugendarbeit) in der Tabelle visualisiert und in den CSV-Export/Druck integriert.
 // [2026-07-27] - UX-FEATURE: Persistente Filter-Speicherung (localStorage) für die Mitgliederansicht integriert (Status, Teams, Eltern-Info).
 // [2026-07-27] - SEC-FEATURE: Frontend-Türsteher für das neue Recht 'viewJugend' implementiert.
@@ -269,7 +270,6 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
   };
 
   const handleExportCSV = () => {
-    // CHIRURGISCHER EINGRIFF: DSGVO Felder im CSV-Export
     let csv = '\uFEFF' + "Name;Telefon;Email;Status;Alias;Tel. Eltern;Email Eltern";
     if (hasSensitiveAccess) csv += ";Geburt;Eintritt;DSGVO Papier;Erw. Führungszeugnis";
     csv += "\n";
@@ -515,11 +515,11 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
                       )}
                       {renderAppAccessIndicator(h)}
                       
-                      {/* CHIRURGISCHER EINGRIFF: Aktenlage Visualisierung (Icons links neben dem Namen) */}
+                      {/* CHIRURGISCHER EINGRIFF: TS-Fix für Icon-Titel */}
                       {canManageMitglieder && (
                         <div className="flex items-center gap-0.5 mr-1 shrink-0">
-                          {h.hasWrittenDsgvoConsent && <FileSignature className="w-3.5 h-3.5 text-slate-400" title="Schriftliche DSGVO-Erklärung liegt vor" />}
-                          {h.hasYouthWorkClearance && <ShieldAlert className="w-3.5 h-3.5 text-blue-400" title="Unbedenklichkeitsbescheinigung Jugendarbeit liegt vor" />}
+                          {h.hasWrittenDsgvoConsent && <span title="Schriftliche DSGVO-Erklärung liegt vor" className="flex items-center"><FileSignature className="w-3.5 h-3.5 text-slate-400" /></span>}
+                          {h.hasYouthWorkClearance && <span title="Unbedenklichkeitsbescheinigung Jugendarbeit liegt vor" className="flex items-center"><ShieldAlert className="w-3.5 h-3.5 text-blue-400" /></span>}
                         </div>
                       )}
 

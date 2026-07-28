@@ -1,3 +1,4 @@
+// [2026-07-28] - TS-FIX: Ungenutzten Import 'FileSignature' entfernt (TS6133).
 // [2026-07-28] - UX-FEATURE: Aktenlage (DSGVO-Papier & Jugendarbeit) vom App-Sichtbarkeitsschalter getrennt eingebaut. Automatisches Opt-In bei Papiereingang.
 // [2026-07-22] - BUGFIX: DSGVO Reset-Button für den Admin hinzugefügt, um Verweigerer (oder alte Zustimmungen) zurückzusetzen und eine Neuabfrage zu erzwingen.
 // 2026-04-16 16:40 - FEATURE: Eingabefelder für Eintrittsdatum und Mitgliedsstatus hinzugefügt
@@ -7,7 +8,7 @@
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import type { Helper } from '../../core/types/models';
-import { X, Save, AlertTriangle, AlertCircle, ShieldCheck, RefreshCw, FolderOpen, FileSignature } from 'lucide-react';
+import { X, Save, AlertTriangle, AlertCircle, ShieldCheck, RefreshCw, FolderOpen } from 'lucide-react';
 import { DSGVO_CONFIG } from '../../config/dsgvoConfig';
 
 interface HelperFormModalProps {
@@ -29,7 +30,6 @@ export const HelperFormModal: React.FC<HelperFormModalProps> = ({ onClose, exist
   const [eintrittsdatum, setEintrittsdatum] = useState(existingHelper?.eintrittsdatum || '');
   const [memberStatus, setMemberStatus] = useState<'AKTIV' | 'PASSIV' | 'JUGEND'>(existingHelper?.memberStatus || 'AKTIV');
 
-  // CHIRURGISCHER EINGRIFF: Neue Aktenlage-States
   const [hasWrittenDsgvoConsent, setHasWrittenDsgvoConsent] = useState(existingHelper?.hasWrittenDsgvoConsent || false);
   const [hasYouthWorkClearance, setHasYouthWorkClearance] = useState(existingHelper?.hasYouthWorkClearance || false);
 
@@ -278,7 +278,6 @@ export const HelperFormModal: React.FC<HelperFormModalProps> = ({ onClose, exist
             </div>
           </div>
 
-          {/* CHIRURGISCHER EINGRIFF: Dokumente und Aktenlage */}
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mt-6">
             <div className="flex items-start">
               <FolderOpen className="w-5 h-5 text-slate-600 mt-0.5 mr-3 flex-shrink-0" />
