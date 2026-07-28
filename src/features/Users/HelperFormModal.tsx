@@ -1,3 +1,4 @@
+// [2026-07-28] - UX-FEATURE: Aktenlage (DSGVO-Papier & Jugendarbeit) vom App-Sichtbarkeitsschalter getrennt eingebaut. Automatisches Opt-In bei Papiereingang.
 // [2026-07-22] - BUGFIX: DSGVO Reset-Button für den Admin hinzugefügt, um Verweigerer (oder alte Zustimmungen) zurückzusetzen und eine Neuabfrage zu erzwingen.
 // 2026-04-16 16:40 - FEATURE: Eingabefelder für Eintrittsdatum und Mitgliedsstatus hinzugefügt
 // 2026-04-23 15:30 - FEATURE: Eingabefeld für Tel. Eltern hinzugefügt
@@ -6,7 +7,7 @@
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import type { Helper } from '../../core/types/models';
-import { X, Save, AlertTriangle, AlertCircle, ShieldCheck, RefreshCw } from 'lucide-react';
+import { X, Save, AlertTriangle, AlertCircle, ShieldCheck, RefreshCw, FolderOpen, FileSignature } from 'lucide-react';
 import { DSGVO_CONFIG } from '../../config/dsgvoConfig';
 
 interface HelperFormModalProps {
@@ -28,12 +29,15 @@ export const HelperFormModal: React.FC<HelperFormModalProps> = ({ onClose, exist
   const [eintrittsdatum, setEintrittsdatum] = useState(existingHelper?.eintrittsdatum || '');
   const [memberStatus, setMemberStatus] = useState<'AKTIV' | 'PASSIV' | 'JUGEND'>(existingHelper?.memberStatus || 'AKTIV');
 
+  // CHIRURGISCHER EINGRIFF: Neue Aktenlage-States
+  const [hasWrittenDsgvoConsent, setHasWrittenDsgvoConsent] = useState(existingHelper?.hasWrittenDsgvoConsent || false);
+  const [hasYouthWorkClearance, setHasYouthWorkClearance] = useState(existingHelper?.hasYouthWorkClearance || false);
+
   const [consentConfirmed, setConsentConfirmed] = useState(existingHelper?.consentConfirmed || false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDateFocused, setIsDateFocused] = useState(false);
   const [isEintrittFocused, setIsEintrittFocused] = useState(false);
   
-  // CHIRURGISCHER EINGRIFF: State für den DSGVO-Reset
   const [forceResetConsent, setForceResetConsent] = useState(false);
   
   const [error, setError] = useState<string | null>(null);
@@ -102,7 +106,6 @@ export const HelperFormModal: React.FC<HelperFormModalProps> = ({ onClose, exist
     let newConsentAt = existingHelper?.consentConfirmedAt;
     let newConsentBy = existingHelper?.consentConfirmedBy;
 
-    // CHIRURGISCHER EINGRIFF: Reset-Logik anwenden
     if (forceResetConsent) {
       newDsgvoVersion = undefined;
       newConsentAt = undefined;
@@ -134,6 +137,9 @@ export const HelperFormModal: React.FC<HelperFormModalProps> = ({ onClose, exist
       eintrittsdatum: eintrittsdatum || undefined,
       memberStatus,
       
+      hasWrittenDsgvoConsent,
+      hasYouthWorkClearance,
+
       consentConfirmed,
       dsgvoConsentVersion: newDsgvoVersion,
       consentConfirmedAt: newConsentAt,
@@ -271,17 +277,53 @@ export const HelperFormModal: React.FC<HelperFormModalProps> = ({ onClose, exist
               />
             </div>
           </div>
+
+          {/* CHIRURGISCHER EINGRIFF: Dokumente und Aktenlage */}
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mt-6">
+            <div className="flex items-start">
+              <FolderOpen className="w-5 h-5 text-slate-600 mt-0.5 mr-3 flex-shrink-0" />
+              <div className="flex-1">
+                <h4 className="text-sm font-bold text-slate-900">Aktenlage & Dokumente (Vereinsverwaltung)</h4>
+                
+                <div className="mt-3 flex items-center">
+                  <input
+                    id="paper-consent" type="checkbox" checked={hasWrittenDsgvoConsent} 
+                    onChange={(e) => {
+                      setHasWrittenDsgvoConsent(e.target.checked);
+                      if (e.target.checked) setConsentConfirmed(true);
+                    }} 
+                    disabled={isSaving}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                  />
+                  <label htmlFor="paper-consent" className="ml-2 text-sm text-slate-800 font-medium cursor-pointer">
+                    Schriftliche DSGVO-Erklärung liegt im Ordner vor
+                  </label>
+                </div>
+                
+                <div className="mt-3 flex items-center">
+                  <input
+                    id="youth-clearance" type="checkbox" checked={hasYouthWorkClearance} 
+                    onChange={(e) => setHasYouthWorkClearance(e.target.checked)} disabled={isSaving}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                  />
+                  <label htmlFor="youth-clearance" className="ml-2 text-sm text-slate-800 font-medium cursor-pointer">
+                    Unbedenklichkeitsbescheinigung (Jugendarbeit) liegt vor
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
           
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-6">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
             <div className="flex items-start">
               <ShieldCheck className="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" />
               <div className="flex-1">
-                <h4 className="text-sm font-bold text-blue-900">DSGVO App-Sichtbarkeit (Offline-Mitglieder)</h4>
+                <h4 className="text-sm font-bold text-blue-900">App-Einstellungen des Nutzers</h4>
                 
                 {forceResetConsent ? (
                   <div className="mt-3 p-3 rounded border border-orange-200 bg-orange-50 text-orange-800 text-sm font-bold flex items-start">
                     <AlertTriangle className="w-5 h-5 mr-2 shrink-0" />
-                    Der DSGVO-Status wird beim Speichern komplett gelöscht. Der Nutzer wird beim nächsten Login neu gefragt.
+                    Der Sichtbarkeits-Status wird beim Speichern gelöscht.
                   </div>
                 ) : (
                   <>
@@ -291,32 +333,27 @@ export const HelperFormModal: React.FC<HelperFormModalProps> = ({ onClose, exist
                         className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
                       />
                       <label htmlFor="consent" className="ml-2 text-sm text-blue-900 font-medium block cursor-pointer">
-                        Einwilligung zur App-Sichtbarkeit liegt schriftlich vor
+                        Daten im Adressbuch der App sichtbar machen
                       </label>
                     </div>
                     
                     {existingHelper?.consentConfirmedAt && (
                       <div className={`mt-3 p-2.5 rounded border text-xs ${existingHelper.consentConfirmed ? 'bg-white/60 border-blue-100 text-blue-800' : 'bg-red-50/60 border-red-100 text-red-800'}`}>
-                        <span className="font-bold">Nachweis der DSGVO-Abfrage:</span><br/>
+                        <span className="font-bold">Nachweis der Freigabe:</span><br/>
                         {existingHelper.consentConfirmed ? 'Zustimmung erteilt' : 'Aktiv ABGELEHNT'} am {new Date(existingHelper.consentConfirmedAt).toLocaleDateString('de-DE')} um {new Date(existingHelper.consentConfirmedAt).toLocaleTimeString('de-DE', {hour: '2-digit', minute:'2-digit'})} Uhr<br/>
                         <span className="italic">Protokolliert durch: {existingHelper.consentConfirmedBy === 'ADMIN' ? 'Administrator (Manuell)' : 'Nutzer selbst (Digital)'}</span>
                         
-                        {/* CHIRURGISCHER EINGRIFF: Reset Button */}
                         <div className="mt-2 pt-2 border-t border-black/10">
                           <button 
                             type="button" 
                             onClick={() => { setConsentConfirmed(false); setForceResetConsent(true); }} 
                             className={`flex items-center font-bold transition-colors ${existingHelper.consentConfirmed ? 'text-blue-600 hover:text-blue-800' : 'text-red-700 hover:text-red-900'}`}
                           >
-                            <RefreshCw className="w-3.5 h-3.5 mr-1" /> DSGVO-Status zurücksetzen (Neuabfrage erzwingen)
+                            <RefreshCw className="w-3.5 h-3.5 mr-1" /> Freigabe-Status zurücksetzen (Neuabfrage)
                           </button>
                         </div>
                       </div>
                     )}
-    
-                    <p className="text-xs text-blue-700 mt-3">
-                      Setzt du diesen Haken, ist das Mitglied im Adressbuch sichtbar und wird beim ersten Login <strong>nicht</strong> durch den Clickwrap-Screen blockiert.
-                    </p>
                   </>
                 )}
               </div>

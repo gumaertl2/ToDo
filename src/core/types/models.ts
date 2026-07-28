@@ -1,3 +1,4 @@
+// [2026-07-28] - SCHEMA: 'hasWrittenDsgvoConsent' (Papierakte) und 'hasYouthWorkClearance' (Unbedenklichkeit Jugendarbeit) zum Helper hinzugefügt.
 // [2026-07-27] - SEC-FEATURE: Neues dediziertes Recht 'viewJugend' für den DSGVO-konformen Schutz von Minderjährigen-Daten hinzugefügt.
 // [2026-07-22] - SCHEMA: Audit-Trail Felder (consentConfirmedAt & consentConfirmedBy) für DSGVO-Clickwrap hinzugefügt.
 // [2026-06-11] - ARCHITEKTUR-FIX: Feld 'isHistorical' zu AgendaItem hinzugefügt (Fate-Binding). Löst das Container-Kosmetik-Problem und verhindert Waisenkinder.
@@ -46,7 +47,7 @@ export interface RolePermissions {
   viewRoles: boolean;    
   
   viewEhrungen: boolean;
-  viewJugend: boolean; // CHIRURGISCHER EINGRIFF: DSGVO Schutz Minderjährige
+  viewJugend: boolean; 
   viewAllReminders: boolean;
   
   viewTeamPins: boolean;
@@ -76,7 +77,7 @@ export interface UserPermissions {
   canManageRoles: boolean;
   
   viewEhrungen?: boolean;
-  viewJugend?: boolean; // CHIRURGISCHER EINGRIFF: DSGVO Schutz Minderjährige
+  viewJugend?: boolean; 
   viewAllReminders?: boolean;
   
   viewTeamPins?: boolean;
@@ -120,6 +121,10 @@ export interface Helper extends BaseDocument {
   eintrittsdatum?: string;
   memberStatus?: 'AKTIV' | 'PASSIV' | 'JUGEND';
   
+  // CHIRURGISCHER EINGRIFF: Aktenlage vs. App-Präferenz
+  hasWrittenDsgvoConsent?: boolean;
+  hasYouthWorkClearance?: boolean;
+
   consentConfirmed: boolean;
   dsgvoConsentVersion?: number;
   consentConfirmedAt?: number;

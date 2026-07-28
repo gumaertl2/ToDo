@@ -1,3 +1,4 @@
+// [2026-07-28] - UX-FEATURE: Aktenlage-Icons (DSGVO Papier & Jugendarbeit) in der Tabelle visualisiert und in den CSV-Export/Druck integriert.
 // [2026-07-27] - UX-FEATURE: Persistente Filter-Speicherung (localStorage) für die Mitgliederansicht integriert (Status, Teams, Eltern-Info).
 // [2026-07-27] - SEC-FEATURE: Frontend-Türsteher für das neue Recht 'viewJugend' implementiert.
 // [2026-07-26] - SEC-FIX: Harte RBAC-Filterung für passive Mitglieder im Frontend eingebaut. Normale Mitglieder ohne 'manageMitglieder' oder 'viewEhrungen' können passive Mitglieder nicht mehr sehen, selbst wenn der UI-Filter aktiv ist.
@@ -17,7 +18,7 @@
 // 2026-05-14 14:30 - FEATURE: 3-Stufen App-Zugangs-Indikator (Grau/Gelb/Grün) basierend auf nativem Gast-Login integriert
 // src/features/Users/tabs/MitgliederTab.tsx
 import React, { useState, useMemo, useEffect } from 'react';
-import { ArrowUpDown, ArrowUp, ArrowDown, Cake, Edit2, Trash2, Filter, Search, X, Printer, FileDown, Eye, EyeOff, Phone, Users } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, Cake, Edit2, Trash2, Filter, Search, X, Printer, FileDown, Eye, EyeOff, Phone, Users, ShieldAlert, FileSignature } from 'lucide-react';
 import { useClubStore } from '../../../store/useClubStore';
 import type { Helper } from '../../../core/types/models';
 import { EditableCell } from '../components/EditableCell';
@@ -36,7 +37,6 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
   const [sortConfig, setSortConfig] = useState<{ key: keyof Helper; direction: SortDirection }>({ key: 'name', direction: 'asc' });
   const [searchTerm, setSearchTerm] = useState('');
   
-  // CHIRURGISCHER EINGRIFF: Persistenz via localStorage
   const [statusFilter, setStatusFilter] = useState<Set<'AKTIV' | 'PASSIV' | 'JUGEND'>>(() => {
     const saved = localStorage.getItem('papatodo_mitglieder_statusFilter');
     if (saved) return new Set(JSON.parse(saved));
@@ -269,12 +269,15 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
   };
 
   const handleExportCSV = () => {
+    // CHIRURGISCHER EINGRIFF: DSGVO Felder im CSV-Export
     let csv = '\uFEFF' + "Name;Telefon;Email;Status;Alias;Tel. Eltern;Email Eltern";
-    if (hasSensitiveAccess) csv += ";Geburt;Eintritt";
+    if (hasSensitiveAccess) csv += ";Geburt;Eintritt;DSGVO Papier;Erw. Führungszeugnis";
     csv += "\n";
     filteredAndSortedHelpers.forEach(h => {
        csv += `${h.name || ''};${h.telefon || ''};${h.email || ''};${h.memberStatus || 'AKTIV'};${h.alias || ''};${h.telefonEltern || ''};${h.emailEltern || ''}`;
-       if (hasSensitiveAccess) csv += `;${h.geburtsdatum || ''};${h.eintrittsdatum || ''}`;
+       if (hasSensitiveAccess) {
+         csv += `;${h.geburtsdatum || ''};${h.eintrittsdatum || ''};${h.hasWrittenDsgvoConsent ? 'Ja' : 'Nein'};${h.hasYouthWorkClearance ? 'Ja' : 'Nein'}`;
+       }
        csv += "\n";
     });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -511,6 +514,15 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
                         />
                       )}
                       {renderAppAccessIndicator(h)}
+                      
+                      {/* CHIRURGISCHER EINGRIFF: Aktenlage Visualisierung (Icons links neben dem Namen) */}
+                      {canManageMitglieder && (
+                        <div className="flex items-center gap-0.5 mr-1 shrink-0">
+                          {h.hasWrittenDsgvoConsent && <FileSignature className="w-3.5 h-3.5 text-slate-400" title="Schriftliche DSGVO-Erklärung liegt vor" />}
+                          {h.hasYouthWorkClearance && <ShieldAlert className="w-3.5 h-3.5 text-blue-400" title="Unbedenklichkeitsbescheinigung Jugendarbeit liegt vor" />}
+                        </div>
+                      )}
+
                       <EditableCell value={h.name} onSave={val => handleInlineUpdateHelper(h, 'name', val)} disabled={!canManageMitglieder} placeholder="Vorname Nachname" />
                     </div>
                   </td>

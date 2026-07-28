@@ -1,7 +1,8 @@
-// 2026-04-16 17:00 - FEATURE: CSV-Import um Eintrittsdatum und Mitgliedsstatus erweitert
-// 2026-04-23 16:05 - FEATURE: CSV-Import um Feld telefonEltern erweitert
-// 2026-04-25 13:00 - BUGFIX: sanitizePhone filtert nun fehlerhafte "nur +49" Nummern korrekt aus
-// 2026-04-30 18:30 - FEATURE: CSV-Import um Feld emailEltern erweitert und in Vorschau aufgenommen
+// [2026-07-28] - FEATURE: CSV-Import um Aktenlage-Felder ('DSGVO Papier' und 'Erw. Führungszeugnis') erweitert.
+// [2026-04-16] - FEATURE: CSV-Import um Eintrittsdatum und Mitgliedsstatus erweitert
+// [2026-04-23] - FEATURE: CSV-Import um Feld telefonEltern erweitert
+// [2026-04-25] - BUGFIX: sanitizePhone filtert nun fehlerhafte "nur +49" Nummern korrekt aus
+// [2026-04-30] - FEATURE: CSV-Import um Feld emailEltern erweitert und in Vorschau aufgenommen
 // src/features/Users/CsvImportModal.tsx
 import React, { useState, useRef } from 'react';
 import { useClubStore } from '../../store/useClubStore';
@@ -59,7 +60,6 @@ export const CsvImportModal: React.FC<Props> = ({ onClose }) => {
     if (f.startsWith('00')) f = '+' + f.substring(2);
     else if (f.startsWith('0') && !f.startsWith('00')) f = '+49' + f.substring(1);
     
-    // CHIRURGISCHER EINGRIFF: Wenn nur "+49", "+" oder eine ungültig kurze Nummer übrig bleibt, verwerfen wir sie.
     if (f === '+49' || f === '+' || f.length < 5) {
       return '';
     }
@@ -90,6 +90,12 @@ export const CsvImportModal: React.FC<Props> = ({ onClose }) => {
     return `${firstName} ${counter}`;
   };
 
+  const parseBooleanStr = (val: string) => {
+    if (!val) return false;
+    const lower = val.trim().toLowerCase();
+    return ['ja', 'yes', 'true', '1', 'x', 'j'].includes(lower);
+  };
+
   const processCSV = (text: string) => {
     setError(null);
     setIsProcessing(true);
@@ -113,8 +119,11 @@ export const CsvImportModal: React.FC<Props> = ({ onClose }) => {
       const idxStatus = mapIndex(['status', 'mitgliedsart', 'art', 'typ']);
       
       const idxTelEltern = mapIndex(['eltern', 'tel. eltern', 'telefon eltern', 'elterntelefon', 'telefoneltern']);
-      // CHIRURGISCHER EINGRIFF: Spaltenerkennung für E-Mail Eltern
       const idxEmailEltern = mapIndex(['email eltern', 'eltern email', 'e-mail eltern', 'eltern e-mail', 'elternmail']);
+      
+      // CHIRURGISCHER EINGRIFF: Aktenlage Indices
+      const idxDsgvo = mapIndex(['dsgvo papier', 'dsgvo', 'papier', 'einwilligung']);
+      const idxFz = mapIndex(['erw. führungszeugnis', 'führungszeugnis', 'unbedenklichkeit', 'jugendarbeit']);
 
       if (idxName === -1) throw new Error('Spalte "Name" wurde nicht gefunden.');
 
@@ -146,10 +155,16 @@ export const CsvImportModal: React.FC<Props> = ({ onClose }) => {
         const rawTelEltern = idxTelEltern >= 0 ? cols[idxTelEltern] : '';
         const rawEmailEltern = idxEmailEltern >= 0 ? cols[idxEmailEltern] : '';
 
+        const rawDsgvo = idxDsgvo >= 0 ? cols[idxDsgvo] : '';
+        const rawFz = idxFz >= 0 ? cols[idxFz] : '';
+
         const phone = sanitizePhone(rawPhone);
         const phoneEltern = sanitizePhone(rawTelEltern);
         const birth = parseDate(rawBirth);
         const eintritt = parseDate(rawEintritt);
+        
+        const isDsgvoPaper = parseBooleanStr(rawDsgvo);
+        const isFzPaper = parseBooleanStr(rawFz);
         
         let parsedStatus: 'AKTIV' | 'PASSIV' | 'JUGEND' | undefined = undefined;
         if (rawStatus) {
@@ -171,11 +186,13 @@ export const CsvImportModal: React.FC<Props> = ({ onClose }) => {
               telefon: phone || existingMatch.telefon,
               telefonEltern: phoneEltern || existingMatch.telefonEltern,
               email: rawEmail || existingMatch.email,
-              emailEltern: rawEmailEltern || existingMatch.emailEltern, // CHIRURGISCHER EINGRIFF
+              emailEltern: rawEmailEltern || existingMatch.emailEltern,
               geburtsdatum: birth || existingMatch.geburtsdatum,
               eintrittsdatum: eintritt || existingMatch.eintrittsdatum,
               memberStatus: parsedStatus || existingMatch.memberStatus || 'AKTIV',
               bezug: rawBezug || existingMatch.bezug,
+              hasWrittenDsgvoConsent: isDsgvoPaper || existingMatch.hasWrittenDsgvoConsent,
+              hasYouthWorkClearance: isFzPaper || existingMatch.hasYouthWorkClearance,
               lastActivityAt: Date.now()
             }
           });
@@ -196,12 +213,16 @@ export const CsvImportModal: React.FC<Props> = ({ onClose }) => {
               telefon: phone,
               telefonEltern: phoneEltern,
               email: rawEmail,
-              emailEltern: rawEmailEltern, // CHIRURGISCHER EINGRIFF
+              emailEltern: rawEmailEltern,
               geburtsdatum: birth,
               eintrittsdatum: eintritt,
               memberStatus: parsedStatus || 'AKTIV',
               bezug: rawBezug,
-              consentConfirmed: true, 
+              hasWrittenDsgvoConsent: isDsgvoPaper,
+              hasYouthWorkClearance: isFzPaper,
+              consentConfirmed: isDsgvoPaper, // Auto-Opt-In
+              consentConfirmedAt: isDsgvoPaper ? Date.now() : undefined,
+              consentConfirmedBy: isDsgvoPaper ? 'ADMIN' : undefined,
               lastActivityAt: Date.now(),
               retentionExpiresAt: Date.now() + (365 * 24 * 60 * 60 * 1000)
             }
@@ -281,7 +302,7 @@ export const CsvImportModal: React.FC<Props> = ({ onClose }) => {
             <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-blue-200 bg-blue-50/30 rounded-xl p-8 text-center">
               <FileText className="w-12 h-12 text-blue-400 mb-3" />
               <h3 className="font-bold text-gray-800 mb-1">CSV-Datei hochladen</h3>
-              <p className="text-sm text-gray-500 mb-6 max-w-md">Die Datei sollte eine Kopfzeile mit mindestens "Name" haben. Optional: "Telefon", "Tel. Eltern", "Email", "Email Eltern", "Geburt", "Eintritt", "Status", "Bezug". (Komma oder Semikolon getrennt).</p>
+              <p className="text-sm text-gray-500 mb-6 max-w-md">Kopfzeilen: Name, Telefon, Tel. Eltern, Email, Email Eltern, Geburt, Eintritt, Status, DSGVO Papier, Führungszeugnis.</p>
               
               <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
               
@@ -314,11 +335,9 @@ export const CsvImportModal: React.FC<Props> = ({ onClose }) => {
                         <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
                         <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Alias</th>
                         <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Mitglieds-Status</th>
-                        <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Eintritt</th>
+                        <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Papierakte</th>
                         <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Telefon</th>
-                        <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Tel. Eltern</th>
-                        {/* CHIRURGISCHER EINGRIFF: Spalte in der Vorschau hinzugefügt */}
-                        <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">E-Mail Eltern</th>
+                        <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">E-Mail</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
@@ -334,10 +353,12 @@ export const CsvImportModal: React.FC<Props> = ({ onClose }) => {
                               {row.data.memberStatus}
                             </span>
                           </td>
-                          <td className="px-4 py-2 text-sm font-mono text-gray-600">{row.data.eintrittsdatum ? new Date(row.data.eintrittsdatum).toLocaleDateString() : '-'}</td>
+                          <td className="px-4 py-2 text-sm font-mono text-gray-600">
+                            {row.data.hasWrittenDsgvoConsent ? 'DSGVO ✓ ' : ''} 
+                            {row.data.hasYouthWorkClearance ? 'Führungszeugnis ✓' : ''}
+                          </td>
                           <td className="px-4 py-2 text-sm font-mono text-gray-600">{row.data.telefon || '-'}</td>
-                          <td className="px-4 py-2 text-sm font-mono text-gray-600">{row.data.telefonEltern || '-'}</td>
-                          <td className="px-4 py-2 text-sm font-mono text-gray-600">{row.data.emailEltern || '-'}</td>
+                          <td className="px-4 py-2 text-sm font-mono text-gray-600">{row.data.email || '-'}</td>
                         </tr>
                       ))}
                     </tbody>
