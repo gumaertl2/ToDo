@@ -1,3 +1,4 @@
+// [2026-07-29] - UX-FEATURE: Anzeige der Dokumenten-Akte (Schriftliche DSGVO & Jugendschutz) als schreibgeschützte Status-Badges im Profil hinzugefügt.
 // [2026-07-24] - UX-FEATURE: "App reparieren" (Hard Reset) Button im Profil hinzugefügt, um Service Worker und Caches bei Update-Problemen hart zurückzusetzen.
 // [2026-07-23] - FEATURE: DSGVO Self-Service für Nutzer integriert. Erlaubt die eigenständige Änderung von Kontaktdaten und DSGVO-Einwilligung.
 // [2026-07-23] - SEC-FIX: Primäres E-Mail-Feld gesperrt (Read-Only), um die "Einladungs-Brücke" zum Firebase-Login nicht zu zerstören.
@@ -7,7 +8,7 @@
 // src/features/Users/MyProfileModal.tsx
 import React, { useState, useMemo } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import { X, Save, ShieldCheck, AlertCircle, Info, Lock, RefreshCw } from 'lucide-react';
+import { X, Save, ShieldCheck, AlertCircle, Info, Lock, RefreshCw, CheckCircle, XCircle, FileText } from 'lucide-react';
 import { DSGVO_CONFIG } from '../../config/dsgvoConfig';
 import type { AgendaItem } from '../../core/types/models';
 
@@ -54,7 +55,6 @@ export const MyProfileModal: React.FC<Props> = ({ onClose }) => {
     setIsResetting(true);
 
     try {
-      // 1. Service Worker deregistrieren
       if ('serviceWorker' in navigator) {
         const registrations = await navigator.serviceWorker.getRegistrations();
         for (const registration of registrations) {
@@ -62,7 +62,6 @@ export const MyProfileModal: React.FC<Props> = ({ onClose }) => {
         }
       }
 
-      // 2. Alle Browser-Caches leeren
       if ('caches' in window) {
         const keys = await caches.keys();
         for (const key of keys) {
@@ -70,11 +69,9 @@ export const MyProfileModal: React.FC<Props> = ({ onClose }) => {
         }
       }
 
-      // 3. LocalStorage & SessionStorage putzen
       localStorage.clear();
       sessionStorage.clear();
 
-      // 4. Hard-Reload
       window.location.href = '/';
       
     } catch (error) {
@@ -279,6 +276,56 @@ export const MyProfileModal: React.FC<Props> = ({ onClose }) => {
 
               </div>
             </div>
+          </div>
+
+          {/* CHIRURGISCHER EINGRIFF: Rechtliches & Dokumente Sektion */}
+          <div className="border-t border-gray-100 pt-6">
+            <h3 className="font-bold text-gray-800 mb-4 flex items-center">
+              <FileText className="w-5 h-5 mr-2 text-gray-500" />
+              Rechtliches & Dokumente (Vereinsakte)
+            </h3>
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-4">
+              
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="block text-sm font-bold text-gray-800">Schriftliche DSGVO-Erklärung</span>
+                  <span className="text-xs text-gray-500">Unterschriebenes Papierdokument</span>
+                </div>
+                <div className="shrink-0 ml-4">
+                  {myHelper.hasWrittenDsgvoConsent ? (
+                    <span className="flex items-center px-2.5 py-1 rounded-full bg-green-100 text-green-700 text-xs font-bold shadow-sm">
+                      <CheckCircle className="w-3.5 h-3.5 mr-1" /> Liegt vor
+                    </span>
+                  ) : (
+                    <span className="flex items-center px-2.5 py-1 rounded-full bg-gray-200 text-gray-600 text-xs font-bold shadow-sm">
+                      <XCircle className="w-3.5 h-3.5 mr-1" /> Fehlt
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                <div>
+                  <span className="block text-sm font-bold text-gray-800">Nachweis Jugendschutz</span>
+                  <span className="text-xs text-gray-500">Führungszeugnis / Ehrenkodex</span>
+                </div>
+                <div className="shrink-0 ml-4">
+                  {myHelper.hasYouthWorkClearance ? (
+                    <span className="flex items-center px-2.5 py-1 rounded-full bg-green-100 text-green-700 text-xs font-bold shadow-sm">
+                      <CheckCircle className="w-3.5 h-3.5 mr-1" /> Gültig
+                    </span>
+                  ) : (
+                    <span className="flex items-center px-2.5 py-1 rounded-full bg-gray-200 text-gray-600 text-xs font-bold shadow-sm">
+                      <XCircle className="w-3.5 h-3.5 mr-1" /> Fehlt / k.A.
+                    </span>
+                  )}
+                </div>
+              </div>
+
+            </div>
+            <p className="text-xs text-gray-500 mt-2 flex items-start">
+              <Info className="w-4 h-4 mr-1 shrink-0" /> Dieser Status entspricht der physischen Akte beim Vorstand und kann nur von Admins geändert werden.
+            </p>
           </div>
 
           {/* CHIRURGISCHER EINGRIFF: Fehlerbehebung / Hard-Reset Sektion */}
