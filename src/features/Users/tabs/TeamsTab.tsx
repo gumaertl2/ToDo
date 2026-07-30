@@ -1,3 +1,4 @@
+// [2026-07-30] - UX-FEATURE: Alphabetische Sortierung (A-Z, nach Vorname) für die Mitgliederliste in den Team-Kacheln hinzugefügt.
 // [2026-05-15] - FEATURE: Deep-Link Support (Kader-Namen sind klickbar und setzen focusedHelperId)
 // [2026-05-15] - FEATURE: TeamsTab - Kader-Anzeige für alle Nutzer (Namen-Liste in den Kacheln)
 // src/features/Users/tabs/TeamsTab.tsx
@@ -39,8 +40,10 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ openTeamEditor, canManageMit
     <div className="p-4 sm:p-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {teams.map(team => {
-          // Extrahiere alle Mitglieder, die diesem Team zugeordnet sind
-          const teamMembers = helpers.filter(h => h.teamIds?.includes(team.id));
+          // Extrahiere alle Mitglieder, die diesem Team zugeordnet sind, und sortiere sie alphabetisch (Vorname)
+          const teamMembers = helpers
+            .filter(h => h.teamIds?.includes(team.id))
+            .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
           
           return (
             <div key={team.id} className="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-all flex flex-col h-full">
