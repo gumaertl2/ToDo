@@ -1,3 +1,4 @@
+// [2026-08-06] - BUGFIX: Dynamischer Cache-Buster (_t=timestamp) in syncSubscription eingebaut, um aggressive Proxy-Caches zu umgehen.
 // [2026-07-23] - BUGFIX: Auto-Sync (Lazy Cronjob) wird nun NUR für eingeloggte User ausgeführt. Verhindert eine tödliche "Optimistic Update Rollback"-Endlosschleife für ungeloggte Gäste.
 // [2026-07-23] - BUGFIX: Cache-Buster (nocache) von der Original-URL entfernt und stattdessen Server/Proxy-Caching via Fetch API { cache: 'no-store' } blockiert.
 // [2026-07-23] - FEATURE: 7-Tage Auto-Sync (Lazy Cronjob) in den Kalender-Snapshot eingebaut.
@@ -150,9 +151,15 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
 
       if (feedUrl.toLowerCase().startsWith('webcal://')) feedUrl = 'https://' + feedUrl.substring(9);
       
+      // CHIRURGISCHER EINGRIFF: Dynamischer Cache-Buster an die URL hängen
+      const cacheBuster = `_t=${Date.now()}`;
+      const cacheBustedUrl = feedUrl.includes('?') 
+        ? `${feedUrl}&${cacheBuster}` 
+        : `${feedUrl}?${cacheBuster}`;
+      
       const proxyUrls = [
-        `https://api.allorigins.win/raw?url=${encodeURIComponent(feedUrl)}&disableCache=true`, 
-        `https://corsproxy.io/?${encodeURIComponent(feedUrl)}` 
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(cacheBustedUrl)}&disableCache=true`, 
+        `https://corsproxy.io/?${encodeURIComponent(cacheBustedUrl)}` 
       ];
       
       let textData = null;
