@@ -1,3 +1,4 @@
+// [2026-08-12] - UX-FIX: URL-Felder (Portal-Links) für click-tt / nuLiga komplett aus dem Formular und der Ansicht entfernt, um tote Links und UX-Frust zu vermeiden.
 // [2026-07-24] - ARCHITECTURE-FIX: Build-Error (TS2339) behoben. Sichtbarkeitsprüfung für `assignedTeamIds` umgedreht, da die Team-Zugehörigkeit im Helper-Modell (`teamIds`) und nicht im Team-Modell gespeichert wird.
 // [2026-07-24] - ARCHITECTURE-FIX: Team-PINs nutzen nun dynamische `assignedTeamIds` anstelle von statisch aufgelösten Helfern (SSOT), sodass Team-Änderungen sofort live greifen.
 // [2026-05-16] - UX-FIX: Festen Höhen-Container entfernt und showBadges={true} aktiviert für einklappbare Such-UX.
@@ -11,7 +12,7 @@
 // src/features/TeamPins/TeamPinsView.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import { Key, Plus, Minus, Edit2, Trash2, Copy, Check, Globe, X, Save, Users, ShieldAlert } from 'lucide-react';
+import { Key, Plus, Minus, Edit2, Trash2, Copy, Check, X, Save, Users, ShieldAlert } from 'lucide-react';
 import type { TeamPin } from '../../core/types/models';
 import { SmartEntityPicker } from '../Shared/components/SmartEntityPicker';
 
@@ -99,8 +100,9 @@ export const TeamPinsView: React.FC = () => {
     );
   };
 
-  const renderCodeBox = (title: string, text: string, url: string | undefined, boxId: string) => {
-    if (!text && !url) return null;
+  // CHIRURGISCHER EINGRIFF: URL-Logik komplett entfernt
+  const renderCodeBox = (title: string, text: string, boxId: string) => {
+    if (!text) return null;
     
     return (
       <div className="mb-6 last:mb-0 bg-gray-50 p-4 rounded-xl border border-gray-200 flex flex-col">
@@ -108,36 +110,20 @@ export const TeamPinsView: React.FC = () => {
           <h3 className="font-bold text-gray-800 flex items-center">
             {title.includes('Unterschrift') ? '✍️' : '🏓'} <span className="ml-2">{title}</span>
           </h3>
-          {text && (
-            <button 
-              onClick={() => handleCopy(text, boxId)}
-              className="text-xs flex items-center px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors font-medium text-gray-600"
-            >
-              {copiedId === boxId ? <Check className="w-4 h-4 text-green-600 mr-1" /> : <Copy className="w-4 h-4 mr-1" />}
-              {copiedId === boxId ? 'Kopiert!' : 'Kopieren'}
-            </button>
-          )}
+          <button 
+            onClick={() => handleCopy(text, boxId)}
+            className="text-xs flex items-center px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors font-medium text-gray-600"
+          >
+            {copiedId === boxId ? <Check className="w-4 h-4 text-green-600 mr-1" /> : <Copy className="w-4 h-4 mr-1" />}
+            {copiedId === boxId ? 'Kopiert!' : 'Kopieren'}
+          </button>
         </div>
         
-        {text && (
-          <div className="bg-[#1e1e1e] rounded-lg p-4 overflow-auto shadow-inner relative group resize-y min-h-[120px] max-h-[70vh]">
-            <pre className="font-mono text-sm text-green-400 whitespace-pre leading-relaxed">
-              {text}
-            </pre>
-          </div>
-        )}
-
-        {url && (
-          <a 
-            href={url.startsWith('http') ? url : `https://${url}`} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="mt-4 flex items-center justify-center w-full py-3 px-4 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg font-bold transition-colors border border-blue-200 shrink-0"
-          >
-            <Globe className="w-5 h-5 mr-2" />
-            Portal öffnen
-          </a>
-        )}
+        <div className="bg-[#1e1e1e] rounded-lg p-4 overflow-auto shadow-inner relative group resize-y min-h-[120px] max-h-[70vh]">
+          <pre className="font-mono text-sm text-green-400 whitespace-pre leading-relaxed">
+            {text}
+          </pre>
+        </div>
       </div>
     );
   };
@@ -218,10 +204,11 @@ export const TeamPinsView: React.FC = () => {
                 {/* Card Body */}
                 {isExpanded && (
                   <div className="p-5 flex-1 flex flex-col border-t border-gray-700">
-                    {renderCodeBox("Spiel-Codes (nuScore)", pin.gameEntryPinsText, pin.gameEntryUrl, `${pin.id}-game`)}
-                    {renderCodeBox("Unterschriften-PINs", pin.signaturePinsText, pin.signatureUrl, `${pin.id}-sig`)}
+                    {/* CHIRURGISCHER EINGRIFF: URL-Übergabe entfernt */}
+                    {renderCodeBox("Spiel-Codes (nuScore)", pin.gameEntryPinsText, `${pin.id}-game`)}
+                    {renderCodeBox("Unterschriften-PINs", pin.signaturePinsText, `${pin.id}-sig`)}
                     
-                    {!pin.gameEntryPinsText && !pin.signaturePinsText && !pin.gameEntryUrl && !pin.signatureUrl && (
+                    {!pin.gameEntryPinsText && !pin.signaturePinsText && (
                       <p className="text-center text-gray-500 py-4 italic">Noch keine Codes hinterlegt.</p>
                     )}
                   </div>
@@ -319,16 +306,6 @@ export const TeamPinsView: React.FC = () => {
                     placeholder="Datum    Heim    Gast    Code..."
                   />
                 </div>
-                <div className="shrink-0 mt-4">
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Portal Link (URL, Optional)</label>
-                  <input
-                    type="text"
-                    value={editingPin.gameEntryUrl || ''}
-                    onChange={e => setEditingPin({ ...editingPin, gameEntryUrl: e.target.value })}
-                    className="w-full border border-gray-300 rounded-xl p-3 focus:border-blue-500 outline-none"
-                    placeholder="https://..."
-                  />
-                </div>
               </div>
 
               {/* Unterschriften */}
@@ -345,16 +322,6 @@ export const TeamPinsView: React.FC = () => {
                     onChange={e => setEditingPin({ ...editingPin, signaturePinsText: e.target.value })}
                     className="w-full border border-gray-300 rounded-xl p-3 font-mono text-sm focus:border-blue-500 outline-none bg-gray-50 whitespace-pre overflow-auto resize-y min-h-[120px]"
                     placeholder="Datum    Heim    Gast    PIN..."
-                  />
-                </div>
-                <div className="shrink-0 mt-4">
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Portal Link (URL, Optional)</label>
-                  <input
-                    type="text"
-                    value={editingPin.signatureUrl || ''}
-                    onChange={e => setEditingPin({ ...editingPin, signatureUrl: e.target.value })}
-                    className="w-full border border-gray-300 rounded-xl p-3 focus:border-blue-500 outline-none"
-                    placeholder="https://..."
                   />
                 </div>
               </div>
