@@ -1,3 +1,4 @@
+// [2026-09-28] - BUGFIX: TypeScript Build-Fehler behoben (ungültige 'title'-Attribute an Lucide-Icons entfernt).
 // [2026-09-28] - UX-FIX: Footer der Team-Kachel für mobile Geräte optimiert (Stacked Layout mit w-full Buttons).
 // [2026-09-28] - UX-FEATURE: Button "Saison planen" (MatchLineupMatrixModal) in Team-Kachel integriert. Sichtbar für Admins und eingetragene Captains.
 // [2026-09-28] - UX-FEATURE: Interaktive Zuweisung von Captains und Stammspielern direkt in den Team-Kacheln (Base & Override Prinzip).
@@ -139,8 +140,8 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ openTeamEditor, canManageMit
                             /* Anzeige der Icons für normale Mitglieder ohne Schreibrecht */
                             (isLineup || isTeamCaptain) && (
                               <div className="flex items-center gap-1.5 px-2 bg-white border-l border-gray-200">
-                                {isLineup && <Star className="w-3.5 h-3.5 text-yellow-500" fill="currentColor" title="Stammspieler" />}
-                                {isTeamCaptain && <Shield className="w-3.5 h-3.5 text-blue-600" fill="currentColor" title="Mannschaftsführer" />}
+                                {isLineup && <Star className="w-3.5 h-3.5 text-yellow-500" fill="currentColor" />}
+                                {isTeamCaptain && <Shield className="w-3.5 h-3.5 text-blue-600" fill="currentColor" />}
                               </div>
                             )
                           )}
