@@ -9,6 +9,7 @@
   ├── project.json
   ├── README.txt
   ├── calendar.ts
+├── Dateibaum erstellen.txt
   ├── .DS_Store
     ├── .DS_Store
     ├── index-CmTLipOL.js
@@ -23,12 +24,16 @@
 ├── firestore.rules
 ├── HANDBUCH.md
 ├── index.html
+├── Microsoft Word - Wie registriere ich mich für PapaToDo V2.docx.pdf
+├── node starten prod.command
+├── node starten.command
 ├── package-lock.json
 ├── package.json
 ├── PAPA_MASTER_MANIFEST.md
   ├── manifest.json
   ├── papatodo-logo.png
 ├── README.md
+├── README.pages
   ├── .DS_Store
   ├── App.css
   ├── App.tsx
@@ -92,10 +97,12 @@
       ├── TemplatesView.tsx
       ├── .DS_Store
         ├── EditableCell.tsx
+        ├── MatchLineupMatrixModal.tsx
         ├── QuickAddHelperRow.tsx
       ├── CsvImportModal.tsx
       ├── GroupFormModal.tsx
       ├── HelperFormModal.tsx
+      ├── MyProfileModal.tsx
       ├── RoleMatrixModal.tsx
         ├── AppUserTab.tsx
         ├── EhrungenTab.tsx
@@ -116,6 +123,7 @@
       ├── createAuthSlice.ts
       ├── createCalendarSlice.ts
       ├── createEventSlice.ts
+      ├── createMatchLineupSlice.ts
       ├── createTaskSlice.ts
       ├── createTeamPinsSlice.ts
       ├── createTeamSlice.ts
@@ -127,4 +135,4 @@
 ├── tsconfig.node.json
 ├── vercel.json
 ├── vite.config.ts
-
+├── Wie registriere ich mich für PapaToDo.pdf

@@ -1,3 +1,4 @@
+// [2026-09-28] - UX-FEATURE: Read-Only Modus für die Saison-Planung. Einfache Team-Mitglieder können die Matrix nun einsehen, aber nicht bearbeiten.
 // [2026-09-28] - BUGFIX: TypeScript Build-Fehler behoben (ungültige 'title'-Attribute an Lucide-Icons entfernt).
 // [2026-09-28] - UX-FIX: Footer der Team-Kachel für mobile Geräte optimiert (Stacked Layout mit w-full Buttons).
 // [2026-09-28] - UX-FEATURE: Button "Saison planen" (MatchLineupMatrixModal) in Team-Kachel integriert. Sichtbar für Admins und eingetragene Captains.
@@ -21,7 +22,6 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ openTeamEditor, canManageMit
   const { teams, helpers, deleteTeam, updateTeam, setFocusedHelperId, user } = useClubStore();
   const [planningTeam, setPlanningTeam] = useState<Team | null>(null);
 
-  // Finde die Helper-ID des aktuell eingeloggten Nutzers (für den Captain-Check)
   const currentUserHelperId = useMemo(() => {
     if (!user || !user.email) return null;
     return helpers.find(h => h.email?.toLowerCase() === user.email.toLowerCase())?.id;
@@ -67,13 +67,15 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ openTeamEditor, canManageMit
     <div className="p-4 sm:p-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {teams.map(team => {
-          // Extrahiere alle Mitglieder, die diesem Team zugeordnet sind, und sortiere sie alphabetisch (Vorname)
           const teamMembers = helpers
             .filter(h => h.teamIds?.includes(team.id))
             .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
           
           const isCaptain = currentUserHelperId && team.captainHelperIds?.includes(currentUserHelperId);
+          const isTeamMember = currentUserHelperId && teamMembers.some(m => m.id === currentUserHelperId);
+          
           const hasFooterAccess = canManageMitglieder || isCaptain;
+          const showMatrixButton = hasFooterAccess || isTeamMember; // Mitglieder dürfen Ansicht sehen
           
           return (
             <div key={team.id} className="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-all flex flex-col h-full">
@@ -155,16 +157,16 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ openTeamEditor, canManageMit
               </div>
               
               {/* Footer: Admin- & Captain-Aktionen (Mobile Optimized) */}
-              {hasFooterAccess && (
+              {showMatrixButton && (
                 <div className="p-3 border-t border-gray-100 flex flex-col gap-2 bg-gray-50 rounded-b-xl">
-                  {/* Primärer Button für Captains & Admins - Volle Breite */}
+                  {/* Primärer Button für Captains, Admins & Team-Mitglieder - Volle Breite */}
                   <button 
                     onClick={() => setPlanningTeam(team)}
-                    className="flex items-center justify-center w-full gap-1.5 px-3 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition shadow-sm"
-                    title="Saison-Planung (Aufstellung) öffnen"
+                    className={`flex items-center justify-center w-full gap-1.5 px-3 py-2 text-sm font-bold text-white rounded-lg transition shadow-sm ${hasFooterAccess ? 'bg-blue-600 hover:bg-blue-700' : 'bg-indigo-500 hover:bg-indigo-600'}`}
+                    title={hasFooterAccess ? "Saison-Planung (Aufstellung) öffnen" : "Saison-Übersicht ansehen"}
                   >
                     <Calendar className="w-4 h-4" />
-                    Saison planen
+                    {hasFooterAccess ? 'Saison planen' : 'Saison-Übersicht'}
                   </button>
                   
                   {/* Sekundäre Buttons für Admins - 50/50 aufgeteilt */}
@@ -199,6 +201,7 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ openTeamEditor, canManageMit
       {planningTeam && (
         <MatchLineupMatrixModal 
           team={planningTeam} 
+          isReadOnly={!(canManageMitglieder || (currentUserHelperId && planningTeam.captainHelperIds?.includes(currentUserHelperId)))}
           onClose={() => setPlanningTeam(null)} 
         />
       )}

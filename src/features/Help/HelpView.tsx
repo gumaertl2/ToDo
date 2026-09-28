@@ -1,14 +1,15 @@
+// [2026-09-28] - UX-FIX: Handbuch um "Teil 8: Saison- & Aufstellungsplanung" (Base & Override, Matrix, Kader-Erinnerungen) für Mannschaftsführer erweitert.
 // [2026-07-24] - UX-FIX: Handbuch um DSGVO Self-Service, dynamische Team-PINs, persistente Kalender-Filter und den Hard-Reset (Cache leeren) erweitert.
 // [2026-05-31] - UX-FEATURE: Best-Practice Workflow (Self-Service für Dienste) in Kalender-Sektion (Teil 2) integriert.
 // [2026-05-31] - UX-FIX: Generische Vereinsbeispiele im gesamten Handbuch konsequent auf Tischtennis-Beispiele (Hallendienst, Getränkeversorgung, Spielbälle, Vereinsmeisterschaft) umgestellt.
 // [2026-05-30] - UX-FIX: Sprachliche Kalibrierung (Nüchterner, professioneller SOP-Ton statt Marketing-Sprech). Euphorie-Wörter ("Magie", "Königsdisziplin", "chirurgisch") entfernt. Komplexe Begriffe ("Endlos-Projekt", "Führender Oberpunkt", "Succession") mit kurzen Definitionen versehen. Einleitung auf primäre Zielgruppe (Vorstand/Admin) fokussiert.
 // [2026-05-30] - UX-FIX: Handbuch auf architektonische Wahrheiten korrigiert. 1. Aufgabenübergabe-Workflow präzisiert. 2. Kanban-Board um Listenansicht ergänzt. 3. "Geisteraufgaben" durch "Qualitätskontrolle" (Protokoll-Blockade) ersetzt.
-// [2026-05-30] - UX-FIX: Handbuch auf 7 praxisnahe Kernbereiche (Use Cases) verdichtet. Neues Konzept des "Persönlichen Dashboards" integriert. 
+// [2026-05-30] - UX-FIX: Handbuch auf praxisnahe Kernbereiche (Use Cases) verdichtet. Neues Konzept des "Persönlichen Dashboards" integriert. 
 // [2026-05-30] - UX-FIX: Akkordeon-Logik komplett entfernt. Permanenter Lesemodus (Single-Page). 
 // 2026-04-18 20:15 - CHIRURGISCHER EINGRIFF: Integration von Teil 9 (Rollen & Berechtigungen)
 // src/features/Help/HelpView.tsx
 import React from 'react';
-import { BookOpen, Target, Calendar, ListTodo, Layers, Printer, Repeat, Lock, ArrowUp } from 'lucide-react';
+import { BookOpen, Target, Calendar, ListTodo, Layers, Printer, Repeat, Lock, ArrowUp, Users } from 'lucide-react';
 
 interface HelpSectionProps {
   id: string;
@@ -107,6 +108,7 @@ export const HelpView: React.FC = () => {
               <li><button onClick={() => scrollToSection('routines')} className="hover:underline text-left">Teil 5: Daueraufgaben & das "Endlos-Projekt"</button></li>
               <li><button onClick={() => scrollToSection('templates')} className="hover:underline text-left">Teil 6: Vorlagen & Die geregelte Aufgabenübergabe</button></li>
               <li><button onClick={() => scrollToSection('security')} className="hover:underline text-left">Teil 7: Sicherheit, Rechte & Rollen-Profile</button></li>
+              <li><button onClick={() => scrollToSection('lineups')} className="hover:underline text-left">Teil 8: Saison- & Aufstellungsplanung (Für Captains)</button></li>
             </ul>
           </div>
 
@@ -304,6 +306,39 @@ export const HelpView: React.FC = () => {
             <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-lg">
               <h4 className="font-bold text-indigo-900 mb-2">Datensicherung: Der Soft-Delete</h4>
               <p className="text-sm text-indigo-800">Gelöschte Datensätze (z.B. Agenda-Punkte) werden nicht physisch vernichtet. Sie erhalten intern den Status "TRASH" und werden lediglich aus der Benutzeroberfläche ausgeblendet. Administratoren haben Zugriff auf diesen Papierkorb und können versehentlich gelöschte Elemente jederzeit wiederherstellen.</p>
+            </div>
+          </HelpSection>
+
+          {/* NEU: Kapitel 8 für die Aufstellungsplanung */}
+          <HelpSection id="lineups" title="Teil 8: Saison- & Aufstellungsplanung (Für Captains)" icon={Users} audience="board">
+            <p className="font-bold text-lg mb-4 text-blue-900">Wofür ist das da? Für Mannschaftsführer (Captains), um den Kader für externe Punktspiele dynamisch zu steuern und das Team rechtzeitig zu informieren.</p>
+
+            <p className="mb-4 text-sm leading-relaxed">PapaToDo nutzt ein intelligentes "Base & Override" System. Das bedeutet: Das System geht standardmäßig davon aus, dass bei jedem Spiel der reguläre Stammkader antritt. Der Captain muss nur dann eingreifen, wenn jemand ausfällt oder Joker aushelfen ("Override").</p>
+
+            <div className="space-y-4 mb-8 text-sm">
+              <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-sm border-l-4 border-l-blue-500">
+                <strong className="text-blue-700 block mb-1">Schritt 1: Die Matrix öffnen</strong>
+                Gehen Sie unter "User & Gruppen" in den Reiter <strong>Teams</strong>. Bei Mannschaften, deren Captain Sie sind, sehen Sie den Button <strong>Saison planen</strong>. Ein Klick öffnet die Planungs-Matrix für alle anstehenden Spiele (aus dem verknüpften ICS-Kalender-Abo).
+              </div>
+              <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-sm border-l-4 border-l-blue-500">
+                <strong className="text-blue-700 block mb-1">Schritt 2: Joker & Abweichungen eintragen</strong>
+                In der Matrix sehen Sie in jeder Zeile ein Spiel. Fehlt ein Stammspieler, entfernen Sie den Haken. Über den Button <strong>+ Weiterer Spieler</strong> können Sie externe Joker aus dem Verein für dieses spezielle Spiel einfliegen lassen und anhaken. Die Speicherung erfolgt lautlos im Hintergrund.
+              </div>
+              <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-sm border-l-4 border-l-blue-500">
+                <strong className="text-blue-700 block mb-1">Schritt 3: Last-Minute Änderungen im Kalender</strong>
+                Meldet sich ein Spieler am Vorabend ab, müssen Sie nicht die komplette Matrix öffnen. Klicken Sie einfach im <strong>Vereinskalender</strong> auf das entsprechende Spiel. Dort sehen Sie den berechneten Kader und einen Button "Ändern", der Sie direkt in den Fokus-Modus für dieses eine Spiel führt.
+              </div>
+            </div>
+
+            <div className="bg-green-50 border border-green-100 p-5 rounded-lg mb-6">
+              <h4 className="font-bold text-green-900 mb-2">WhatsApp-Export & Benachrichtigungen</h4>
+              <p className="text-sm text-green-800 mb-2">Damit das Team Bescheid weiß, können Sie in der Termin-Detailansicht (im Kalender) auf das kleine <strong>WhatsApp-Symbol</strong> neben dem Kader klicken. Das System generiert sofort einen fertigen Text für Ihre WhatsApp-Mannschaftsgruppe (inklusive Spielort, Uhrzeit und den aktuell eingeteilten Spielern).</p>
+              <p className="text-sm text-green-800">Wenn Administratoren automatisierte Erinnerungen für den Kalender hinterlegt haben, wird diese berechnete Aufstellung zudem automatisch an alle formellen System-Erinnerungen für dieses Spiel angehängt.</p>
+            </div>
+            
+            <div className="bg-gray-50 border border-gray-200 p-5 rounded-lg">
+              <h4 className="font-bold text-gray-900 mb-2">Datenschutz-Hinweis</h4>
+              <p className="text-sm text-gray-800">Aufstellungen sind ausschließlich für eingeloggte Vereinsmitglieder sichtbar. Gäste und Besucher, die über einen öffentlichen Link auf den Vereinskalender zugreifen, sehen lediglich den Termin und den Spielort, jedoch aus DSGVO-Gründen niemals die Spielernamen.</p>
             </div>
           </HelpSection>
 

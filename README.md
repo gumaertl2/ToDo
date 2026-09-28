@@ -1,3 +1,5 @@
+// [2026-09-28] - MASTER SYNC: Datei-Baum (TEIL 8) exakt mit PAPA_MASTER_MANIFEST synchronisiert (Fehlende Modale, Tabs, HelpView und DashboardView ergänzt).
+// [2026-09-28] - MASTER SYNC: Modul 'Aufstellungsplanung' (Base & Override, Lineup Matrix, WhatsApp-Kader) in Architektur & Datei-Baum dokumentiert.
 // [2026-07-23] - MASTER SYNC: DSGVO Clickwrap, Nutzer-Self-Service (Mein Profil) und Auto-Benachrichtigungen für Stammdaten-Updates dokumentiert.
 // [2026-07-22] - MASTER SYNC: DSGVO Passiv-Mitglieder-Firewall (gebunden an viewEhrungen) reaktiv im Store implementiert und dokumentiert.
 // [2026-06-11] - MASTER SYNC: Domain-Language geklärt. Definition von 'App-Nutzer' (users) und 'Mitglieder & Helfer' (helpers) in TEIL 6 hinzugefügt, um eine saubere Trennung der UX/UI Ansichten (Dashboard) zu garantieren.
@@ -160,9 +162,10 @@ Kein automatcher E-Mail-Spam! Der User (z.B. der Vorstand) versendet Erinnerunge
 ### 6. Wettkampf-Tresor (Team-PINs)
 Sichere Ablage von Passwörtern, Zugangscodes oder Kabinenschlüsseln. Der Zugriff ist an strikte Berechtigungen gekoppelt (nur Admins oder befugte Trainer sehen den Klartext).
 
-### 7. Externe Kalender (ICS) & Sichtbarkeit
-PapaToDo kann externe Kalender (z.B. vom BFV oder Google) abonnieren. An diese importierten Termine (z.B. ein Heimspiel) können dann intern "Dienste" (z.B. Hallenverkauf) angehängt und Personen zugewiesen werden.
-Der gesamte Kalender kann via iFrame/Web-Link schreibgeschützt für alle Vereinsmitglieder (ohne Login) freigegeben werden.
+### 7. Externe Kalender (ICS) & Aufstellungsplanung (Base & Override)
+PapaToDo kann externe Kalender (z.B. vom BFV oder Google) abonnieren. An diese importierten Termine (z.B. ein Auswärtsspiel) können dann intern "Dienste" (z.B. Fahren) angehängt und Personen zugewiesen werden.
+*   **Base & Override Aufstellung:** Für verknüpfte Kalender-Abos können Team-Captains eine Matrix öffnen ("Saison planen"). Das System nutzt den im Team hinterlegten Stammkader ("Base") und erlaubt dem Captain, pro Spieltag per Klick Abweichungen, Ausfälle oder Joker ("Override") als Schatten-Akte zu speichern.
+*   **Live-Integration:** Die berechnete finale Aufstellung wird automatisch in der Termin-Detailansicht für die Spieler angezeigt und bei aktivierten WhatsApp-Erinnerungen nahtlos an den Info-Text angehängt. Der öffentliche Kalender bleibt aus DSGVO-Gründen für Gäste (ohne Login) von diesen Aufstellungen isoliert.
 
 ### 8. Soft-Delete (Trash) & Papierkorb-Management
 Gelöschte Elemente (Agenda-Punkte, Aufgaben) werden nicht physisch aus der Datenbank entfernt, sondern erhalten den Status `TRASH` und einen `deletedAt` Zeitstempel. Sie werden in der regulären Agenda und im Kanban-Board ausgeblendet, können aber von Administratoren über die `OrphanCleanupModal` wiederhergestellt oder endgültig (hard-delete) bereinigt werden.
@@ -224,6 +227,7 @@ Um Verwirrung in der UI und Logik zu vermeiden, gibt es eine strikte Trennung:
 * `calendar_subscriptions`: Abonnierte externe ICS-Feeds.
 * `team_pins`: Der Passwort-Tresor.
 * `templates`: Wiederverwendbare Vorlagen für Routinen.
+* `match_lineups`: Schatten-Akten (Overrides) für dynamische Aufstellungs-Matrizen an Spieltagen.
 
 ---
 
@@ -254,27 +258,35 @@ Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der e
 ### State Management (Store)
 * `src/store/useClubStore.ts`: Der Master-Zustand. Führt alle Slices zusammen.
 * `src/store/slices/*`: Die modularisierten Store-Fragmente (Auth, User, Event, Task, etc.). Hier passiert 90% der Datenbank-Kommunikation mit Firestore.
+  * **WICHTIG:** `createMatchLineupSlice.ts`: Managt die Schatten-Akten für Aufstellungen inkl. Optimistic UI Updates, um das UI nicht durch Netzwerk-Delays zu blockieren.
 
 ### Features & UI
 
 * **Admin:** `OrphanCleanupModal.tsx` (Papierkorb-Verwaltung und Soft-Delete Cleanup).
 * **Auth:** `AuthGuard.tsx` (Routenschutz), `LoginView.tsx` (Firebase Auth), `DsgvoClickwrap.tsx` (Privacy-Gate).
-* **Dashboard:** `WelcomeDashboard.tsx` (Die rollenbasierte Kommandozentrale).
+* **Dashboard:** `WelcomeDashboard.tsx` (Die rollenbasierte Kommandozentrale), `DashboardView.tsx`.
 * **Events:** `CalendarView.tsx` (Interner Kalender), `EventDetailView.tsx` (Live-Protokollführung), `ProtocolEditor.tsx`, `EventsView.tsx`.
   * *Kalender-Tools:* `CalendarBulkEventModal.tsx`, `CalendarExportModal.tsx`, `CalendarIcsDetailModal.tsx`, `CalendarSubscriptionModal.tsx`.
+  * *Event-Tools:* `EventAgendaList.tsx`, `EventDetailHeader.tsx`, `EventFormModal.tsx`, `EventTemplateSidebar.tsx`.
   * *Extern:* `PublicCalendarEmbed.tsx` (Öffentliche Ansicht).
+* **Help:** `HelpView.tsx` (Integriertes Handbuch & Hilfe).
 * **Layout:** `AppLayout.tsx` (Responsive Shell & Mobile-Menü).
-* **Reminders:** `RemindersView.tsx` (WhatsApp-Kommandozentrale & Snooze-Logik).
+* **Reminders:** `RemindersView.tsx` (WhatsApp-Kommandozentrale, Snooze-Logik & Auto-Kader Generator).
 * **Reports:** `ReportsView.tsx` (Statistik & Fristen-Radar).
-* **Tasks:** `TasksView.tsx` (Board/Liste), `KanbanBoard.tsx`, `TasksListView.tsx`, `TaskHistoryModal.tsx`.
+* **Tasks:** `TasksView.tsx` (Board/Liste), `KanbanBoard.tsx`, `TasksListView.tsx`, `TaskHistoryModal.tsx`, `TaskCard.tsx`, `TasksToolbar.tsx`.
 * **TeamPins:** `TeamPinsView.tsx` (Wettkampf-Tresor & PIN-Freigabe).
 * **Templates:** `TemplatesView.tsx` (Vorlagen-Management).
-* **Users:** `UsersView.tsx` (Nutzer & Helfer), `UserSuccessionModal.tsx` (Amtsübergabe), `MyProfileModal.tsx` (Nutzer Self-Service), `tabs/` (Mitglieder, Rollen, Ehrungen, App-Nutzer).
-  * *`tabs/RollenTab.tsx`:* Nutzt eine dynamische Baumstruktur mit **Kontext-Erhalt** und **+/- Filter**, um Daueraufgaben übersichtlich darzustellen.
+* **Users:** `UsersView.tsx` (Nutzer & Helfer), `MyProfileModal.tsx` (Nutzer Self-Service), `RoleMatrixModal.tsx`.
+  * *Modale:* `CsvImportModal.tsx`, `GroupFormModal.tsx`, `HelperFormModal.tsx`, `TeamFormModal.tsx`, `UserFormModal.tsx`, `UserSuccessionModal.tsx`.
+  * *`tabs/`:* `AppUserTab.tsx`, `EhrungenTab.tsx`, `MitgliederTab.tsx`, `RollenTab.tsx`, `TeamsTab.tsx`, `VorstandTab.tsx`.
+    * *WICHTIG:* `TeamsTab.tsx` verwaltet Stammkader, Captains und bietet den Einstieg in die Saison-Planung.
+  * *`components/`:* `EditableCell.tsx`, `QuickAddHelperRow.tsx`.
+    * *WICHTIG:* `MatchLineupMatrixModal.tsx` (Base & Override Planungs-Matrix für Captains).
 * **Shared:** `ItemFormModal.tsx` (Universal-Editor), `AgendaItemRow.tsx` (Listenansicht), `ItemCard.tsx` (Kanban-Ansicht), `RichText.tsx`.
-  * *AgendaItem Sub-Komponenten:* Desktop Power-Features (`InlineEditors.tsx`, `ItemMetadata.tsx`, `ItemStatusSection.tsx`, `RowContextMenu.tsx`).
-  * *ItemForm Sub-Komponenten:* `AssigneePicker.tsx`, `ReminderSettings.tsx`, `RoutineSettings.tsx`.
-  * *Utils:* `textUtils.tsx` (Highlighting & Formatierung).
+  * *`components/AgendaItem/`:* `InlineEditors.tsx`, `ItemMetadata.tsx`, `ItemStatusSection.tsx`, `RowContextMenu.tsx` (Desktop Power-Features).
+  * *`components/ItemForm/`:* `AssigneePicker.tsx`, `ReminderSettings.tsx`, `RoutineSettings.tsx`.
+  * *`components/`:* `SmartEntityPicker.tsx`.
+  * *`utils/`:* `textUtils.tsx` (Highlighting & Formatierung).
 
 ---
 
@@ -286,5 +298,5 @@ Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der e
 4.  `npm run dev` startet den lokalen Vite-Server.
 5.  `npm run build` führt einen strengen TypeScript Check (`tsc -b`) aus und baut das Production-Bundle.
 
-*Stand: 23.07.2026 - Protokoll: WelcomeDashboard, Domain Language, Fate-Binding & DSGVO-Self-Service*
+*Stand: 28.09.2026 - Protokoll: WelcomeDashboard, Fate-Binding, DSGVO-Self-Service & Base/Override Aufstellungen*
 // --- END OF FILE ---

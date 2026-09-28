@@ -1,4 +1,5 @@
-// [2026-09-28] - UX-FEATURE: 'focusedEventId' Prop hinzugefügt. Zieht ein bestimmtes Spiel an die Spitze der Matrix und hebt es farblich hervor (Fokus-Modus für Detailansicht).
+// [2026-09-28] - UX-FEATURE: 'isReadOnly' Prop hinzugefügt. Erlaubt einfachen Team-Mitgliedern die Ansicht der Matrix, ohne Schreibrechte zu gewähren.
+// [2026-09-28] - UX-FEATURE: 'focusedEventId' Prop hinzugefügt. Zieht ein bestimmtes Spiel an die Spitze der Matrix und hebt es farblich hervor.
 // [2026-09-28] - SEC-FIX: ID-Sanitizer hinzugefügt, um iCal-Sonderzeichen (wie '/') für Firestore-Pfade unschädlich zu machen.
 // [2026-09-28] - BUGFIX: Strikte Auswertung von result.success beim Speichern (verhindert unsichtbare Firebase-Permission-Fehler).
 // [2026-09-28] - BUGFIX: Optimistic UI (lokaler State) implementiert, damit Checkboxen sofort reagieren.
@@ -11,6 +12,7 @@ import type { Team, MatchLineup, Helper } from '../../../core/types/models';
 interface MatchLineupMatrixModalProps {
   team: Team;
   focusedEventId?: string;
+  isReadOnly?: boolean; // <-- NEU: Steuert den Ansichts-Modus
   onClose: () => void;
 }
 
@@ -19,7 +21,7 @@ type PlayerCategory = 'STAMM' | 'KADER' | 'EXTERN';
 // Hilfsfunktion: Macht iCal-UIDs sicher für Firestore Dokument-Pfade
 const sanitizeId = (id: string) => id.replace(/[\/\\.#$\[\]]/g, '_');
 
-export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ team, focusedEventId, onClose }) => {
+export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ team, focusedEventId, isReadOnly, onClose }) => {
   const { helpers, calendarSubscriptions, matchLineups, saveMatchLineup } = useClubStore();
   const [tempJokers, setTempJokers] = useState<string[]>([]);
   const [isJokerMenuOpen, setIsJokerMenuOpen] = useState(false);
@@ -73,7 +75,6 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
     if (!linkedSubscription || !linkedSubscription.cachedEvents) return [];
     const sorted = [...linkedSubscription.cachedEvents].sort((a, b) => a.startTime - b.startTime);
     
-    // FOKUS-MODUS: Zieht das angeklickte Spiel ganz nach oben an Index 0
     if (focusedEventId) {
       const focusIndex = sorted.findIndex(e => sanitizeId(e.uid) === focusedEventId);
       if (focusIndex > -1) {
@@ -86,13 +87,14 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
   }, [linkedSubscription, focusedEventId]);
 
   const handleTogglePlayer = async (rawEventId: string, helperId: string, currentActiveIds: string[]) => {
+    if (isReadOnly) return; // Doppelter Schutz
+
     const safeEventId = sanitizeId(rawEventId);
     
     const newActiveIds = currentActiveIds.includes(helperId)
       ? currentActiveIds.filter(id => id !== helperId)
       : [...currentActiveIds, helperId];
 
-    // Optimistic Update
     setLocalOverrides(prev => ({ ...prev, [safeEventId]: newActiveIds }));
 
     const newLineup: MatchLineup = {
@@ -132,7 +134,9 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
           <div>
             <h2 className="text-lg font-bold text-gray-900 flex items-center">
               <CalendarIcon className="w-5 h-5 mr-2 text-blue-600" />
-              {focusedEventId ? 'Aufstellung ändern' : `Saison-Planung: ${team.name}`}
+              {focusedEventId 
+                ? (isReadOnly ? 'Kader-Übersicht' : 'Aufstellung ändern') 
+                : (isReadOnly ? `Saison-Übersicht: ${team.name}` : `Saison-Planung: ${team.name}`)}
             </h2>
             {linkedSubscription && (
               <p className="text-xs text-gray-500 mt-1">Team: {team.name} | Abo: {linkedSubscription.name}</p>
@@ -140,7 +144,8 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
           </div>
           
           <div className="flex items-center gap-3 w-full sm:w-auto">
-            {linkedSubscription && (
+            {/* Joker Button nur für Captains sichtbar */}
+            {!isReadOnly && linkedSubscription && (
               <div className="relative">
                 <button 
                   onClick={() => setIsJokerMenuOpen(!isJokerMenuOpen)}
@@ -289,14 +294,16 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                           <td 
                             key={m.id} 
                             onClick={() => {
-                              if (!isPast || isFocusedRow) handleTogglePlayer(event.uid, m.id, activePlayers);
+                              if (!isReadOnly && (!isPast || isFocusedRow)) handleTogglePlayer(event.uid, m.id, activePlayers);
                             }}
                             className={`p-0 align-middle ${borderClasses} border-r border-gray-100 ${rowBg} transition-colors ${
-                              (isPast && !isFocusedRow)
-                                ? 'cursor-not-allowed opacity-50' 
-                                : 'cursor-pointer group-hover:bg-blue-100/60 hover:bg-blue-200/80'
+                              isReadOnly
+                                ? 'cursor-default opacity-80 hover:bg-gray-50'
+                                : ((isPast && !isFocusedRow)
+                                  ? 'cursor-not-allowed opacity-50' 
+                                  : 'cursor-pointer group-hover:bg-blue-100/60 hover:bg-blue-200/80')
                             }`}
-                            title={isPast && !isFocusedRow ? 'Vergangenheit (Gesperrt)' : 'Aufstellung umschalten'}
+                            title={isReadOnly ? 'Nur Ansicht' : (isPast && !isFocusedRow ? 'Vergangenheit (Gesperrt)' : 'Aufstellung umschalten')}
                           >
                             <div className="w-full h-full min-h-[60px] flex flex-col items-center justify-center">
                               {isPlaying ? (
@@ -316,9 +323,13 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
           )}
         </div>
         
+        {/* Footer: Schließen vs. Speichern */}
         <div className="p-4 border-t border-gray-200 bg-white flex justify-end shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] relative z-40">
-          <button onClick={onClose} className="w-full sm:w-auto px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-sm transition-colors text-sm">
-            Speichern & Schließen
+          <button 
+            onClick={onClose} 
+            className={`w-full sm:w-auto px-6 py-2.5 text-white rounded-lg font-bold shadow-sm transition-colors text-sm ${isReadOnly ? 'bg-gray-600 hover:bg-gray-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+          >
+            {isReadOnly ? 'Ansicht schließen' : 'Speichern & Schließen'}
           </button>
         </div>
       </div>

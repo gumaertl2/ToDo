@@ -1,3 +1,4 @@
+// [2026-09-28] - UX-FEATURE: Read-Only Modus der Aufstellungs-Matrix auch im Kalender-Detail für reguläre Teammitglieder freigeschaltet.
 // [2026-09-28] - BUGFIX: Titel-Abgleich repariert. (Emojis wie 🏠/🚌 aus dem Kalender verhinderten den exakten Titel-Match, wodurch die Schatten-Akte nicht gefunden wurde).
 // [2026-09-28] - UX-FIX: Das vollständige Datum wird nun wieder prominent direkt unter dem Titel angezeigt.
 // [2026-09-28] - FEATURE: Lineup-Integration (Aufstellung) implementiert. Zeigt nun für Matches den Kader (Base & Overrides) an.
@@ -37,10 +38,16 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
   const teamId = sub?.reminderRecipientTeamIds?.[0];
   const teamContext = teamId ? teams.find(t => t.id === teamId) : null;
   
-  const myHelperId = helpers.find(h => h.email?.toLowerCase() === user?.email?.toLowerCase())?.id;
+  const myHelper = helpers.find(h => h.email?.toLowerCase() === user?.email?.toLowerCase());
+  const myHelperId = myHelper?.id;
+  
   const isAdmin = user?.roleProfileId === 'pro-admin';
   const isCaptain = teamContext?.captainHelperIds?.includes(myHelperId || '');
   const canManageLineup = isAdmin || isCaptain;
+  const isTeamMember = myHelperId && teamContext ? myHelper?.teamIds?.includes(teamContext.id) : false;
+  
+  // Darf der Nutzer den Matrix-Button überhaupt sehen? (Captain oder Mitglied)
+  const showMatrixButton = canManageLineup || isTeamMember;
 
   // FIX: Wir nutzen 'includes' anstelle von '===', da der angezeigte Event-Titel evtl. 🏠/🚌 Emojis enthält
   const cachedEvent = sub?.cachedEvents?.find(ce => 
@@ -136,7 +143,6 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
                 {event.title.replace(/\s\([^)]+\)$/, '')}
               </h3>
               
-              {/* NEU: Das Datum ist wieder prominent unter dem Titel */}
               <p className="text-xs font-bold text-gray-500 mt-1.5 uppercase tracking-wider">
                 {event.start.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
               </p>
@@ -184,10 +190,16 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
                       <button onClick={handleWhatsAppShare} className="text-green-600 hover:text-green-700 hover:bg-green-50 p-1.5 rounded-lg transition-colors flex items-center" title="Über WhatsApp in der Mannschaftsgruppe teilen">
                         <MessageCircle className="w-4 h-4" />
                       </button>
-                      {canManageLineup && (
-                        <button onClick={() => setIsMatrixOpen(true)} className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 p-1.5 rounded-lg transition-colors flex items-center" title="Aufstellung ändern (Matrix öffnen)">
-                          <Edit3 className="w-4 h-4 mr-1.5" />
-                          <span className="text-xs font-bold">Ändern</span>
+                      
+                      {/* CHIRURGISCHER EINGRIFF: Dynamischer Matrix-Button (Ansicht vs. Ändern) */}
+                      {showMatrixButton && (
+                        <button 
+                          onClick={() => setIsMatrixOpen(true)} 
+                          className={`p-1.5 rounded-lg transition-colors flex items-center ${canManageLineup ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-50' : 'text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50'}`} 
+                          title={canManageLineup ? "Aufstellung ändern (Matrix öffnen)" : "Saison-Übersicht ansehen"}
+                        >
+                          {canManageLineup ? <Edit3 className="w-4 h-4 mr-1.5" /> : <CalIcon className="w-4 h-4 mr-1.5" />}
+                          <span className="text-xs font-bold">{canManageLineup ? 'Ändern' : 'Ansicht'}</span>
                         </button>
                       )}
                     </div>
@@ -235,11 +247,12 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* MATRIX MODAL RENDERER (Nur wenn der Captain "Ändern" klickt) */}
+      {/* MATRIX MODAL RENDERER (Read-Only Status wird live durchgereicht) */}
       {isMatrixOpen && teamContext && (
         <MatchLineupMatrixModal 
           team={teamContext} 
           focusedEventId={safeEventId || undefined} 
+          isReadOnly={!canManageLineup}
           onClose={() => setIsMatrixOpen(false)} 
         />
       )}
