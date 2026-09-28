@@ -1,11 +1,7 @@
+// [2026-09-28] - SEC-FIX: matchLineups in den Logout-Store-Reset aufgenommen, um Geister-Daten nach Account-Wechsel zu verhindern.
 // [2026-07-26] - BUGFIX: 'Gast' Hardcoding beim resolveUserProfile Fallback auf 'Mitglied' korrigiert.
 // [2026-06-11] - TYP-SICHERHEIT: Globalen StoreState importiert und (set as any) im Logout entfernt. Der Store-Reset ist jetzt 100% typensicher.
 // [2026-06-11] - ARCHITEKTUR-FIX: Massives Code-Duplikat für Profil-Ermittlung in zentrale 'resolveUserProfile'-Funktion ausgelagert. Logout-Funktion auf dynamisches 'unsubscribeAll'-Muster umgestellt.
-// [2026-05-14 14:15] - FEATURE: Gastzugänge loggen nun hasAppAccess und lastAppLoginAt ins Helfer-Profil
-// [2026-04-25 10:00] - UX-FIX: Auto-Resend für Bestätigungslinks und sprechende Fehler bei Doppel-Registrierung
-// [2026-04-24 10:30] - SEC-FIX: Harten Türsteher (E-Mail Verifizierung) eingebaut & Gast-Login für Helfer aktiviert
-// [2026-04-20 18:05] - FEATURE: lastActivityAt Zeitstempel beim App-Initialisieren aktualisieren
-// --- START OF FILE ---
 // src/store/slices/createAuthSlice.ts
 import type { StateCreator } from 'zustand';
 import type { User } from '../../core/types/models';
@@ -13,7 +9,6 @@ import { auth, db } from '../../services/firebase';
 import { onAuthStateChanged, signOut, signInWithEmailAndPassword, sendPasswordResetEmail, createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { collection, query, where, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
 import type { Result } from '../../core/types/shared';
-
 import type { StoreState } from '../useClubStore';
 
 export interface AuthSlice {
@@ -35,7 +30,7 @@ async function resolveUserProfile(firebaseUser: { uid: string, email: string | n
   
   const q = query(collection(db, 'users'), where('email', '==', normalizedEmail));
   const querySnapshot = await getDocs(q);
-
+  
   let userData: User | null = null;
   let userDocId: string | null = null;
   let helperDocId: string | null = null;
@@ -46,6 +41,7 @@ async function resolveUserProfile(firebaseUser: { uid: string, email: string | n
   } else {
     const docRef = doc(db, 'users', firebaseUser.uid);
     const docSnap = await getDoc(docRef);
+    
     if (docSnap.exists()) {
       userDocId = firebaseUser.uid;
       userData = docSnap.data() as User;
@@ -62,7 +58,6 @@ async function resolveUserProfile(firebaseUser: { uid: string, email: string | n
           schemaVersion: '1.0',
           name: helperData.name || 'Helfer',
           amt: 'Externer Helfer',
-          // CHIRURGISCHER EINGRIFF: Die Rolle heißt nun Mitglied, nicht mehr Gast
           rolle: 'Mitglied',
           email: normalizedEmail,
           telefon: helperData.telefon || '',
@@ -93,7 +88,7 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
   user: null,
   isAuthenticated: false,
   isAuthLoading: true,
-  
+
   initializeAuth: () => {
     onAuthStateChanged(auth, async (firebaseUser) => {
       set({ isAuthLoading: true });
@@ -125,7 +120,7 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
       }
     });
   },
-  
+
   login: async (email, pass) => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, pass);
@@ -152,7 +147,7 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
       return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
     }
   },
-  
+
   register: async (email, pass) => {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
@@ -169,15 +164,17 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
       return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
     }
   },
-  
+
   logout: async () => {
     const store = get() as any;
+    
+    // Alle Firebase-Listener sicher trennen
     Object.keys(store).forEach(key => {
       if (key.startsWith('unsub') && typeof store[key] === 'function') {
         store[key]();
       }
     });
-
+    
     await signOut(auth);
     
     set({ 
@@ -192,10 +189,11 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
       groups: [],
       templates: [],
       calendarEvents: [],
-      calendarSubscriptions: []
+      calendarSubscriptions: [],
+      matchLineups: [] // <-- NEU: Schatten-Akten beim Logout sicher aus dem Speicher löschen
     });
   },
-  
+
   resetPassword: async (email) => {
     try {
       await sendPasswordResetEmail(auth, email);

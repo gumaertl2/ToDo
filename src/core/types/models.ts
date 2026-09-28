@@ -1,29 +1,31 @@
-// [2026-07-28] - SCHEMA: 'hasWrittenDsgvoConsent' (Papierakte) und 'hasYouthWorkClearance' (Unbedenklichkeit Jugendarbeit) zum Helper hinzugefügt.
-// [2026-07-27] - SEC-FEATURE: Neues dediziertes Recht 'viewJugend' für den DSGVO-konformen Schutz von Minderjährigen-Daten hinzugefügt.
-// [2026-07-22] - SCHEMA: Audit-Trail Felder (consentConfirmedAt & consentConfirmedBy) für DSGVO-Clickwrap hinzugefügt.
-// [2026-06-11] - ARCHITEKTUR-FIX: Feld 'isHistorical' zu AgendaItem hinzugefügt (Fate-Binding). Löst das Container-Kosmetik-Problem und verhindert Waisenkinder.
-// [2026-05-31] - FEATURE: 'completedAt' zu AgendaItem hinzugefügt, um das tatsächliche Erledigungsdatum von der Frist (dueDate) zu trennen.
-// [2026-05-21] - BUGFIX: isPublic zu ClubEvent hinzugefügt, um "Auf Homepage zeigen" strikt von "Agenda veröffentlicht" (isPublished) zu trennen.
-// [2026-05-16] - FEATURE: reminderRecipient Arrays für in-app Erinnerungen bei Terminen und Abos ergänzt
-// [2026-05-15] - FEATURE: Option B - arrays für Team-IDs in Events, Tasks und Pins ergänzt
-// [2026-05-15] - FEATURE: Option B (Sauberer Schnitt) - Team-Logik für Mitglieder hinzugefügt
+// [2026-09-28] - SCHEMA: 'captainUserIds' in 'captainHelperIds' ge ndert, um die Rechteverwaltung direkt an die Mitgliedsakte (Helper) zu kn pfen.
+// [2026-09-28] - SCHEMA: 'defaultLineupHelperIds' zum Team hinzugef gt. Neues Modell 'MatchLineup' f r Spieltags-Ausnahmen (Schatten-Akte) erstellt.
+// [2026-07-28] - SCHEMA: 'hasWrittenDsgvoConsent' (Papierakte) und 'hasYouthWorkClearance' (Unbedenklichkeit Jugendarbeit) zum Helper hinzugef gt.
+// [2026-07-27] - SEC-FEATURE: Neues dediziertes Recht 'viewJugend' f r den DSGVO-konformen Schutz von Minderj hrigen-Daten hinzugef gt.
+// [2026-07-22] - SCHEMA: Audit-Trail Felder (consentConfirmedAt & consentConfirmedBy) f r DSGVO-Clickwrap hinzugef gt.
+// [2026-06-11] - ARCHITEKTUR-FIX: Feld 'isHistorical' zu AgendaItem hinzugef gt (Fate-Binding). L st das Container-Kosmetik-Problem und verhindert Waisenkinder.
+// [2026-05-31] - FEATURE: 'completedAt' zu AgendaItem hinzugef gt, um das tats chliche Erledigungsdatum von der Frist (dueDate) zu trennen.
+// [2026-05-21] - BUGFIX: isPublic zu ClubEvent hinzugef gt, um "Auf Homepage zeigen" strikt von "Agenda ver ffentlicht" (isPublished) zu trennen.
+// [2026-05-16] - FEATURE: reminderRecipient Arrays f r in-app Erinnerungen bei Terminen und Abos erg nzt
+// [2026-05-15] - FEATURE: Option B - arrays f r Team-IDs in Events, Tasks und Pins erg nzt
+// [2026-05-15] - FEATURE: Option B (Sauberer Schnitt) - Team-Logik f r Mitglieder hinzugef gt
 // 2026-04-18 19:00 - FEATURE: Trennung von App-Nutzern und Rollen
-// 2026-04-18 21:45 - FIX: RBAC Rechte (viewEhrungen, manageMitglieder) zum UserPermissions Interface hinzugefügt
-// 2026-04-20 18:00 - FEATURE: lastActivityAt Feld für App-Nutzer ergänzt
-// 2026-04-22 19:40 - FEATURE: Detaillierte Anwesenheits-Felder (Entschuldigt/Unentschuldigt) für Protokolle
-// 2026-04-22 20:10 - FEATURE: protocolIndex Feld für AgendaItems hinzugefügt
-// 2026-04-23 15:30 - FEATURE: Feld telefonEltern bei Helper hinzugefügt
+// 2026-04-18 21:45 - FIX: RBAC Rechte (viewEhrungen, manageMitglieder) zum UserPermissions Interface hinzugef gt
+// 2026-04-20 18:00 - FEATURE: lastActivityAt Feld f r App-Nutzer erg nzt
+// 2026-04-22 19:40 - FEATURE: Detaillierte Anwesenheits-Felder (Entschuldigt/Unentschuldigt) f r Protokolle
+// 2026-04-22 20:10 - FEATURE: protocolIndex Feld f r AgendaItems hinzugef gt
+// 2026-04-23 15:30 - FEATURE: Feld telefonEltern bei Helper hinzugef gt
 // 2026-04-24 06:45 - FEATURE: 1-Level Aufgaben-Hierarchie (isSubItem, parentItemId) implementiert
-// 2026-04-24 22:00 - SCHEMA: isTemplate Feld hinzugefügt, um beliebige ItemTypes als Vorlage zu erlauben
-// 2026-04-30 10:00 - SEC-FEATURE: Berechtigung 'viewAllReminders' für datenschutzkonforme Erinnerungsansicht ergänzt
-// 2026-04-30 16:45 - FEATURE: Wettkampf-Tresor (TeamPins) und zugehörige Rechte hinzugefügt
-// 2026-04-30 18:10 - FEATURE: Feld emailEltern bei Helper (Mitgliedern) hinzugefügt
-// 2026-05-02 09:37 - SCHEMA: 'half_yearly' zu den Recurrence-Patterns für Events und Routinen hinzugefügt
-// 2026-05-02 10:00 - SCHEMA: Relative Terminierung für Unteraufgaben (leadTimeUnit) angepasst
-// 2026-05-11 18:40 - LOGIK-FIX: 'viewRoles' ist nun ein reines Lese-Recht. Schreibrechte für Rollen hängen nun an 'viewAppUsers'.
+// 2026-04-24 22:00 - SCHEMA: isTemplate Feld hinzugef gt, um beliebige ItemTypes als Vorlage zu erlauben
+// 2026-04-30 10:00 - SEC-FEATURE: Berechtigung 'viewAllReminders' f r datenschutzkonforme Erinnerungsansicht erg nzt
+// 2026-04-30 16:45 - FEATURE: Wettkampf-Tresor (TeamPins) und zugeh rige Rechte hinzugef gt
+// 2026-04-30 18:10 - FEATURE: Feld emailEltern bei Helper (Mitgliedern) hinzugef gt
+// 2026-05-02 09:37 - SCHEMA: 'half_yearly' zu den Recurrence-Patterns f r Events und Routinen hinzugef gt
+// 2026-05-02 10:00 - SCHEMA: Relative Terminierung f r Unteraufgaben (leadTimeUnit) angepasst
+// 2026-05-11 18:40 - LOGIK-FIX: 'viewRoles' ist nun ein reines Lese-Recht. Schreibrechte f r Rollen h ngen nun an 'viewAppUsers'.
 // 2026-05-13 15:45 - CHIRURGISCHER EINGRIFF: Soft-Delete (TRASH) implementiert und ungenutzte Rechte entfernt
-// 2026-05-14 14:20 - FEATURE: hasAppAccess & lastAppLoginAt beim Helper für die Gast-Zugangs-Prüfung ergänzt
-// 2026-05-14 15:00 - FEATURE: assignedHelperIds beim TeamPin für die Sichtbarkeit von Gästen hinzugefügt
+// 2026-05-14 14:20 - FEATURE: hasAppAccess & lastAppLoginAt beim Helper f r die Gast-Zugangs-Pr fung erg nzt
+// 2026-05-14 15:00 - FEATURE: assignedHelperIds beim TeamPin f r die Sichtbarkeit von G sten hinzugef gt
 // src/core/types/models.ts
 
 export interface BaseDocument {
@@ -100,6 +102,9 @@ export interface User extends BaseDocument {
 
 export interface Team extends BaseDocument {
   name: string;
+  // ---> NEU: Aufstellungs-Logik (Base) <---
+  captainHelperIds?: string[];       // Helper-IDs der Mannschaftsf hrer
+  defaultLineupHelperIds?: string[]; // Helper-IDs der Stammspieler (Das Fundament)
 }
 
 export interface Group extends BaseDocument {
@@ -121,7 +126,7 @@ export interface Helper extends BaseDocument {
   eintrittsdatum?: string;
   memberStatus?: 'AKTIV' | 'PASSIV' | 'JUGEND';
   
-  // CHIRURGISCHER EINGRIFF: Aktenlage vs. App-Präferenz
+  // CHIRURGISCHER EINGRIFF: Aktenlage vs. App-Pr ferenz
   hasWrittenDsgvoConsent?: boolean;
   hasYouthWorkClearance?: boolean;
 
@@ -149,7 +154,7 @@ export interface ClubEvent extends BaseDocument {
   reminderCustomText?: string;     
   isPublished: boolean; 
   isPublic?: boolean; 
-  seriesId?: string;    
+  seriesId?: string;     
   isArchived?: boolean; 
   participantUserIds: string[];
   participantGroupIds: string[];
@@ -297,5 +302,13 @@ export interface TeamPin extends BaseDocument {
   assignedGroupIds: string[];       
   assignedHelperIds?: string[];
   assignedTeamIds?: string[];     
+}
+
+export interface MatchLineup {
+  id: string;
+  schemaVersion: string;
+  teamId: string;
+  lineupHelperIds: string[];
+  updatedAt?: number;
 }
 // --- END OF FILE ---

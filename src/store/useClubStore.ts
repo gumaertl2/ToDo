@@ -1,3 +1,4 @@
+// [2026-09-28] - ARCHITECTURE: MatchLineupSlice in den globalen Store (useClubStore) eingehängt, um die neue Aufstellungs-Logik (Base & Override) verfügbar zu machen.
 // [2026-05-15] - FIX: Vercel Build Error TS2551 (Korrektur Singular/Plural von roleProfiles in partialize)
 // src/store/useClubStore.ts
 import { create } from 'zustand';
@@ -12,6 +13,7 @@ import { createTaskSlice } from './slices/createTaskSlice';
 import { createTemplateSlice } from './slices/createTemplateSlice';
 import { createTeamPinsSlice } from './slices/createTeamPinsSlice';
 import { createTeamSlice } from './slices/createTeamSlice';
+import { createMatchLineupSlice } from './slices/createMatchLineupSlice';
 
 // Slice Imports (Typen/Interfaces)
 import type { AuthSlice } from './slices/createAuthSlice';
@@ -22,6 +24,7 @@ import type { TaskSlice } from './slices/createTaskSlice';
 import type { TemplateSlice } from './slices/createTemplateSlice';
 import type { TeamPinsSlice } from './slices/createTeamPinsSlice';
 import type { TeamSlice } from './slices/createTeamSlice';
+import type { MatchLineupSlice } from './slices/createMatchLineupSlice';
 
 export interface StoreState 
   extends AuthSlice, 
@@ -31,7 +34,8 @@ export interface StoreState
           TaskSlice, 
           TemplateSlice, 
           TeamPinsSlice,
-          TeamSlice {}
+          TeamSlice,
+          MatchLineupSlice {}
 
 export const useClubStore = create<StoreState>()(
   persist(
@@ -44,6 +48,7 @@ export const useClubStore = create<StoreState>()(
       ...createTemplateSlice(...a),
       ...createTeamPinsSlice(...a),
       ...createTeamSlice(...a),
+      ...createMatchLineupSlice(...a),
     }),
     {
       name: 'club-management-storage',

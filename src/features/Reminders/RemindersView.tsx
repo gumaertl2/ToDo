@@ -1,3 +1,4 @@
+// [2026-09-28] - FEATURE: Lineup-Integration (Aufstellung) in die automatisierte Erinnerungs-Schleife (RemindersView) integriert. Abos mit Team-Verknüpfung berechnen nun live den Kader (Base & Overrides) und hängen ihn automatisch an den WhatsApp-Text an.
 // [2026-06-12] - BUGFIX: Mehrtägige und monatsübergreifende Termine (inkl. ganztägig) werden im WhatsApp-Text jetzt korrekt mit Start- und Enddatum ("Datum A bis Datum B") formatiert.
 // [2026-06-11] - UX-FIX: Poka-Yoke (Narrensicherung) für Browser-Benachrichtigungen integriert. Wenn der Browser die Anfrage stumm blockiert (Notification.permission === 'denied'), wirft die App nun explizit einen Alert mit der Lösungsanweisung (Klick auf das Schloss-Symbol), anstatt ohne Reaktion zu verbleiben.
 // [2026-05-23] - ARCHITEKTUR-FIX: Projekt-Schutzschild & Unterpunkt-Schutzschild in Reminder-Schleife eingebaut. Verhindert Phantom-Erinnerungen für erledigte Oberpunkte und abgeschlossene/archivierte Projekte.
@@ -14,6 +15,9 @@ import { CalendarEventFormModal } from '../Events/CalendarEventFormModal';
 import { CalendarBulkEventModal } from '../Events/CalendarBulkEventModal';
 import { CalendarIcsDetailModal } from '../Events/CalendarIcsDetailModal'; 
 import type { Task, CalendarEvent } from '../../core/types/models';
+
+// Hilfsfunktion: Macht iCal-UIDs sicher für Firestore Dokument-Pfade
+const sanitizeId = (id: string) => id.replace(/[\/\\.#$\[\]]/g, '_');
 
 const formatReminderText = (type: string, item: any, customText?: string) => {
   const baseText = customText ? customText : 'Hallo, hier ist eine kurze Erinnerung für dich:';
@@ -91,6 +95,7 @@ export const RemindersView: React.FC = () => {
     helpers,
     users, 
     teams,
+    matchLineups, // <-- NEU: Schatten-Akten für automatisierte Kader-Berechnung
     user, 
     roleProfiles, 
     saveAgendaItem,
@@ -353,7 +358,30 @@ export const RemindersView: React.FC = () => {
                 const phone = isDirect ? (targets[0].phone || '') : '';
                 const isRecipient = !!(isDirectRecipient || isGroupRecipient || isTeamRecipient || isHelperRecipient);
 
-                const fullText = formatReminderText('Abo', cachedEv, sub.reminderCustomText);
+                // --- LINEUP BERECHNUNG (Base & Override Kader an Text hängen) ---
+                const teamId = sub.reminderRecipientTeamIds?.[0];
+                const teamContext = teamId ? teams.find(t => t.id === teamId) : null;
+                
+                let lineupText = '';
+                if (teamContext) {
+                  const safeEventId = sanitizeId(cachedEv.uid);
+                  const storeLineup = (matchLineups || []).find(m => m.id === safeEventId);
+                  const activePlayerIds = storeLineup ? storeLineup.lineupHelperIds : (teamContext.defaultLineupHelperIds || []);
+                  const activePlayers = helpers
+                    .filter(h => activePlayerIds.includes(h.id))
+                    .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+                  if (activePlayers.length > 0) {
+                    lineupText = `\n\n👟 *Kader (${activePlayers.length}):*\n${activePlayers.map(p => p.alias || p.name.split(' ')[0]).join(', ')}\n\n(Bitte sagt rechtzeitig ab, falls sich etwas ändert!)`;
+                  } else {
+                    lineupText = `\n\n👟 *Kader (0):*\nKeine Spieler eingeteilt.\n\n(Bitte sagt rechtzeitig ab, falls sich etwas ändert!)`;
+                  }
+                }
+
+                const baseText = formatReminderText('Abo', cachedEv, sub.reminderCustomText);
+                const fullText = baseText + lineupText;
+                // ----------------------------------------------------------------
+
                 const senderName = users.find(u => u.id === sub.reminderSenderUserId)?.name || 'Unbekannt';
 
                 items.push({
@@ -380,7 +408,7 @@ export const RemindersView: React.FC = () => {
     }
 
     return items.sort((a, b) => a.date - b.date);
-  }, [user, calendarEvents, allAgendaItems, events, calendarSubscriptions, groups, helpers, users, teams]);
+  }, [user, calendarEvents, allAgendaItems, events, calendarSubscriptions, groups, helpers, users, teams, matchLineups]);
 
   const myReminders = useMemo(() => {
     return allPendingReminders.filter(r => r.senderUserId === user?.id || r.isRecipient);

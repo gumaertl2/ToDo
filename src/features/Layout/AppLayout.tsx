@@ -1,3 +1,4 @@
+// [2026-09-28] - BUGFIX: Globale Store-Fetches (fetchMatchLineups, fetchTeamPins) in den App-Init und Visibility-Check aufgenommen.
 // [2026-07-26] - BUGFIX: Domain-Language Fallback ('Gast' -> 'Mitglied') korrigiert, um Menü-Sichtbarkeit wiederherzustellen.
 // [2026-07-22] - FEATURE: 'Mein Profil' Button in Desktop-Sidebar und Mobile-Menu integriert (Self-Service).
 // [2026-07-22] - FEATURE: DSGVO Clickwrap in AppLayout integriert als unumgängliche UI-Schranke.
@@ -25,7 +26,8 @@ export const AppLayout: React.FC = () => {
      logout, user, roleProfiles, fetchUsersAndHelpers, fetchGroups, 
      calendarEvents, allAgendaItems, events, calendarSubscriptions,
      fetchEvents, fetchTasks, fetchCalendarData,
-    helpers, groups, tasks
+    helpers, groups, tasks,
+    fetchTeamPins, fetchMatchLineups // <-- CHIRURGISCHER EINGRIFF: Neue Store-Funktionen geladen
   } = useClubStore();
   const location = useLocation();
 
@@ -53,6 +55,7 @@ export const AppLayout: React.FC = () => {
     localStorage.setItem('papatodo_sidebar_pinned', String(isPinned));
   }, [isPinned]);
 
+  // Initialer App-Start (wenn der User sich einloggt oder die Seite neu lädt)
   useEffect(() => {
     const initApp = async () => {
       if (fetchUsersAndHelpers) await fetchUsersAndHelpers();
@@ -60,10 +63,13 @@ export const AppLayout: React.FC = () => {
       if (fetchEvents) await fetchEvents();
       if (fetchTasks) await fetchTasks();
       if (fetchCalendarData) await fetchCalendarData();
+      if (fetchTeamPins) await fetchTeamPins(); // <-- FIX: Tresor wird sofort geladen
+      if (fetchMatchLineups) await fetchMatchLineups(); // <-- FIX: Aufstellungen (Haken) werden sofort geladen
     };
     initApp();
-  }, [fetchUsersAndHelpers, fetchGroups, fetchEvents, fetchTasks, fetchCalendarData]);
+  }, [fetchUsersAndHelpers, fetchGroups, fetchEvents, fetchTasks, fetchCalendarData, fetchTeamPins, fetchMatchLineups]);
 
+  // Wenn die App aus dem Hintergrund zurückkehrt (Visibility-Change)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && navigator.onLine) {
@@ -72,13 +78,15 @@ export const AppLayout: React.FC = () => {
         if (fetchEvents) fetchEvents();
         if (fetchTasks) fetchTasks();
         if (fetchCalendarData) fetchCalendarData();
+        if (fetchTeamPins) fetchTeamPins(); // <-- FIX: Tresor-Sync nach Hintergrund-Pause
+        if (fetchMatchLineups) fetchMatchLineups(); // <-- FIX: Aufstellungen-Sync nach Hintergrund-Pause
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [fetchUsersAndHelpers, fetchGroups, fetchEvents, fetchTasks, fetchCalendarData]);
+  }, [fetchUsersAndHelpers, fetchGroups, fetchEvents, fetchTasks, fetchCalendarData, fetchTeamPins, fetchMatchLineups]);
 
   const reminderCounts = useMemo(() => {
     if (!user) return { myCount: 0, allCount: 0 };
