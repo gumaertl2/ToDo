@@ -1,3 +1,4 @@
+// [2026-09-30] - FEATURE: Store unterstützt nun 'availabilities' und 'isLocked' (Base & Override V2).
 // [2026-09-28] - BUGFIX: Optimistic Store-Update in saveMatchLineup hinzugefügt, um "Geister-Speichern" zu verhindern.
 // [2026-09-28] - FEATURE: Slice für MatchLineups (Schatten-Akten für Aufstellungen) erstellt, um das Base & Override Prinzip zu unterstützen.
 // src/store/slices/createMatchLineupSlice.ts
@@ -53,6 +54,7 @@ export const createMatchLineupSlice: StateCreator<MatchLineupSlice, [], [], Matc
 
     // WICHTIGER FIX: Sofortiges lokales Speichern im Store (Optimistic Update).
     // Dadurch sind die Daten für das Frontend sofort da, egal wie lange Firebase braucht.
+    // Funktioniert generisch auch perfekt für die neuen 'availabilities' und 'isLocked' Felder.
     set((state) => {
       const filtered = state.matchLineups.filter(m => m.id !== lineup.id);
       return { matchLineups: [...filtered, dataToSave as MatchLineup] };

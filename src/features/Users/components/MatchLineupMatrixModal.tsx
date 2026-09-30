@@ -1,33 +1,41 @@
+// [2026-09-30] - FEATURE: Base & Override V2 (Bottom-Up). Spieler können ihre eigene Zelle anklicken (Verfügbarkeit: Da/Weg).
+// [2026-09-30] - FEATURE: Auto-Freeze und manuelles Siegel (🔒) in die Matrix integriert. Notfall-Alert bei verspäteten Absagen eingebaut.
 // [2026-09-28] - UX-FEATURE: 'isReadOnly' Prop hinzugefügt. Erlaubt einfachen Team-Mitgliedern die Ansicht der Matrix, ohne Schreibrechte zu gewähren.
 // [2026-09-28] - UX-FEATURE: 'focusedEventId' Prop hinzugefügt. Zieht ein bestimmtes Spiel an die Spitze der Matrix und hebt es farblich hervor.
-// [2026-09-28] - SEC-FIX: ID-Sanitizer hinzugefügt, um iCal-Sonderzeichen (wie '/') für Firestore-Pfade unschädlich zu machen.
-// [2026-09-28] - BUGFIX: Strikte Auswertung von result.success beim Speichern (verhindert unsichtbare Firebase-Permission-Fehler).
-// [2026-09-28] - BUGFIX: Optimistic UI (lokaler State) implementiert, damit Checkboxen sofort reagieren.
 // src/features/Users/components/MatchLineupMatrixModal.tsx
 import React, { useMemo, useState } from 'react';
 import { useClubStore } from '../../../store/useClubStore';
-import { X, Calendar as CalendarIcon, Lock, CheckSquare, Square, UserPlus, Search, Users } from 'lucide-react';
+import { X, Calendar as CalendarIcon, Lock, Unlock, CheckSquare, Square, UserPlus, Search, Users } from 'lucide-react';
 import type { Team, MatchLineup, Helper } from '../../../core/types/models';
 
 interface MatchLineupMatrixModalProps {
   team: Team;
   focusedEventId?: string;
-  isReadOnly?: boolean; // <-- NEU: Steuert den Ansichts-Modus
+  isReadOnly?: boolean;
   onClose: () => void;
 }
 
 type PlayerCategory = 'STAMM' | 'KADER' | 'EXTERN';
 
-// Hilfsfunktion: Macht iCal-UIDs sicher für Firestore Dokument-Pfade
 const sanitizeId = (id: string) => id.replace(/[\/\\.#$\[\]]/g, '_');
 
 export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ team, focusedEventId, isReadOnly, onClose }) => {
-  const { helpers, calendarSubscriptions, matchLineups, saveMatchLineup } = useClubStore();
+  const { user, helpers, calendarSubscriptions, matchLineups, saveMatchLineup } = useClubStore();
+  
   const [tempJokers, setTempJokers] = useState<string[]>([]);
   const [isJokerMenuOpen, setIsJokerMenuOpen] = useState(false);
   const [jokerSearchTerm, setJokerSearchTerm] = useState('');
   
+  // Optimistische UI-States für verzögerungsfreies Klicken
   const [localOverrides, setLocalOverrides] = useState<Record<string, string[]>>({});
+  const [localAvailOverrides, setLocalAvailOverrides] = useState<Record<string, Record<string, 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN'>>>({});
+  const [localLockOverrides, setLocalLockOverrides] = useState<Record<string, boolean>>({});
+
+  // Finde heraus, wer gerade eingeloggt ist (um eigene Spalte zu identifizieren)
+  const myHelperId = useMemo(() => {
+    if (!user || !user.email) return null;
+    return helpers.find(h => h.email?.toLowerCase() === user.email?.toLowerCase())?.id;
+  }, [user, helpers]);
 
   const displayMembers = useMemo(() => {
     const defaultIds = new Set(team.defaultLineupHelperIds || []);
@@ -86,10 +94,12 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
     return sorted;
   }, [linkedSubscription, focusedEventId]);
 
+  // --- KADER NOMINIERUNG (Nur Captain) ---
   const handleTogglePlayer = async (rawEventId: string, helperId: string, currentActiveIds: string[]) => {
-    if (isReadOnly) return; // Doppelter Schutz
+    if (isReadOnly) return;
 
     const safeEventId = sanitizeId(rawEventId);
+    const storeLineup = matchLineups.find(m => m.id === safeEventId);
     
     const newActiveIds = currentActiveIds.includes(helperId)
       ? currentActiveIds.filter(id => id !== helperId)
@@ -102,21 +112,82 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
       schemaVersion: '1.0',
       teamId: team.id,
       lineupHelperIds: newActiveIds,
+      availabilities: storeLineup?.availabilities || {},
+      isLocked: storeLineup?.isLocked,
       updatedAt: Date.now()
     };
 
     const result = await saveMatchLineup(newLineup);
-    
     if (!result.success) {
-      console.error("Datenbank-Fehler beim Speichern der Matrix:", result.error);
       alert(`SPEICHERN FEHLGESCHLAGEN!\n\nFirebase meldet: ${result.error?.message || 'Unbekannter Fehler'}`);
-      
-      setLocalOverrides(prev => {
-        const next = { ...prev };
-        delete next[safeEventId];
-        return next;
-      });
+      setLocalOverrides(prev => { const next = { ...prev }; delete next[safeEventId]; return next; });
     }
+  };
+
+  // --- VERFÜGBARKEIT ÄNDERN (Da / Weg / ?) ---
+  const handleToggleAvailability = async (rawEventId: string, helperId: string, isPlaying: boolean, isFrozenLocal: boolean) => {
+    // Man darf nur sich selbst ändern!
+    if (helperId !== myHelperId) return;
+
+    const safeEventId = sanitizeId(rawEventId);
+    const storeLineup = matchLineups.find(m => m.id === safeEventId);
+    
+    const currentAvail = localAvailOverrides[safeEventId]?.[helperId] || storeLineup?.availabilities?.[helperId] || 'UNKNOWN';
+    
+    // Ampel weiterschalten
+    let nextAvail: 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN' = 'UNKNOWN';
+    if (currentAvail === 'UNKNOWN') nextAvail = 'AVAILABLE';
+    else if (currentAvail === 'AVAILABLE') nextAvail = 'UNAVAILABLE';
+    else nextAvail = 'UNKNOWN';
+
+    // NOTBREMSE: Verhindert stillschweigende Absagen nach der Nominierung!
+    if (isFrozenLocal && isPlaying && nextAvail === 'UNAVAILABLE') {
+       const defaultMsg = "🔒 Du bist für dieses Spiel fest aufgestellt und die Planung ist bereits versiegelt! Bei kurzfristigen Ausfällen kontaktiere bitte sofort deinen Mannschaftsführer.";
+       alert(team.lineupLockMessage || defaultMsg);
+       return;
+    }
+
+    // Optimistic Update
+    setLocalAvailOverrides(prev => ({
+       ...prev,
+       [safeEventId]: {
+          ...(prev[safeEventId] || {}),
+          [helperId]: nextAvail
+       }
+    }));
+
+    const newLineup: MatchLineup = {
+      id: safeEventId,
+      schemaVersion: '1.0',
+      teamId: team.id,
+      lineupHelperIds: storeLineup?.lineupHelperIds || team.defaultLineupHelperIds || [],
+      availabilities: {
+        ...(storeLineup?.availabilities || {}),
+        [helperId]: nextAvail
+      },
+      isLocked: storeLineup?.isLocked,
+      updatedAt: Date.now()
+    };
+    
+    await saveMatchLineup(newLineup);
+  };
+
+  // --- MANUELLE VERSIEGELUNG (Nur Captain) ---
+  const handleToggleLock = async (rawEventId: string, newState: boolean) => {
+    const safeEventId = sanitizeId(rawEventId);
+    const storeLineup = matchLineups.find(m => m.id === safeEventId);
+    setLocalLockOverrides(prev => ({ ...prev, [safeEventId]: newState }));
+    
+    const newLineup: MatchLineup = {
+      id: safeEventId,
+      schemaVersion: '1.0',
+      teamId: team.id,
+      lineupHelperIds: storeLineup?.lineupHelperIds || team.defaultLineupHelperIds || [],
+      availabilities: storeLineup?.availabilities || {},
+      isLocked: newState,
+      updatedAt: Date.now()
+    };
+    await saveMatchLineup(newLineup);
   };
 
   const handleAddJoker = (helperId: string) => {
@@ -144,7 +215,6 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
           </div>
           
           <div className="flex items-center gap-3 w-full sm:w-auto">
-            {/* Joker Button nur für Captains sichtbar */}
             {!isReadOnly && linkedSubscription && (
               <div className="relative">
                 <button 
@@ -220,7 +290,7 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                     Termin / Spiel
                   </th>
                   {displayMembers.map(({ helper: m, category }) => (
-                    <th key={m.id} className="sticky top-0 z-20 bg-gray-100 border-b-2 border-b-gray-200 border-r border-gray-100 px-2 py-3 text-center text-[10px] font-bold text-gray-600 uppercase tracking-wider min-w-[75px] shadow-[0px_1px_0px_0px_#e5e7eb]">
+                    <th key={m.id} className={`sticky top-0 z-20 bg-gray-100 border-b-2 border-b-gray-200 border-r border-gray-100 px-2 py-3 text-center text-[10px] font-bold uppercase tracking-wider min-w-[75px] shadow-[0px_1px_0px_0px_#e5e7eb] ${m.id === myHelperId ? 'text-blue-700 bg-blue-50/50' : 'text-gray-600'}`}>
                       <div className="truncate px-1" title={m.name}>{m.alias || m.name.split(' ')[0]}</div>
                       {category === 'STAMM' && <div className="text-[8px] text-green-600 font-extrabold mt-0.5">Stamm</div>}
                       {category === 'KADER' && <div className="text-[8px] text-blue-600 font-extrabold mt-0.5">Bank</div>}
@@ -252,6 +322,16 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                   } else {
                     activePlayers = team.defaultLineupHelperIds || [];
                   }
+
+                  // AUTO-FREEZE BERECHNUNG
+                  const leadDays = team.lineupFreezeLeadDays !== undefined ? team.lineupFreezeLeadDays : 7;
+                  const msPerDay = 1000 * 60 * 60 * 24;
+                  const daysUntil = (event.startTime - Date.now()) / msPerDay;
+                  // Gefroren, wenn in der Frist, aber nur bis 1 Tag nach dem Spiel (danach wieder irrelevant)
+                  const isAutoFrozen = leadDays > 0 && daysUntil <= leadDays && daysUntil >= -1;
+                  
+                  const isManuallyLocked = localLockOverrides[safeEventId] !== undefined ? localLockOverrides[safeEventId] : (storeLineup?.isLocked === true);
+                  const isFrozen = isManuallyLocked || isAutoFrozen;
                   
                   const rowBg = isFocusedRow ? 'bg-blue-50/80' : (isPast ? 'bg-gray-100' : 'bg-white');
                   const borderClasses = isFocusedRow ? 'border-b-4 border-t-4 border-blue-500 z-10 relative' : 'border-b border-gray-200';
@@ -280,37 +360,88 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                             <span className={`flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded border ${isOverride ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`} title={`${activePlayers.length} Spieler eingeteilt`}>
                               <Users className="w-3 h-3" /> {activePlayers.length}
                             </span>
+                            
+                            {/* SIEGEL (Lock) ANZEIGE / BUTTON */}
+                            {!isReadOnly && (!isPast || isFocusedRow) ? (
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); handleToggleLock(event.uid, !isManuallyLocked); }}
+                                className={`flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
+                                  isManuallyLocked ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' :
+                                  isAutoFrozen ? 'bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200' :
+                                  'bg-white text-gray-400 border-gray-200 hover:bg-gray-50 hover:text-gray-600'
+                                }`}
+                                title={isAutoFrozen ? `Auto-Freeze aktiv (${leadDays} Tage). Klick für manuelles Siegel.` : 'Kader manuell versiegeln (Sperre)'}
+                              >
+                                {isFrozen ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+                                {isFrozen ? 'Versiegelt' : 'Offen'}
+                              </button>
+                            ) : (
+                              isFrozen && (
+                                <span className="flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded border bg-gray-100 text-gray-600 border-gray-300">
+                                  <Lock className="w-3 h-3" /> Versiegelt
+                                </span>
+                              )
+                            )}
                           </div>
                         </div>
                       </td>
                       
                       {displayMembers.map(({ helper: m, category }) => {
                         const isPlaying = activePlayers.includes(m.id);
+                        const isMyColumn = m.id === myHelperId;
+                        
                         let checkColor = 'text-blue-600';
                         if (isOverride) checkColor = 'text-orange-500';
                         else if (category === 'STAMM') checkColor = 'text-green-600';
 
+                        // Spieler-Verfügbarkeit abrufen
+                        const avail = localAvailOverrides[safeEventId]?.[m.id] || storeLineup?.availabilities?.[m.id] || 'UNKNOWN';
+                        let availBgClass = isFocusedRow ? 'bg-blue-50/50' : (isPast ? 'bg-gray-100' : 'bg-white');
+                        if (avail === 'AVAILABLE') availBgClass = 'bg-green-100/60';
+                        if (avail === 'UNAVAILABLE') availBgClass = 'bg-red-100/60';
+
+                        const canEditAvail = isMyColumn && (!isPast || isFocusedRow);
+
                         return (
                           <td 
                             key={m.id} 
-                            onClick={() => {
-                              if (!isReadOnly && (!isPast || isFocusedRow)) handleTogglePlayer(event.uid, m.id, activePlayers);
-                            }}
-                            className={`p-0 align-middle ${borderClasses} border-r border-gray-100 ${rowBg} transition-colors ${
-                              isReadOnly
-                                ? 'cursor-default opacity-80 hover:bg-gray-50'
-                                : ((isPast && !isFocusedRow)
-                                  ? 'cursor-not-allowed opacity-50' 
-                                  : 'cursor-pointer group-hover:bg-blue-100/60 hover:bg-blue-200/80')
+                            className={`relative p-0 align-middle ${borderClasses} border-r border-gray-100 transition-colors ${availBgClass} ${
+                              canEditAvail ? 'cursor-pointer hover:brightness-95 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.1)]' : ''
                             }`}
-                            title={isReadOnly ? 'Nur Ansicht' : (isPast && !isFocusedRow ? 'Vergangenheit (Gesperrt)' : 'Aufstellung umschalten')}
+                            onClick={() => {
+                              if (canEditAvail) {
+                                handleToggleAvailability(event.uid, m.id, isPlaying, isFrozen);
+                              }
+                            }}
+                            title={canEditAvail ? "Klicken, um deine eigene Verfügbarkeit zu ändern (Da / Weg / ?)" : ""}
                           >
-                            <div className="w-full h-full min-h-[60px] flex flex-col items-center justify-center">
-                              {isPlaying ? (
-                                <CheckSquare className={`w-5 h-5 pointer-events-none ${checkColor}`} />
-                              ) : (
-                                <Square className="w-5 h-5 pointer-events-none text-gray-300 group-hover:text-gray-400" />
-                              )}
+                            <div className="w-full h-full min-h-[60px] flex flex-col items-center justify-center relative pt-2 pb-4">
+                              {/* Die Checkbox (Lineup-Nominierung durch Captain) */}
+                              <button
+                                type="button"
+                                disabled={isReadOnly || (isPast && !isFocusedRow)}
+                                onClick={(e) => {
+                                  e.stopPropagation(); // Verhindert, dass der Klick auf die Checkbox auch den Hintergrund (Verfügbarkeit) triggert
+                                  if (!isReadOnly && (!isPast || isFocusedRow)) {
+                                    handleTogglePlayer(event.uid, m.id, activePlayers);
+                                  }
+                                }}
+                                className={`p-1.5 rounded-md ${!isReadOnly && (!isPast || isFocusedRow) ? 'cursor-pointer hover:bg-black/5' : 'cursor-default'}`}
+                                title={!isReadOnly ? "Kader-Nominierung setzen/entfernen" : ""}
+                              >
+                                {isPlaying ? (
+                                  <CheckSquare className={`w-5 h-5 pointer-events-none ${checkColor}`} />
+                                ) : (
+                                  <Square className={`w-5 h-5 pointer-events-none ${isReadOnly ? 'text-gray-200' : 'text-gray-300 group-hover:text-gray-400'}`} />
+                                )}
+                              </button>
+
+                              {/* Der Status-Indikator (Verfügbarkeit) */}
+                              <div className="absolute bottom-1 w-full text-center pointer-events-none">
+                                {avail === 'AVAILABLE' && <span className="text-[9px] font-extrabold text-green-700">DA</span>}
+                                {avail === 'UNAVAILABLE' && <span className="text-[9px] font-extrabold text-red-700">WEG</span>}
+                                {avail === 'UNKNOWN' && isMyColumn && <span className="text-[9px] font-bold text-gray-400">?</span>}
+                              </div>
                             </div>
                           </td>
                         );
@@ -323,7 +454,7 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
           )}
         </div>
         
-        {/* Footer: Schließen vs. Speichern */}
+        {/* Footer */}
         <div className="p-4 border-t border-gray-200 bg-white flex justify-end shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] relative z-40">
           <button 
             onClick={onClose} 
