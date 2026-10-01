@@ -1,4 +1,4 @@
-// [2026-10-01] - CRITICAL BUGFIX: 'fetchTeams' und 'teams' in den Store-Import und die Init-Hooks zurückgeholt (Regression-Bug behoben, der das Team-Dropdown in Abos leerte).
+// [2026-10-01] - BUGFIX: 'fetchTeams' zum globalen App-Init hinzugefügt, um Regression-Bug bei der Team-Zuweisung (Abo-Erinnerungen) zu beheben.
 // [2026-09-28] - BUGFIX: Globale Store-Fetches (fetchMatchLineups, fetchTeamPins) in den App-Init und Visibility-Check aufgenommen.
 // [2026-07-26] - BUGFIX: Domain-Language Fallback ('Gast' -> 'Mitglied') korrigiert, um Menü-Sichtbarkeit wiederherzustellen.
 // [2026-07-22] - FEATURE: 'Mein Profil' Button in Desktop-Sidebar und Mobile-Menu integriert (Self-Service).
@@ -27,7 +27,7 @@ export const AppLayout: React.FC = () => {
      logout, user, roleProfiles, fetchUsersAndHelpers, fetchGroups, fetchTeams,
      calendarEvents, allAgendaItems, events, calendarSubscriptions,
      fetchEvents, fetchTasks, fetchCalendarData,
-    helpers, groups, teams, tasks,
+    helpers, groups, tasks,
     fetchTeamPins, fetchMatchLineups 
   } = useClubStore();
   const location = useLocation();
@@ -60,7 +60,7 @@ export const AppLayout: React.FC = () => {
     const initApp = async () => {
       if (fetchUsersAndHelpers) await fetchUsersAndHelpers();
       if (fetchGroups) await fetchGroups();
-      if (fetchTeams) await fetchTeams(); // <-- FIX: Teams wiederhergestellt
+      if (fetchTeams) await fetchTeams(); // <-- FIX: Teams für Dropdowns laden
       if (fetchEvents) await fetchEvents();
       if (fetchTasks) await fetchTasks();
       if (fetchCalendarData) await fetchCalendarData();
@@ -76,7 +76,7 @@ export const AppLayout: React.FC = () => {
       if (document.visibilityState === 'visible' && navigator.onLine) {
         if (fetchUsersAndHelpers) fetchUsersAndHelpers();
         if (fetchGroups) fetchGroups();
-        if (fetchTeams) fetchTeams(); // <-- FIX: Teams wiederhergestellt
+        if (fetchTeams) fetchTeams(); // <-- FIX: Teams-Sync nach Hintergrund-Pause
         if (fetchEvents) fetchEvents();
         if (fetchTasks) fetchTasks();
         if (fetchCalendarData) fetchCalendarData();
