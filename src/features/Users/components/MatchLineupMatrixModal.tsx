@@ -1,3 +1,4 @@
+// [2026-10-01] - UX-FIX: Safari AutoFill für die Joker-Suche deaktiviert (autoComplete, autoCorrect, spellCheck).
 // [2026-09-30] - FEATURE: Base & Override V2 (Bottom-Up). Spieler können ihre eigene Zelle anklicken (Verfügbarkeit: Da/Weg).
 // [2026-09-30] - FEATURE: Auto-Freeze und manuelles Siegel (🔒) in die Matrix integriert. Notfall-Alert bei verspäteten Absagen eingebaut.
 // [2026-09-28] - UX-FEATURE: 'isReadOnly' Prop hinzugefügt. Erlaubt einfachen Team-Mitgliedern die Ansicht der Matrix, ohne Schreibrechte zu gewähren.
@@ -237,6 +238,9 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                           placeholder="Name suchen..."
                           value={jokerSearchTerm}
                           onChange={(e) => setJokerSearchTerm(e.target.value)}
+                          autoComplete="off"
+                          autoCorrect="off"
+                          spellCheck={false}
                           className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
                         />
                       </div>
