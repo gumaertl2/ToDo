@@ -1,3 +1,6 @@
+// [2026-10-01] - BUGFIX: 'snap.metadata.fromCache' Filter im Snapshot hinzugefügt. Verhindert, dass veraltete lokale Handy-Caches ununterbrochen den Auto-Sync triggern (Distributed-Sync Überhitzung).
+// [2026-10-01] - BUGFIX: 'batch.update' statt 'batch.set' in updateCalendarSubscriptionOrder genutzt. Verhindert die unfreiwillige Wiederbelebung gelöschter Abos (Zombies) durch alte Handys.
+// [2026-10-01] - BUGFIX: Zeitzonen-Fehler (UK/Ausland) im ICS-Parser behoben. Nutzt nun 'toUnixTime()' anstelle des lokalen 'new Date()' um die exakte, zeitzonenunabhängige ICS-Zeit zu erzwingen.
 // [2026-08-06] - BUGFIX: Dynamischer Cache-Buster (_t=timestamp) in syncSubscription eingebaut, um aggressive Proxy-Caches zu umgehen.
 // [2026-07-23] - BUGFIX: Auto-Sync (Lazy Cronjob) wird nun NUR für eingeloggte User ausgeführt. Verhindert eine tödliche "Optimistic Update Rollback"-Endlosschleife für ungeloggte Gäste.
 // [2026-07-23] - BUGFIX: Cache-Buster (nocache) von der Original-URL entfernt und stattdessen Server/Proxy-Caching via Fetch API { cache: 'no-store' } blockiert.
@@ -58,9 +61,12 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
       const sortedSubs = subs.sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
       set({ calendarSubscriptions: sortedSubs, isCalendarLoading: false });
 
+      // ---> CHIRURGISCHER EINGRIFF 1: CACHE-FILTER <---
+      // Wir blockieren den automatischen Sync, wenn die Liste nur aus dem veralteten
+      // lokalen Offline-Cache des Handys geladen wurde. Wir warten auf die echten Server-Daten!
+      if (snap.metadata.fromCache) return;
+
       // ---> CHIRURGISCHER EINGRIFF: GAST-SCHUTZ (Endlosschleifen-Blocker) <---
-      // Wir holen uns den aktuellen User aus dem Store. Nur wenn jemand eingeloggt ist,
-      // dürfen wir Schreibbefehle (updateDoc) abfeuern, um Permission-Rollbacks zu vermeiden.
       const currentUser = (get() as any).user;
       
       if (currentUser) {
@@ -124,10 +130,16 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
   updateCalendarSubscriptionOrder: async (subs) => {
     try {
       const batch = writeBatch(db);
-      subs.forEach((sub, index) => batch.set(doc(db, 'calendar_subscriptions', sub.id), { ...sub, sortOrder: index }));
+      // ---> CHIRURGISCHER EINGRIFF 2: ZOMBIE-KILLER <---
+      // batch.update statt batch.set. So können alte Handys keine 
+      // bereits gelöschten Abos mehr aus Versehen neu erschaffen.
+      subs.forEach((sub, index) => batch.update(doc(db, 'calendar_subscriptions', sub.id), { sortOrder: index }));
       await batch.commit();
       return { success: true, data: undefined };
-    } catch (e) { return { success: false, error: e as Error }; }
+    } catch (e) { 
+      // Fehler (z.B. Dokument existiert nicht mehr) werden still geschluckt, das ist exakt das Ziel!
+      return { success: false, error: e as Error }; 
+    }
   },
 
   deleteCalendarSubscription: async (id) => {
@@ -151,7 +163,6 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
 
       if (feedUrl.toLowerCase().startsWith('webcal://')) feedUrl = 'https://' + feedUrl.substring(9);
       
-      // CHIRURGISCHER EINGRIFF: Dynamischer Cache-Buster an die URL hängen
       const cacheBuster = `_t=${Date.now()}`;
       const cacheBustedUrl = feedUrl.includes('?') 
         ? `${feedUrl}&${cacheBuster}` 
@@ -183,13 +194,20 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
       vevents.forEach((vevent: any) => {
         const event = new ICAL.Event(vevent);
         if (!event.startDate) return; 
+        
         const s = event.startDate;
-        const startDate = new Date(s.year, s.month - 1, s.day, s.hour, s.minute).getTime();
+        
+        // ---> CHIRURGISCHER EINGRIFF 3: ZEITZONEN-ANKER <---
+        // 's.toUnixTime()' berechnet den korrekten UTC-Wert basierend auf der ICS-Datei.
+        // Das lokale 'new Date(s.year...)' wurde entfernt, da es die UK-Zeitzone des Handys aufgezwungen hat.
+        const startDate = s.toUnixTime() * 1000;
+        
         let endDate = startDate;
         if (event.endDate) { 
           const e = event.endDate; 
-          endDate = new Date(e.year, e.month - 1, e.day, e.hour, e.minute).getTime(); 
+          endDate = e.toUnixTime() * 1000; 
         }
+
         cachedEvents.push({ 
           uid: event.uid, 
           title: event.summary || 'Ohne Titel', 
