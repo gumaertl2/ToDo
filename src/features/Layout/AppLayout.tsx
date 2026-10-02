@@ -1,3 +1,4 @@
+// [2026-10-03] - BUGFIX: Vergangenheits-Filter (todayStart <= eventDateStart) in die Badge-Berechnung (reminderCounts) integriert, um die rote Zahl in der Navigation mit der RemindersView zu synchronisieren.
 // [2026-10-01] - BUGFIX: 'fetchTeams' zum globalen App-Init hinzugefügt, um Regression-Bug bei der Team-Zuweisung (Abo-Erinnerungen) zu beheben.
 // [2026-09-28] - BUGFIX: Globale Store-Fetches (fetchMatchLineups, fetchTeamPins) in den App-Init und Visibility-Check aufgenommen.
 // [2026-07-26] - BUGFIX: Domain-Language Fallback ('Gast' -> 'Mitglied') korrigiert, um Menü-Sichtbarkeit wiederherzustellen.
@@ -60,7 +61,7 @@ export const AppLayout: React.FC = () => {
     const initApp = async () => {
       if (fetchUsersAndHelpers) await fetchUsersAndHelpers();
       if (fetchGroups) await fetchGroups();
-      if (fetchTeams) await fetchTeams(); // <-- FIX: Teams für Dropdowns laden
+      if (fetchTeams) await fetchTeams();
       if (fetchEvents) await fetchEvents();
       if (fetchTasks) await fetchTasks();
       if (fetchCalendarData) await fetchCalendarData();
@@ -76,7 +77,7 @@ export const AppLayout: React.FC = () => {
       if (document.visibilityState === 'visible' && navigator.onLine) {
         if (fetchUsersAndHelpers) fetchUsersAndHelpers();
         if (fetchGroups) fetchGroups();
-        if (fetchTeams) fetchTeams(); // <-- FIX: Teams-Sync nach Hintergrund-Pause
+        if (fetchTeams) fetchTeams();
         if (fetchEvents) fetchEvents();
         if (fetchTasks) fetchTasks();
         if (fetchCalendarData) fetchCalendarData();
@@ -110,7 +111,8 @@ export const AppLayout: React.FC = () => {
           const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
           const stichtag = eventDateStart - (leadDays * MS_PER_DAY);
 
-          if (todayStart >= stichtag) {
+          // FIX: Nur zählen, wenn in Zukunft
+          if (todayStart >= stichtag && todayStart <= eventDateStart) {
             allCount++;
             
             let isRecipient = false;
@@ -152,7 +154,8 @@ export const AppLayout: React.FC = () => {
         const taskDateStart = new Date(taskDue.getFullYear(), taskDue.getMonth(), taskDue.getDate()).getTime();
         const stichtag = taskDateStart - (leadDays * MS_PER_DAY);
         
-        if (todayStart >= stichtag) {
+        // FIX: Nur zählen, wenn in Zukunft
+        if (todayStart >= stichtag && todayStart <= taskDateStart) {
           allCount++;
           const isDirectRecipient = t.assigneeUserIds?.includes(user.id);
           const isGroupRecipient = t.assigneeGroupIds?.some(gId => userGroupIds.includes(gId));
@@ -173,7 +176,8 @@ export const AppLayout: React.FC = () => {
           const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
           const stichtag = eventDateStart - (leadDays * MS_PER_DAY);
           
-          if (todayStart >= stichtag) {
+          // FIX: Nur zählen, wenn in Zukunft
+          if (todayStart >= stichtag && todayStart <= eventDateStart) {
             allCount++;
             const isDirectRecipient = ev.participantUserIds?.includes(user.id);
             const isGroupRecipient = ev.participantGroupIds?.some(gId => userGroupIds.includes(gId));
@@ -193,7 +197,9 @@ export const AppLayout: React.FC = () => {
               const eventStart = new Date(cachedEv.startTime);
               const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
               const stichtag = eventDateStart - (leadDays * MS_PER_DAY);
-              if (todayStart >= stichtag) {
+              
+              // FIX: Nur zählen, wenn in Zukunft
+              if (todayStart >= stichtag && todayStart <= eventDateStart) {
                 allCount++;
                 if (sub.reminderSenderUserId === user.id) myCount++;
               }
