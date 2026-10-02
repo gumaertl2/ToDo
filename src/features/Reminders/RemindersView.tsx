@@ -1,3 +1,4 @@
+// [2026-10-01] - BUGFIX: Vergangenheits-Filter (todayStart <= eventDateStart) in alle vier Erinnerungs-Schleifen eingebaut. Verhindert Zombie-Erinnerungen für Termine, die bereits in der Vergangenheit liegen.
 // [2026-09-28] - FEATURE: Lineup-Integration (Aufstellung) in die automatisierte Erinnerungs-Schleife (RemindersView) integriert. Abos mit Team-Verknüpfung berechnen nun live den Kader (Base & Overrides) und hängen ihn automatisch an den WhatsApp-Text an.
 // [2026-06-12] - BUGFIX: Mehrtägige und monatsübergreifende Termine (inkl. ganztägig) werden im WhatsApp-Text jetzt korrekt mit Start- und Enddatum ("Datum A bis Datum B") formatiert.
 // [2026-06-11] - UX-FIX: Poka-Yoke (Narrensicherung) für Browser-Benachrichtigungen integriert. Wenn der Browser die Anfrage stumm blockiert (Notification.permission === 'denied'), wirft die App nun explizit einen Alert mit der Lösungsanweisung (Klick auf das Schloss-Symbol), anstatt ohne Reaktion zu verbleiben.
@@ -95,7 +96,7 @@ export const RemindersView: React.FC = () => {
     helpers,
     users, 
     teams,
-    matchLineups, // <-- NEU: Schatten-Akten für automatisierte Kader-Berechnung
+    matchLineups,
     user, 
     roleProfiles, 
     saveAgendaItem,
@@ -182,7 +183,8 @@ export const RemindersView: React.FC = () => {
           const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
           const stichtag = eventDateStart - (leadDays * MS_PER_DAY);
           
-          if (todayStart >= stichtag) {
+          // FIX: Erlaubt nur Erinnerungen, wenn das echte Event in der Zukunft (oder heute) liegt
+          if (todayStart >= stichtag && todayStart <= eventDateStart) {
             const diffDays = Math.ceil((eventDateStart - todayStart) / MS_PER_DAY);
             let targetsNames = 'Manuelle Gruppenwahl';
             let isDirect = false;
@@ -258,7 +260,8 @@ export const RemindersView: React.FC = () => {
         const taskDateStart = new Date(taskDue.getFullYear(), taskDue.getMonth(), taskDue.getDate()).getTime();
         const stichtag = taskDateStart - (leadDays * MS_PER_DAY);
         
-        if (todayStart >= stichtag) {
+        // FIX: Auch Aufgaben nur erinnern, wenn sie nicht schon lange in der Vergangenheit liegen
+        if (todayStart >= stichtag && todayStart <= taskDateStart) {
           const diffDays = Math.ceil((taskDateStart - todayStart) / MS_PER_DAY);
           const targets: { name: string, phone?: string, isGroup: boolean }[] = [];
           
@@ -300,7 +303,8 @@ export const RemindersView: React.FC = () => {
           const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
           const stichtag = eventDateStart - (leadDays * MS_PER_DAY);
           
-          if (todayStart >= stichtag) {
+          // FIX: Nur Sitzungen, die heute oder in der Zukunft stattfinden
+          if (todayStart >= stichtag && todayStart <= eventDateStart) {
             const diffDays = Math.ceil((eventDateStart - todayStart) / MS_PER_DAY);
             const targets: { name: string, phone?: string, isGroup: boolean }[] = [];
             
@@ -339,7 +343,8 @@ export const RemindersView: React.FC = () => {
               const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
               const stichtag = eventDateStart - (leadDays * MS_PER_DAY);
               
-              if (todayStart >= stichtag) {
+              // FIX: Abos nur erinnern, wenn der Termin heute oder in der Zukunft ist!
+              if (todayStart >= stichtag && todayStart <= eventDateStart) {
                 const diffDays = Math.ceil((eventDateStart - todayStart) / MS_PER_DAY);
                 const targets: { name: string, phone?: string, isGroup: boolean }[] = [];
                 
