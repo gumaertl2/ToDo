@@ -1,3 +1,4 @@
+// [2026-10-04] - FEATURE: Automatische Build-Versionsnummer (__APP_BUILD_DATE__) im Footer (Desktop & Mobile) der App integriert.
 // [2026-10-03] - BUGFIX: Vergangenheits-Filter (todayStart <= eventDateStart) in die Badge-Berechnung (reminderCounts) integriert, um die rote Zahl in der Navigation mit der RemindersView zu synchronisieren.
 // [2026-10-01] - BUGFIX: 'fetchTeams' zum globalen App-Init hinzugefügt, um Regression-Bug bei der Team-Zuweisung (Abo-Erinnerungen) zu beheben.
 // [2026-09-28] - BUGFIX: Globale Store-Fetches (fetchMatchLineups, fetchTeamPins) in den App-Init und Visibility-Check aufgenommen.
@@ -22,6 +23,8 @@ import {
 import { useClubStore } from '../../store/useClubStore';
 import { DsgvoClickwrap } from '../Auth/DsgvoClickwrap';
 import { MyProfileModal } from '../Users/MyProfileModal';
+
+declare const __APP_BUILD_DATE__: string | undefined;
 
 export const AppLayout: React.FC = () => {
   const { 
@@ -51,6 +54,8 @@ export const AppLayout: React.FC = () => {
 
   const perms = currentProfile.permissions;
   const canViewAllReminders = !!perms?.viewAllReminders || !!user?.permissions?.viewAllReminders;
+  
+  const appVersion = typeof __APP_BUILD_DATE__ !== 'undefined' ? __APP_BUILD_DATE__ : 'Dev-Modus';
 
   useEffect(() => {
     localStorage.setItem('papatodo_sidebar_pinned', String(isPinned));
@@ -430,6 +435,10 @@ export const AppLayout: React.FC = () => {
               Abmelden
             </span>
           </button>
+          
+          <div className={`text-center text-[10px] text-gray-400 font-medium transition-all duration-300 mt-2 ${isExpanded ? 'opacity-100 block' : 'opacity-0 hidden'}`}>
+            Build: {appVersion}
+          </div>
         </div>
       </aside>
 
@@ -531,6 +540,10 @@ export const AppLayout: React.FC = () => {
                 <LogOut className="w-5 h-5 mr-2" />
                 Abmelden
               </button>
+              
+              <div className="text-center text-[10px] text-gray-400 pt-2 pb-1 font-medium">
+                Build: {appVersion}
+              </div>
             </div>
           </div>
         </div>

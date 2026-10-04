@@ -1,3 +1,4 @@
+// [2026-10-04] - FEATURE: Automatische Build-Versionsnummer (__APP_BUILD_DATE__) via define-Block für UI-Anzeige injiziert.
 // [2026-06-04] - BUGFIX: 'skipWaiting' und 'clientsClaim' in Workbox ergänzt, um das Service Worker Update-Problem (Zombie-Phänomen) auf iOS/Desktop endgültig zu lösen.
 // 2026-04-18 16:55 - CHIRURGISCHER EINGRIFF: Modern JSX Transform erzwungen, um Render-Warnungen/Freezes zu beheben
 // 2026-05-15 14:20 - CHIRURGISCHER EINGRIFF: PWA Offline-Fähigkeit durch Workbox GlobPatterns und NavigateFallback erzwungen
@@ -8,8 +9,16 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const buildDate = new Date().toLocaleString('de-DE', { 
+  day: '2-digit', month: '2-digit', year: 'numeric', 
+  hour: '2-digit', minute: '2-digit' 
+});
+
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    __APP_BUILD_DATE__: JSON.stringify(buildDate),
+  },
   plugins: [
     tailwindcss(),
     react({ jsxRuntime: 'automatic' }),
