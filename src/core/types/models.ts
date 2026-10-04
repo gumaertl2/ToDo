@@ -1,3 +1,4 @@
+// [2026-10-04] - SCHEMA: 'lastSyncBy' und 'lastSyncError' im CalendarSubscription-Modell hinzugefügt (für Admin-Transparenz).
 // [2026-09-30] - SCHEMA: 'lineupFreezeLeadDays' und 'lineupLockMessage' zum Team-Modell hinzugefügt (Auto-Freeze für Aufstellungen).
 // [2026-09-30] - SCHEMA: 'isLocked' und 'availabilities' zum MatchLineup-Modell hinzugefügt (Spieler-Rückmeldungen & Siegel).
 // [2026-09-28] - SCHEMA: 'captainUserIds' in 'captainHelperIds' geändert, um die Rechteverwaltung direkt an die Mitgliedsakte (Helper) zu knüpfen.
@@ -259,6 +260,8 @@ export interface CalendarSubscription extends BaseDocument {
   color: string;
   isActive: boolean;
   lastSyncedAt?: number;
+  lastSyncBy?: string;         // <--- HINZUGEFÜGT
+  lastSyncError?: string | null; // <--- HINZUGEFÜGT
   cachedEvents?: CachedIcsEvent[];
   sortOrder?: number; 
   showInMatchPlan?: boolean;
