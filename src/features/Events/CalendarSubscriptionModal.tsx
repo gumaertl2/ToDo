@@ -1,4 +1,5 @@
-// [2026-10-04] - UX-FEATURE: Hover-Tooltip ('title') für 'lastSyncBy' und 'lastSyncError' hinzugefügt, um Sync-Details und Verursacher am Mac/Desktop anzuzeigen. Fehler färben das Datum rot.
+// [2026-10-04] - UX-FEATURE: 'lastSyncAttemptAt' in Tooltip integriert. Das UI zeigt nun wieder dauerhaft das Datum des letzten ERFOLGREICHEN Syncs (lastSyncedAt), markiert es bei späteren Fehlern aber rot.
+// [2026-10-04] - UX-FEATURE: Hover-Tooltip ('title') für 'lastSyncBy' und 'lastSyncError' hinzugefügt, um Sync-Details und Verursacher am Mac/Desktop anzuzeigen.
 // [2026-07-23] - BUGFIX: Fehlermeldungen (z.B. Sync-Fehler) werden nun auch in der Master-Listenansicht gerendert.
 // [2026-07-23] - BUGFIX: Wenn sich die ICS-URL ändert, werden alte cachedEvents sofort gelöscht (Verhindert "Geister-Termine" bei fehlerhaftem Folge-Sync).
 // src/features/Events/CalendarSubscriptionModal.tsx
@@ -266,12 +267,14 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
   const formatSyncDate = (timestamp?: number) => {
     if (!timestamp) return 'Noch nie synchronisiert';
     const d = new Date(timestamp);
-    return `Zuletzt: ${d.toLocaleDateString('de-DE')} ${d.toLocaleTimeString('de-DE', {hour: '2-digit', minute:'2-digit'})}`;
+    return `Zuletzt erfolgreich: ${d.toLocaleDateString('de-DE')} ${d.toLocaleTimeString('de-DE', {hour: '2-digit', minute:'2-digit'})}`;
   };
 
-  const getTooltipText = (sub: any) => {
-    if (!sub.lastSyncedAt) return 'Noch nie synchronisiert';
-    const d = new Date(sub.lastSyncedAt);
+  const getTooltipText = (sub: CalendarSubscription) => {
+    const attemptTime = sub.lastSyncAttemptAt || sub.lastSyncedAt;
+    if (!attemptTime) return 'Noch nie synchronisiert';
+    
+    const d = new Date(attemptTime);
     let text = `Letzter Versuch: ${d.toLocaleDateString('de-DE')} ${d.toLocaleTimeString('de-DE', {hour: '2-digit', minute:'2-digit'})}`;
     if (sub.lastSyncBy) text += ` von ${sub.lastSyncBy}`;
     if (sub.lastSyncError) text += `\n\nFehler: ${sub.lastSyncError}`;
@@ -515,10 +518,10 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
                         )}
                       </div>
                       <div 
-                        className={`text-xs italic mt-0.5 truncate cursor-help ${(sub as any).lastSyncError ? 'text-red-500 font-bold' : 'text-gray-500'}`}
+                        className={`text-xs italic mt-0.5 truncate cursor-help ${sub.lastSyncError ? 'text-red-500 font-bold' : 'text-gray-500'}`}
                         title={getTooltipText(sub)}
                       >
-                        {formatSyncDate(sub.lastSyncedAt)} {(sub as any).lastSyncError && '(Fehler!)'}
+                        {formatSyncDate(sub.lastSyncedAt)} {sub.lastSyncError && '(Sync fehlgeschlagen)'}
                       </div>
                     </div>
                   </div>

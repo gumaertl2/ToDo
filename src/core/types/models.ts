@@ -1,10 +1,11 @@
+// [2026-10-04] - SCHEMA: 'lastSyncAttemptAt' im CalendarSubscription-Modell hinzugefügt, um fehlgeschlagene Versuche vom letzten erfolgreichen Sync (lastSyncedAt) zu trennen.
 // [2026-10-04] - SCHEMA: 'lastSyncBy' und 'lastSyncError' im CalendarSubscription-Modell hinzugefügt (für Admin-Transparenz).
 // [2026-09-30] - SCHEMA: 'lineupFreezeLeadDays' und 'lineupLockMessage' zum Team-Modell hinzugefügt (Auto-Freeze für Aufstellungen).
 // [2026-09-30] - SCHEMA: 'isLocked' und 'availabilities' zum MatchLineup-Modell hinzugefügt (Spieler-Rückmeldungen & Siegel).
 // [2026-09-28] - SCHEMA: 'captainUserIds' in 'captainHelperIds' geändert, um die Rechteverwaltung direkt an die Mitgliedsakte (Helper) zu knüpfen.
 // [2026-09-28] - SCHEMA: 'defaultLineupHelperIds' zum Team hinzugefügt. Neues Modell 'MatchLineup' für Spieltags-Ausnahmen (Schatten-Akte) erstellt.
 // [2026-07-28] - SCHEMA: 'hasWrittenDsgvoConsent' (Papierakte) und 'hasYouthWorkClearance' (Unbedenklichkeit Jugendarbeit) zum Helper hinzugefügt.
-// [2026-07-27] - SEC-FEATURE: Neues dediziertes Recht 'viewJugend' für den DSGVO-konformen Schutz von Minderjährigen-Daten hinzugefügt.
+// [2026-07-27] - SEC-FEATURE: Neues dediziertes Recht 'viewJugend' für DSGVO-konformen Schutz von Minderjährigen-Daten hinzugefügt.
 // [2026-07-22] - SCHEMA: Audit-Trail Felder (consentConfirmedAt & consentConfirmedBy) für DSGVO-Clickwrap hinzugefügt.
 // [2026-06-11] - ARCHITEKTUR-FIX: Feld 'isHistorical' zu AgendaItem hinzugefügt (Fate-Binding). Löst das Container-Kosmetik-Problem und verhindert Waisenkinder.
 // [2026-05-31] - FEATURE: 'completedAt' zu AgendaItem hinzugefügt, um das tatsächliche Erledigungsdatum von der Frist (dueDate) zu trennen.
@@ -260,8 +261,9 @@ export interface CalendarSubscription extends BaseDocument {
   color: string;
   isActive: boolean;
   lastSyncedAt?: number;
-  lastSyncBy?: string;         // <--- HINZUGEFÜGT
-  lastSyncError?: string | null; // <--- HINZUGEFÜGT
+  lastSyncAttemptAt?: number;  // <--- HINZUGEFÜGT
+  lastSyncBy?: string;         
+  lastSyncError?: string | null; 
   cachedEvents?: CachedIcsEvent[];
   sortOrder?: number; 
   showInMatchPlan?: boolean;

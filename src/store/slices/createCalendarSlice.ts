@@ -1,3 +1,4 @@
+// [2026-10-04] - LOGIK-FIX: 'lastSyncAttemptAt' eingeführt. Fehlerhafte Syncs überschreiben nun nicht mehr das Datum des letzten ERFOLGREICHEN Syncs (lastSyncedAt). Cronjob-Lock auf Attempt-Datum umgestellt.
 // [2026-10-04] - FEATURE: 'lastSyncBy' und 'lastSyncError' beim Sync-Vorgang erfasst, um Fehlschläge und Verursacher transparent zu machen (Hover-Tooltip).
 // [2026-10-01] - BUGFIX: 'snap.metadata.fromCache' Filter im Snapshot hinzugefügt. Verhindert, dass veraltete lokale Handy-Caches ununterbrochen den Auto-Sync triggern (Distributed-Sync Überhitzung).
 // [2026-10-01] - BUGFIX: 'batch.update' statt 'batch.set' in updateCalendarSubscriptionOrder genutzt. Verhindert die unfreiwillige Wiederbelebung gelöschter Abos (Zombies) durch alte Handys.
@@ -76,8 +77,10 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
         
         sortedSubs.forEach(sub => {
           if (sub.isActive && sub.url !== 'FILE_IMPORT') {
-            if (!sub.lastSyncedAt || (now - sub.lastSyncedAt > SEVEN_DAYS)) {
-              updateDoc(doc(db, 'calendar_subscriptions', sub.id), { lastSyncedAt: now }).then(() => {
+            // Nutze das Attempt-Datum als Lock, damit Fehler-URLs nicht endlos triggern
+            const lastAttempt = sub.lastSyncAttemptAt || sub.lastSyncedAt || 0;
+            if (now - lastAttempt > SEVEN_DAYS) {
+              updateDoc(doc(db, 'calendar_subscriptions', sub.id), { lastSyncAttemptAt: now }).then(() => {
                 get().syncSubscription(sub.id);
               }).catch(err => console.warn("Fehler beim Auto-Sync Lock (wird ignoriert):", err));
             }
@@ -191,7 +194,7 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
       if (!textData) {
         const errMsg = 'Download fehlgeschlagen. Bitte Link prüfen.';
         await updateDoc(docRef, { 
-          lastSyncedAt: Date.now(), 
+          lastSyncAttemptAt: Date.now(), // Nur den Versuch protokollieren, nicht den Erfolg!
           lastSyncBy: syncUserName, 
           lastSyncError: errMsg 
         });
@@ -234,14 +237,15 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
       return await DataProcessor.saveDocument<CalendarSubscription>('calendar_subscriptions', sub.id, { 
         ...sub, 
         cachedEvents, 
-        lastSyncedAt: Date.now(),
+        lastSyncedAt: Date.now(),         // ERFOLG!
+        lastSyncAttemptAt: Date.now(),    // VERSUCH (hier identisch mit Erfolg)
         lastSyncBy: syncUserName,
         lastSyncError: null
       });
     } catch (error) { 
       try {
         await updateDoc(doc(db, 'calendar_subscriptions', id), {
-          lastSyncedAt: Date.now(),
+          lastSyncAttemptAt: Date.now(), // Nur den Versuch protokollieren, nicht den Erfolg!
           lastSyncBy: syncUserName,
           lastSyncError: (error as Error).message || 'Unbekannter Fehler'
         });
