@@ -1,3 +1,4 @@
+// [2026-10-04] - FEATURE: 'lastSyncBy' und 'lastSyncError' beim Sync-Vorgang erfasst, um Fehlschläge und Verursacher transparent zu machen (Hover-Tooltip).
 // [2026-10-01] - BUGFIX: 'snap.metadata.fromCache' Filter im Snapshot hinzugefügt. Verhindert, dass veraltete lokale Handy-Caches ununterbrochen den Auto-Sync triggern (Distributed-Sync Überhitzung).
 // [2026-10-01] - BUGFIX: 'batch.update' statt 'batch.set' in updateCalendarSubscriptionOrder genutzt. Verhindert die unfreiwillige Wiederbelebung gelöschter Abos (Zombies) durch alte Handys.
 // [2026-10-01] - BUGFIX: Zeitzonen-Fehler (UK/Ausland) im ICS-Parser behoben. Nutzt nun 'toUnixTime()' anstelle des lokalen 'new Date()' um die exakte, zeitzonenunabhängige ICS-Zeit zu erzwingen.
@@ -150,6 +151,9 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
   },
 
   syncSubscription: async (id) => {
+    const currentUser = (get() as any).user;
+    const syncUserName = currentUser ? (currentUser.name || 'Unbekannt') : 'Auto-Sync';
+
     try {
       const docRef = doc(db, 'calendar_subscriptions', id);
       const docSnap = await getDoc(docRef);
@@ -184,7 +188,15 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
         } catch (e) { console.warn(`Proxy fail für ${proxyUrl}`); }
       }
       
-      if (!textData) return { success: false, error: new Error('Download fehlgeschlagen. Bitte Link prüfen.') };
+      if (!textData) {
+        const errMsg = 'Download fehlgeschlagen. Bitte Link prüfen.';
+        await updateDoc(docRef, { 
+          lastSyncedAt: Date.now(), 
+          lastSyncBy: syncUserName, 
+          lastSyncError: errMsg 
+        });
+        return { success: false, error: new Error(errMsg) };
+      }
       
       const jcalData = ICAL.parse(textData);
       const comp = new ICAL.Component(jcalData);
@@ -219,8 +231,21 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
         });
       });
       
-      return await DataProcessor.saveDocument<CalendarSubscription>('calendar_subscriptions', sub.id, { ...sub, cachedEvents, lastSyncedAt: Date.now() });
+      return await DataProcessor.saveDocument<CalendarSubscription>('calendar_subscriptions', sub.id, { 
+        ...sub, 
+        cachedEvents, 
+        lastSyncedAt: Date.now(),
+        lastSyncBy: syncUserName,
+        lastSyncError: null
+      });
     } catch (error) { 
+      try {
+        await updateDoc(doc(db, 'calendar_subscriptions', id), {
+          lastSyncedAt: Date.now(),
+          lastSyncBy: syncUserName,
+          lastSyncError: (error as Error).message || 'Unbekannter Fehler'
+        });
+      } catch (e) { /* ignore fallback errors */ }
       return { success: false, error: error as Error }; 
     }
   }

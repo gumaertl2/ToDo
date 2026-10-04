@@ -1,3 +1,4 @@
+// [2026-10-04] - UX-FEATURE: Hover-Tooltip ('title') für 'lastSyncBy' und 'lastSyncError' hinzugefügt, um Sync-Details und Verursacher am Mac/Desktop anzuzeigen. Fehler färben das Datum rot.
 // [2026-07-23] - BUGFIX: Fehlermeldungen (z.B. Sync-Fehler) werden nun auch in der Master-Listenansicht gerendert.
 // [2026-07-23] - BUGFIX: Wenn sich die ICS-URL ändert, werden alte cachedEvents sofort gelöscht (Verhindert "Geister-Termine" bei fehlerhaftem Folge-Sync).
 // src/features/Events/CalendarSubscriptionModal.tsx
@@ -268,6 +269,15 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
     return `Zuletzt: ${d.toLocaleDateString('de-DE')} ${d.toLocaleTimeString('de-DE', {hour: '2-digit', minute:'2-digit'})}`;
   };
 
+  const getTooltipText = (sub: any) => {
+    if (!sub.lastSyncedAt) return 'Noch nie synchronisiert';
+    const d = new Date(sub.lastSyncedAt);
+    let text = `Letzter Versuch: ${d.toLocaleDateString('de-DE')} ${d.toLocaleTimeString('de-DE', {hour: '2-digit', minute:'2-digit'})}`;
+    if (sub.lastSyncBy) text += ` von ${sub.lastSyncBy}`;
+    if (sub.lastSyncError) text += `\n\nFehler: ${sub.lastSyncError}`;
+    return text;
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -504,7 +514,12 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-gray-500 italic mt-0.5 truncate">{formatSyncDate(sub.lastSyncedAt)}</div>
+                      <div 
+                        className={`text-xs italic mt-0.5 truncate cursor-help ${(sub as any).lastSyncError ? 'text-red-500 font-bold' : 'text-gray-500'}`}
+                        title={getTooltipText(sub)}
+                      >
+                        {formatSyncDate(sub.lastSyncedAt)} {(sub as any).lastSyncError && '(Fehler!)'}
+                      </div>
                     </div>
                   </div>
                   
