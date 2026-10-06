@@ -1,3 +1,4 @@
+// [2026-10-06] - FEATURE: nuScore Scanner eingebaut. Extrahiert Spiel-Codes und Unterschriften-PINs dynamisch per Mustererkennung aus dem Wettkampf-Tresor und zeigt sie mit Copy-Button im Termin-Detail an.
 // [2026-09-28] - UX-FEATURE: Read-Only Modus der Aufstellungs-Matrix auch im Kalender-Detail für reguläre Teammitglieder freigeschaltet.
 // [2026-09-28] - BUGFIX: Titel-Abgleich repariert. (Emojis wie 🏠/🚌 aus dem Kalender verhinderten den exakten Titel-Match, wodurch die Schatten-Akte nicht gefunden wurde).
 // [2026-09-28] - UX-FIX: Das vollständige Datum wird nun wieder prominent direkt unter dem Titel angezeigt.
@@ -6,7 +7,7 @@
 // src/features/Events/CalendarIcsDetailModal.tsx
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import { X, MapPin, AlignLeft, Calendar as CalIcon, Clock, Info, Edit3, UserPlus, Users, MessageCircle } from 'lucide-react';
+import { X, MapPin, AlignLeft, Calendar as CalIcon, Clock, Info, Edit3, UserPlus, Users, MessageCircle, Key, Copy, Check } from 'lucide-react';
 import { MatchLineupMatrixModal } from '../Users/components/MatchLineupMatrixModal';
 
 interface Props {
@@ -28,8 +29,9 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
   canTakeOver, 
   onTakeOver 
 }) => {
-  const { user, teams, helpers, calendarSubscriptions, matchLineups } = useClubStore();
+  const { user, teams, helpers, calendarSubscriptions, matchLineups, teamPins } = useClubStore();
   const [isMatrixOpen, setIsMatrixOpen] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   if (!event) return null;
 
@@ -46,10 +48,8 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
   const canManageLineup = isAdmin || isCaptain;
   const isTeamMember = myHelperId && teamContext ? myHelper?.teamIds?.includes(teamContext.id) : false;
   
-  // Darf der Nutzer den Matrix-Button überhaupt sehen? (Captain oder Mitglied)
   const showMatrixButton = canManageLineup || isTeamMember;
 
-  // FIX: Wir nutzen 'includes' anstelle von '===', da der angezeigte Event-Titel evtl. 🏠/🚌 Emojis enthält
   const cachedEvent = sub?.cachedEvents?.find(ce => 
     ce.startTime === event.start.getTime() && 
     event.title.includes(ce.title)
@@ -63,6 +63,36 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
   const activePlayers = helpers
     .filter(h => activePlayerIds.includes(h.id))
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  // ---------------------
+
+  // --- NUSCORE SCANNER LOGIC ---
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const searchDate = `${pad(event.start.getDate())}.${pad(event.start.getMonth() + 1)}.${event.start.getFullYear()}`;
+  const searchTime = !event.allDay ? `${pad(event.start.getHours())}:${pad(event.start.getMinutes())}` : undefined;
+
+  const teamPin = teamContext ? teamPins.find(p => p.teamName === teamContext.name) : null;
+
+  const extractCode = (text: string | undefined, dateStr: string, timeStr?: string) => {
+    if (!text) return null;
+    const lines = text.split('\n');
+    let match = timeStr ? lines.find(line => line.includes(dateStr) && line.includes(timeStr)) : undefined;
+    if (!match) match = lines.find(line => line.includes(dateStr));
+    
+    if (match) {
+      const words = match.trim().split(/\s+/);
+      return words[words.length - 1]; // Letztes Wort schnappen
+    }
+    return null;
+  };
+
+  const gameCode = teamPin ? extractCode(teamPin.gameEntryPinsText, searchDate, searchTime) : null;
+  const signaturePin = teamPin ? extractCode(teamPin.signaturePinsText, searchDate, searchTime) : null;
+  
+  const handleCopy = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
   // ---------------------
 
   const formatDateTime = (date: Date, allDay: boolean) => {
@@ -181,42 +211,77 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
 
             {/* Die integrierte Spielerliste (Nur intern sichtbar, wenn Team verknüpft) */}
             {teamContext && (
-              <div className="flex items-start text-gray-700 pt-6 border-t border-gray-200">
-                <Users className="w-5 h-5 mr-3 mt-0.5 text-gray-400 shrink-0" />
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="font-medium text-sm">Aufstellung / Kader ({activePlayers.length})</p>
-                    <div className="flex gap-2">
-                      <button onClick={handleWhatsAppShare} className="text-green-600 hover:text-green-700 hover:bg-green-50 p-1.5 rounded-lg transition-colors flex items-center" title="Über WhatsApp in der Mannschaftsgruppe teilen">
-                        <MessageCircle className="w-4 h-4" />
-                      </button>
-                      
-                      {/* CHIRURGISCHER EINGRIFF: Dynamischer Matrix-Button (Ansicht vs. Ändern) */}
-                      {showMatrixButton && (
-                        <button 
-                          onClick={() => setIsMatrixOpen(true)} 
-                          className={`p-1.5 rounded-lg transition-colors flex items-center ${canManageLineup ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-50' : 'text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50'}`} 
-                          title={canManageLineup ? "Aufstellung ändern (Matrix öffnen)" : "Saison-Übersicht ansehen"}
-                        >
-                          {canManageLineup ? <Edit3 className="w-4 h-4 mr-1.5" /> : <CalIcon className="w-4 h-4 mr-1.5" />}
-                          <span className="text-xs font-bold">{canManageLineup ? 'Ändern' : 'Ansicht'}</span>
+              <>
+                {/* CHIRURGISCHER EINGRIFF: nuScore Wettkampf-Codes Scanner */}
+                {(gameCode || signaturePin) && (
+                  <div className="flex items-start text-gray-700 pt-6 border-t border-gray-200">
+                    <Key className="w-5 h-5 mr-3 mt-0.5 text-gray-400 shrink-0" />
+                    <div className="flex-1">
+                      <p className="font-medium text-sm mb-2">Wettkampf-Codes (nuScore)</p>
+                      <div className="flex flex-wrap gap-2">
+                        {gameCode && (
+                          <button 
+                            onClick={() => handleCopy(gameCode, 'game')}
+                            className="flex items-center bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg text-sm font-mono font-bold transition-colors border border-gray-300"
+                            title="Spiel-Code kopieren"
+                          >
+                            <span className="text-gray-500 mr-2 font-sans text-xs uppercase tracking-wider">Spiel:</span>
+                            {gameCode}
+                            {copiedId === 'game' ? <Check className="w-3.5 h-3.5 ml-2 text-green-600" /> : <Copy className="w-3.5 h-3.5 ml-2 text-gray-400" />}
+                          </button>
+                        )}
+                        {signaturePin && (
+                          <button 
+                            onClick={() => handleCopy(signaturePin, 'sig')}
+                            className="flex items-center bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg text-sm font-mono font-bold transition-colors border border-gray-300"
+                            title="Unterschriften-PIN kopieren"
+                          >
+                            <span className="text-gray-500 mr-2 font-sans text-xs uppercase tracking-wider">PIN:</span>
+                            {signaturePin}
+                            {copiedId === 'sig' ? <Check className="w-3.5 h-3.5 ml-2 text-green-600" /> : <Copy className="w-3.5 h-3.5 ml-2 text-gray-400" />}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="flex items-start text-gray-700 pt-6 border-t border-gray-200">
+                  <Users className="w-5 h-5 mr-3 mt-0.5 text-gray-400 shrink-0" />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="font-medium text-sm">Aufstellung / Kader ({activePlayers.length})</p>
+                      <div className="flex gap-2">
+                        <button onClick={handleWhatsAppShare} className="text-green-600 hover:text-green-700 hover:bg-green-50 p-1.5 rounded-lg transition-colors flex items-center" title="Über WhatsApp in der Mannschaftsgruppe teilen">
+                          <MessageCircle className="w-4 h-4" />
                         </button>
+                        
+                        {showMatrixButton && (
+                          <button 
+                            onClick={() => setIsMatrixOpen(true)} 
+                            className={`p-1.5 rounded-lg transition-colors flex items-center ${canManageLineup ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-50' : 'text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50'}`} 
+                            title={canManageLineup ? "Aufstellung ändern (Matrix öffnen)" : "Saison-Übersicht ansehen"}
+                          >
+                            {canManageLineup ? <Edit3 className="w-4 h-4 mr-1.5" /> : <CalIcon className="w-4 h-4 mr-1.5" />}
+                            <span className="text-xs font-bold">{canManageLineup ? 'Ändern' : 'Ansicht'}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {activePlayers.length === 0 ? (
+                        <span className="text-sm text-gray-500 italic">Keine Spieler eingeteilt.</span>
+                      ) : (
+                        activePlayers.map(p => (
+                          <span key={p.id} className="inline-block bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded text-xs font-bold shadow-sm">
+                            {p.alias || p.name.split(' ')[0]}
+                          </span>
+                        ))
                       )}
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {activePlayers.length === 0 ? (
-                      <span className="text-sm text-gray-500 italic">Keine Spieler eingeteilt.</span>
-                    ) : (
-                      activePlayers.map(p => (
-                        <span key={p.id} className="inline-block bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded text-xs font-bold shadow-sm">
-                          {p.alias || p.name.split(' ')[0]}
-                        </span>
-                      ))
-                    )}
-                  </div>
                 </div>
-              </div>
+              </>
             )}
 
             {event.description && (
@@ -247,7 +312,7 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* MATRIX MODAL RENDERER (Read-Only Status wird live durchgereicht) */}
+      {/* MATRIX MODAL RENDERER */}
       {isMatrixOpen && teamContext && (
         <MatchLineupMatrixModal 
           team={teamContext} 
