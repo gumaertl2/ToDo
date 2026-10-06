@@ -1,12 +1,24 @@
+// [2026-10-06] - UX-FIX: E-Mail als URL-Parameter im Magic Link übergeben, um das window.prompt bei leerem localStorage (z.B. Inkognito) zu umgehen.
+// [2026-10-06] - UX-FIX: Stummen Türsteher gesprächig gemacht. Schlägt der Magic Link oder die Profil-Prüfung fehl, wird nun ein sichtbares window.alert ausgegeben.
+// [2026-10-06] - BUGFIX: Race-Condition beim Magic Link behoben. 'isProcessingMagicLink' blockiert den AuthGuard-Rauswurf, bis der Link fertig geladen ist.
+// [2026-10-06] - FEATURE: Magic Link (Passwortloser Login) Logik implementiert. 'sendMagicLink' sendet die E-Mail, 'initializeAuth' fängt den Klick-Rückkehrer ab.
 // [2026-09-28] - SEC-FIX: matchLineups in den Logout-Store-Reset aufgenommen, um Geister-Daten nach Account-Wechsel zu verhindern.
 // [2026-07-26] - BUGFIX: 'Gast' Hardcoding beim resolveUserProfile Fallback auf 'Mitglied' korrigiert.
-// [2026-06-11] - TYP-SICHERHEIT: Globalen StoreState importiert und (set as any) im Logout entfernt. Der Store-Reset ist jetzt 100% typensicher.
-// [2026-06-11] - ARCHITEKTUR-FIX: Massives Code-Duplikat für Profil-Ermittlung in zentrale 'resolveUserProfile'-Funktion ausgelagert. Logout-Funktion auf dynamisches 'unsubscribeAll'-Muster umgestellt.
 // src/store/slices/createAuthSlice.ts
 import type { StateCreator } from 'zustand';
 import type { User } from '../../core/types/models';
 import { auth, db } from '../../services/firebase';
-import { onAuthStateChanged, signOut, signInWithEmailAndPassword, sendPasswordResetEmail, createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
+import { 
+  onAuthStateChanged, 
+  signOut, 
+  signInWithEmailAndPassword, 
+  sendPasswordResetEmail, 
+  createUserWithEmailAndPassword, 
+  sendEmailVerification,
+  sendSignInLinkToEmail,
+  isSignInWithEmailLink,
+  signInWithEmailLink
+} from 'firebase/auth';
 import { collection, query, where, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
 import type { Result } from '../../core/types/shared';
 import type { StoreState } from '../useClubStore';
@@ -20,6 +32,7 @@ export interface AuthSlice {
   register: (email: string, pass: string) => Promise<Result<void>>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<Result<void>>;
+  sendMagicLink: (email: string) => Promise<Result<void>>;
 }
 
 async function resolveUserProfile(firebaseUser: { uid: string, email: string | null }): Promise<User | null> {
@@ -90,7 +103,47 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
   isAuthLoading: true,
 
   initializeAuth: () => {
+    let isProcessingMagicLink = false;
+
+    if (isSignInWithEmailLink(auth, window.location.href)) {
+      isProcessingMagicLink = true;
+      let emailForSignIn = window.localStorage.getItem('emailForSignIn');
+      
+      // CHIRURGISCHER EINGRIFF: Falls der localStorage leer ist, holen wir die E-Mail lautlos aus der URL
+      if (!emailForSignIn) {
+        const searchParams = new URLSearchParams(window.location.search);
+        emailForSignIn = searchParams.get('email');
+      }
+      
+      // Fallback, falls weder im Speicher noch in der URL eine E-Mail gefunden wurde
+      if (!emailForSignIn) {
+        emailForSignIn = window.prompt('Sicherheitsprüfung: Bitte bestätige deine E-Mail-Adresse für den Login:');
+      }
+      
+      if (emailForSignIn) {
+        signInWithEmailLink(auth, emailForSignIn, window.location.href)
+          .then(() => {
+            window.localStorage.removeItem('emailForSignIn');
+            // Die URL wieder bereinigen (E-Mail und kryptische Parameter entfernen)
+            window.history.replaceState(null, '', window.location.pathname);
+          })
+          .catch((error) => {
+            console.error("Magic Link Fehler:", error);
+            window.alert("Fehler beim Magic Link Login: " + error.message + "\n(Tipp: Der Link wurde eventuell schon einmal geklickt oder ist abgelaufen. Fordere einfach einen neuen an.)");
+            set({ isAuthLoading: false }); 
+          });
+      } else {
+        isProcessingMagicLink = false;
+        set({ isAuthLoading: false });
+      }
+    }
+
     onAuthStateChanged(auth, async (firebaseUser) => {
+      // Race Condition Block
+      if (isProcessingMagicLink && !firebaseUser) {
+        return;
+      }
+
       set({ isAuthLoading: true });
       
       if (firebaseUser && firebaseUser.email) {
@@ -108,6 +161,7 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
             set({ user: userData, isAuthenticated: true, isAuthLoading: false });
           } else {
             console.error(`Kein Profil für die E-Mail ${firebaseUser.email} gefunden.`);
+            window.alert(`Zugriff verweigert: Die E-Mail ${firebaseUser.email} steht nicht auf der offiziellen Vereinsliste. Du wurdest aus Sicherheitsgründen abgemeldet.`);
             await signOut(auth);
             set({ user: null, isAuthenticated: false, isAuthLoading: false });
           }
@@ -119,6 +173,24 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
         set({ user: null, isAuthenticated: false, isAuthLoading: false });
       }
     });
+  },
+
+  sendMagicLink: async (email) => {
+    try {
+      // CHIRURGISCHER EINGRIFF: Wir hängen die E-Mail-Adresse direkt als Parameter an den Link
+      const returnUrl = new URL(window.location.href);
+      returnUrl.searchParams.set('email', email);
+      
+      const actionCodeSettings = {
+        url: returnUrl.toString(), 
+        handleCodeInApp: true,
+      };
+      await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+      window.localStorage.setItem('emailForSignIn', email);
+      return { success: true, data: undefined };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
+    }
   },
 
   login: async (email, pass) => {
@@ -168,7 +240,6 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
   logout: async () => {
     const store = get() as any;
     
-    // Alle Firebase-Listener sicher trennen
     Object.keys(store).forEach(key => {
       if (key.startsWith('unsub') && typeof store[key] === 'function') {
         store[key]();
@@ -190,7 +261,7 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
       templates: [],
       calendarEvents: [],
       calendarSubscriptions: [],
-      matchLineups: [] // <-- NEU: Schatten-Akten beim Logout sicher aus dem Speicher löschen
+      matchLineups: [] 
     });
   },
 

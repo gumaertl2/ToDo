@@ -1,7 +1,9 @@
+// [2026-10-06] - BUGFIX: Auto-Redirect (useEffect) hinzugefügt, falls der Nutzer im Hintergrund via Magic Link eingeloggt wird, aber noch auf der Maske festhängt.
+// [2026-10-06] - FEATURE: Magic Link Modus (Passwortloser Login via E-Mail) in die Login-Maske integriert.
 // 2026-04-24 10:30 - UX-FIX: Benutzerführung für E-Mail-Verifizierung nach Registrierung optimiert
 // 2026-05-15 14:40 - BUGFIX: "Angemeldet bleiben" standardmäßig aktiviert & Offline-Login-Fehler übersetzt
 // src/features/Auth/LoginView.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../../services/firebase';
 import {
@@ -18,14 +20,22 @@ import logo from '/papatodo-logo.png';
 export const LoginView: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  // CHIRURGISCHER EINGRIFF: Standardmäßig auf TRUE setzen, damit PWA-Sitzungen (Mac Dock, iOS) überleben
   const [isTrusted, setIsTrusted] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [isMagicLinkMode, setIsMagicLinkMode] = useState(false);
   const [resetMessage, setResetMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const navigate = useNavigate();
-  const { login, register, resetPassword } = useClubStore();
+  const { login, register, resetPassword, sendMagicLink, isAuthenticated } = useClubStore();
+
+  // ---> CHIRURGISCHER EINGRIFF: Auto-Redirect <---
+  // Sobald der Magic Link im Hintergrund erfolgreich war, werfen wir den Nutzer sofort in die App!
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/');
+    }
+  }, [isAuthenticated, navigate]);
 
   const handlePersistence = async () => {
     const persistence = isTrusted ? browserLocalPersistence : browserSessionPersistence;
@@ -39,12 +49,30 @@ export const LoginView: React.FC = () => {
     setIsLoading(true);
     try {
       await handlePersistence();
+
+      if (isMagicLinkMode) {
+        const result = await sendMagicLink(email.trim());
+        if (!result.success) {
+          const errorMsg = result.error?.message || '';
+          if (errorMsg.includes('auth/network-request-failed')) {
+            setError('Du bist offline! Für das Senden benötigst du kurz eine Internetverbindung.');
+          } else {
+            setError(errorMsg || 'Magic Link konnte nicht gesendet werden.');
+          }
+        } else {
+          setResetMessage({
+            type: 'success',
+            text: 'Magic Link gesendet! Prüfe dein E-Mail-Postfach und tippe auf den Link, um dich direkt ohne Passwort anzumelden.'
+          });
+        }
+        return;
+      }
+
       const result = isRegisterMode 
         ? await register(email.trim(), password)
         : await login(email.trim(), password);
         
       if (!result.success) {
-        // CHIRURGISCHER EINGRIFF: Offline-Fehler sauber übersetzen
         const errorMsg = result.error?.message || '';
         if (errorMsg.includes('auth/network-request-failed')) {
           setError('Du bist offline! Für den Neu-Login benötigst du kurz eine Internetverbindung.');
@@ -138,17 +166,21 @@ export const LoginView: React.FC = () => {
               disabled={isLoading}
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Passwort</label>
-            <input
-              type="password"
-              required
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500 outline-none"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={isLoading}
-            />
-          </div>
+          
+          {!isMagicLinkMode && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Passwort</label>
+              <input
+                type="password"
+                required
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500 outline-none"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
+          )}
+
           <div className="flex items-center mt-4">
             <input
               id="trusted"
@@ -162,39 +194,70 @@ export const LoginView: React.FC = () => {
               Auf diesem Gerät angemeldet bleiben / Vertrauenswürdiges Gerät
             </label>
           </div>
+          
           <button
             type="submit"
             disabled={isLoading}
             className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition"
           >
-            {isLoading ? 'Lädt...' : (isRegisterMode ? 'Registrieren & E-Mail bestätigen' : 'Mit E-Mail Anmelden')}
+            {isLoading 
+              ? 'Lädt...' 
+              : (isMagicLinkMode 
+                  ? '✨ Magic Link senden' 
+                  : (isRegisterMode ? 'Registrieren & E-Mail bestätigen' : 'Mit E-Mail Anmelden'))}
           </button>
         </form>
 
-        <div className="text-center mt-4 border-t border-gray-200 pt-4">
-          <p className="text-sm text-gray-600 mb-2">
-            {isRegisterMode ? 'Bereits registriert?' : 'Vom Admin neu angelegt?'}
-          </p>
-          <button 
-            type="button" 
-            onClick={() => { setIsRegisterMode(!isRegisterMode); setError(null); setResetMessage(null); }} 
-            className="text-sm font-bold text-blue-600 hover:text-blue-800 hover:underline transition"
-            disabled={isLoading}
-          >
-            {isRegisterMode ? 'Hier ganz normal Einloggen' : 'Hier mit neuer E-Mail registrieren'}
-          </button>
-        </div>
+        {isMagicLinkMode ? (
+          <div className="text-center mt-4 border-t border-gray-200 pt-4">
+            <button 
+              type="button" 
+              onClick={() => { setIsMagicLinkMode(false); setError(null); setResetMessage(null); }} 
+              className="text-sm font-bold text-blue-600 hover:text-blue-800 hover:underline transition"
+              disabled={isLoading}
+            >
+              Doch lieber mit Passwort anmelden
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="text-center mt-4 border-t border-gray-200 pt-4">
+              <p className="text-sm text-gray-600 mb-2">
+                {isRegisterMode ? 'Bereits registriert?' : 'Vom Admin neu angelegt?'}
+              </p>
+              <button 
+                type="button" 
+                onClick={() => { setIsRegisterMode(!isRegisterMode); setError(null); setResetMessage(null); }} 
+                className="text-sm font-bold text-blue-600 hover:text-blue-800 hover:underline transition"
+                disabled={isLoading}
+              >
+                {isRegisterMode ? 'Hier ganz normal Einloggen' : 'Hier mit neuer E-Mail registrieren'}
+              </button>
+            </div>
 
-        <div className="text-center mt-4">
-          <button 
-            type="button" 
-            onClick={handlePasswordReset} 
-            disabled={isLoading}
-            className="text-sm text-blue-600 hover:text-blue-800 hover:underline font-medium disabled:opacity-50"
-          >
-            Passwort vergessen / Erstes Passwort setzen?
-          </button>
-        </div>
+            <div className="text-center mt-3 flex flex-col gap-2">
+              {!isRegisterMode && (
+                <button 
+                  type="button" 
+                  onClick={() => { setIsMagicLinkMode(true); setError(null); setResetMessage(null); }} 
+                  disabled={isLoading}
+                  className="text-sm font-bold text-indigo-600 hover:text-indigo-800 hover:underline transition"
+                >
+                  ✨ Ohne Passwort einloggen (Magic Link)
+                </button>
+              )}
+
+              <button 
+                type="button" 
+                onClick={handlePasswordReset} 
+                disabled={isLoading}
+                className="text-sm text-blue-600 hover:text-blue-800 hover:underline font-medium disabled:opacity-50"
+              >
+                Passwort vergessen / Erstes Passwort setzen?
+              </button>
+            </div>
+          </>
+        )}
 
         <div className="mt-6">
           <div className="relative">
