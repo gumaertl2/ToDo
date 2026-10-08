@@ -1,3 +1,4 @@
+// [2026-10-08] - FEATURE: EventPollWidget (WhatsApp-Style RSVP/Umfrage) im Termin-Detail eingebunden.
 // [2026-10-06] - FEATURE: nuScore Scanner eingebaut. Extrahiert Spiel-Codes und Unterschriften-PINs dynamisch per Mustererkennung aus dem Wettkampf-Tresor und zeigt sie mit Copy-Button im Termin-Detail an.
 // [2026-09-28] - UX-FEATURE: Read-Only Modus der Aufstellungs-Matrix auch im Kalender-Detail für reguläre Teammitglieder freigeschaltet.
 // [2026-09-28] - BUGFIX: Titel-Abgleich repariert. (Emojis wie 🏠/🚌 aus dem Kalender verhinderten den exakten Titel-Match, wodurch die Schatten-Akte nicht gefunden wurde).
@@ -9,6 +10,7 @@ import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import { X, MapPin, AlignLeft, Calendar as CalIcon, Clock, Info, Edit3, UserPlus, Users, MessageCircle, Key, Copy, Check } from 'lucide-react';
 import { MatchLineupMatrixModal } from '../Users/components/MatchLineupMatrixModal';
+import { EventPollWidget } from './components/EventPollWidget';
 
 interface Props {
   event: any; // Das AdaptedEvent aus dem Kalender
@@ -294,6 +296,14 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
                   </div>
                 </div>
               </div>
+            )}
+            
+            {/* --- NEU: RSVP / UMFRAGE WIDGET --- */}
+            {event.sourceEvent?.pollConfig?.isActive && (
+              <EventPollWidget 
+                eventId={event.sourceEvent.id} 
+                pollConfig={event.sourceEvent.pollConfig} 
+              />
             )}
             
           </div>

@@ -1,11 +1,12 @@
+// [2026-10-08] - FEATURE: Umfragen/RSVP (PollConfig) Konfiguration im Termin-Formular hinzugefügt.
 // [2026-05-16] - UX-FIX: Badge-Anzeige für den ausgewählten WhatsApp-Absender hinzugefügt, damit die Auswahl nach dem Zuklappen sichtbar bleibt.
 // [2026-05-16] - FEATURE: SmartEntityPicker für Omni-Channel In-App Erinnerungen & WhatsApp Absender integriert.
 // 2026-04-15 20:55 - FIX: Firebase "undefined" Error beim Speichern von Terminen behoben
 // src/features/Events/CalendarEventFormModal.tsx
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import type { CalendarEvent } from '../../core/types/models';
-import { X, Save, AlertCircle, Globe, Trash2, Layers, Info, Plus, MessageCircle, List as ListIcon, User, Users } from 'lucide-react';
+import type { CalendarEvent, PollOption } from '../../core/types/models';
+import { X, Save, AlertCircle, Globe, Trash2, Layers, Info, Plus, MessageCircle, List as ListIcon, User, Users, BarChart3 } from 'lucide-react';
 import { SmartEntityPicker } from '../Shared/components/SmartEntityPicker';
 
 interface Props {
@@ -45,6 +46,14 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
 
   const [reminderLeadDays, setReminderLeadDays] = useState(existingEvent?.reminderLeadDays?.toString() || '7');
   const [reminderCustomText, setReminderCustomText] = useState(existingEvent?.reminderCustomText || '');
+
+  // --- NEU: Umfrage / RSVP Konfiguration ---
+  const [isPollActive, setIsPollActive] = useState(existingEvent?.pollConfig?.isActive || false);
+  const [isMultipleChoice, setIsMultipleChoice] = useState(existingEvent?.pollConfig?.isMultipleChoice || false);
+  const [pollOptions, setPollOptions] = useState<PollOption[]>(existingEvent?.pollConfig?.options || [
+    { id: '1', text: '👍 Bin dabei' },
+    { id: '2', text: '🚫 Passt leider nicht' }
+  ]);
   
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -62,6 +71,19 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
       d.setHours(h + 2, m);
       setEndTime(fTime(d));
     }
+  };
+
+  // Hilfsfunktionen für die dynamischen Umfrage-Optionen
+  const handleAddOption = () => {
+    setPollOptions([...pollOptions, { id: Date.now().toString(), text: '' }]);
+  };
+
+  const handleUpdateOption = (id: string, text: string) => {
+    setPollOptions(pollOptions.map(o => o.id === id ? { ...o, text } : o));
+  };
+
+  const handleRemoveOption = (id: string) => {
+    setPollOptions(pollOptions.filter(o => o.id !== id));
   };
 
   const handleSave = async (keepOpen: boolean = false) => {
@@ -100,7 +122,12 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
       reminderRecipientUserIds,
       reminderRecipientGroupIds,
       reminderRecipientTeamIds,
-      reminderRecipientHelperIds
+      reminderRecipientHelperIds,
+      pollConfig: isPollActive ? {
+        isActive: true,
+        isMultipleChoice,
+        options: pollOptions.filter(o => o.text.trim() !== '')
+      } : null
     };
 
     if (existingEvent?.reminderSentAt) rawEventData.reminderSentAt = existingEvent.reminderSentAt;
@@ -208,6 +235,57 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Endzeit</label>
                 <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} disabled={isSaving} className="w-full p-2 border border-gray-300 rounded" />
+              </div>
+            )}
+          </div>
+
+          {/* --- NEU: RSVP / UMFRAGE --- */}
+          <div className="mt-6 bg-indigo-50/50 border border-indigo-200 rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-indigo-800 flex items-center">
+                <BarChart3 className="w-5 h-5 mr-2" />
+                Zu- & Absagen / Abfrage
+              </h3>
+              <label className="flex items-center cursor-pointer">
+                <div className="relative">
+                  <input type="checkbox" className="sr-only" checked={isPollActive} onChange={(e) => setIsPollActive(e.target.checked)} disabled={isSaving} />
+                  <div className={`block w-10 h-6 rounded-full transition-colors ${isPollActive ? 'bg-indigo-500' : 'bg-gray-300'}`}></div>
+                  <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${isPollActive ? 'transform translate-x-4' : ''}`}></div>
+                </div>
+              </label>
+            </div>
+            
+            {isPollActive && (
+              <div className="mt-4 space-y-4 border-t border-indigo-200/50 pt-4">
+                <div className="flex items-center">
+                   <input type="checkbox" id="multiChoice" checked={isMultipleChoice} onChange={(e) => setIsMultipleChoice(e.target.checked)} disabled={isSaving} className="mr-2 rounded text-indigo-600 focus:ring-indigo-500" />
+                   <label htmlFor="multiChoice" className="text-sm font-medium text-indigo-900 cursor-pointer">Mehrfachauswahl erlauben (z.B. für Mitbringsel)</label>
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-indigo-700">Antwort-Optionen</label>
+                  {pollOptions.map((opt) => (
+                    <div key={opt.id} className="flex items-center gap-2">
+                      <input 
+                        type="text" 
+                        value={opt.text} 
+                        onChange={(e) => handleUpdateOption(opt.id, e.target.value)} 
+                        disabled={isSaving}
+                        placeholder="z.B. Ich bringe Kuchen mit"
+                        className="flex-1 p-2 text-sm border border-indigo-200 rounded focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                      <button type="button" onClick={() => handleRemoveOption(opt.id)} disabled={isSaving || pollOptions.length <= 1} className="p-2 text-indigo-400 hover:text-red-500 transition disabled:opacity-50">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button type="button" onClick={handleAddOption} disabled={isSaving} className="flex items-center text-xs font-bold text-indigo-600 hover:text-indigo-800 mt-2">
+                    <Plus className="w-3 h-3 mr-1" /> Weitere Option hinzufügen
+                  </button>
+                </div>
+                <p className="text-[10px] text-indigo-500 leading-tight">
+                  Tipp: Ein freies Textfeld für Kommentare wird den Mitgliedern automatisch bei der Abstimmung angezeigt.
+                </p>
               </div>
             )}
           </div>

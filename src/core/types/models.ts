@@ -1,3 +1,4 @@
+// [2026-10-08] - SCHEMA: 'PollConfig' und 'EventPollResponse' für flexibles RSVP/Umfrage-Feature (WhatsApp-Style) hinzugefügt.
 // [2026-10-08] - SCHEMA: 'isSetByMF' im MatchLineup-Modell hinzugefügt (Fremdsteuerung durch MF).
 // [2026-10-04] - SCHEMA: 'lastSyncAttemptAt' im CalendarSubscription-Modell hinzugefügt, um fehlgeschlagene Versuche vom letzten erfolgreichen Sync (lastSyncedAt) zu trennen.
 // [2026-10-04] - SCHEMA: 'lastSyncBy' und 'lastSyncError' im CalendarSubscription-Modell hinzugefügt (für Admin-Transparenz).
@@ -147,6 +148,18 @@ export interface Helper extends BaseDocument {
   lastAppLoginAt?: number;
 }
 
+// ---> NEU: Umfrage / RSVP Konfiguration <---
+export interface PollOption {
+  id: string;
+  text: string;
+}
+
+export interface PollConfig {
+  isActive: boolean;
+  isMultipleChoice: boolean;
+  options: PollOption[];
+}
+
 export interface ClubEvent extends BaseDocument {
   title: string;
   description?: string;
@@ -180,6 +193,8 @@ export interface ClubEvent extends BaseDocument {
   endDate?: number;
   occurrenceCount?: number;
   nextEventDate?: number;
+
+  pollConfig?: PollConfig; // <--- HINZUGEFÜGT
 }
 
 export type Event = ClubEvent;
@@ -298,6 +313,8 @@ export interface CalendarEvent extends BaseDocument {
   reminderRecipientGroupIds?: string[];
   reminderRecipientTeamIds?: string[];
   reminderRecipientHelperIds?: string[];
+
+  pollConfig?: PollConfig; // <--- HINZUGEFÜGT
 }
 
 export interface TeamPin extends BaseDocument {
@@ -319,7 +336,15 @@ export interface MatchLineup {
   lineupHelperIds: string[];
   isLocked?: boolean;
   availabilities?: Record<string, 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN'>; 
-  isSetByMF?: Record<string, boolean>; // ---> NEU: True, wenn der Captain (Fremder) den Status überschrieben hat
+  isSetByMF?: Record<string, boolean>; 
   updatedAt?: number;
+}
+
+// ---> NEU: Die Schatten-Akte für die Umfrage/RSVP <---
+export interface EventPollResponse extends BaseDocument {
+  eventId: string;
+  helperId: string;
+  selectedOptionIds: string[];
+  comment?: string;
 }
 // --- END OF FILE ---

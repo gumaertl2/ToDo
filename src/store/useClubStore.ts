@@ -1,3 +1,4 @@
+// [2026-10-08] - ARCHITECTURE: EventPollSlice in den globalen Store eingehängt, um die neue RSVP/Umfragen-Logik verfügbar zu machen.
 // [2026-09-28] - ARCHITECTURE: MatchLineupSlice in den globalen Store (useClubStore) eingehängt, um die neue Aufstellungs-Logik (Base & Override) verfügbar zu machen.
 // [2026-05-15] - FIX: Vercel Build Error TS2551 (Korrektur Singular/Plural von roleProfiles in partialize)
 // src/store/useClubStore.ts
@@ -14,6 +15,7 @@ import { createTemplateSlice } from './slices/createTemplateSlice';
 import { createTeamPinsSlice } from './slices/createTeamPinsSlice';
 import { createTeamSlice } from './slices/createTeamSlice';
 import { createMatchLineupSlice } from './slices/createMatchLineupSlice';
+import { createEventPollSlice } from './slices/createEventPollSlice';
 
 // Slice Imports (Typen/Interfaces)
 import type { AuthSlice } from './slices/createAuthSlice';
@@ -25,6 +27,7 @@ import type { TemplateSlice } from './slices/createTemplateSlice';
 import type { TeamPinsSlice } from './slices/createTeamPinsSlice';
 import type { TeamSlice } from './slices/createTeamSlice';
 import type { MatchLineupSlice } from './slices/createMatchLineupSlice';
+import type { EventPollSlice } from './slices/createEventPollSlice';
 
 export interface StoreState 
   extends AuthSlice, 
@@ -35,7 +38,8 @@ export interface StoreState
           TemplateSlice, 
           TeamPinsSlice,
           TeamSlice,
-          MatchLineupSlice {}
+          MatchLineupSlice,
+          EventPollSlice {}
 
 export const useClubStore = create<StoreState>()(
   persist(
@@ -49,6 +53,7 @@ export const useClubStore = create<StoreState>()(
       ...createTeamPinsSlice(...a),
       ...createTeamSlice(...a),
       ...createMatchLineupSlice(...a),
+      ...createEventPollSlice(...a),
     }),
     {
       name: 'club-management-storage',
