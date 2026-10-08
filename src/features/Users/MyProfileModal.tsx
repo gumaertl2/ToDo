@@ -1,3 +1,4 @@
+// [2026-10-08] - FEATURE: Adressfelder (Strasse, PLZ, Ort) im Self-Service hinzugefügt inkl. Benachrichtigung an Admin und Google-Maps-Integration.
 // [2026-07-29] - UX-FEATURE: Anzeige der Dokumenten-Akte (Schriftliche DSGVO & Jugendschutz) als schreibgeschützte Status-Badges im Profil hinzugefügt.
 // [2026-07-24] - UX-FEATURE: "App reparieren" (Hard Reset) Button im Profil hinzugefügt, um Service Worker und Caches bei Update-Problemen hart zurückzusetzen.
 // [2026-07-23] - FEATURE: DSGVO Self-Service für Nutzer integriert. Erlaubt die eigenständige Änderung von Kontaktdaten und DSGVO-Einwilligung.
@@ -8,7 +9,7 @@
 // src/features/Users/MyProfileModal.tsx
 import React, { useState, useMemo } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import { X, Save, ShieldCheck, AlertCircle, Info, Lock, RefreshCw, CheckCircle, XCircle, FileText } from 'lucide-react';
+import { X, Save, ShieldCheck, AlertCircle, Info, Lock, RefreshCw, CheckCircle, XCircle, FileText, MapPin } from 'lucide-react';
 import { DSGVO_CONFIG } from '../../config/dsgvoConfig';
 import type { AgendaItem } from '../../core/types/models';
 
@@ -28,6 +29,12 @@ export const MyProfileModal: React.FC<Props> = ({ onClose }) => {
   const [telefon, setTelefon] = useState(myHelper?.telefon || '');
   const [emailEltern, setEmailEltern] = useState(myHelper?.emailEltern || '');
   const [telefonEltern, setTelefonEltern] = useState(myHelper?.telefonEltern || '');
+  
+  // NEU: Adressfelder
+  const [strasse, setStrasse] = useState(myHelper?.strasse || '');
+  const [plz, setPlz] = useState(myHelper?.plz || '');
+  const [ort, setOrt] = useState(myHelper?.ort || '');
+
   const [consentConfirmed, setConsentConfirmed] = useState(myHelper?.consentConfirmed || false);
   
   const [isSaving, setIsSaving] = useState(false);
@@ -102,7 +109,10 @@ export const MyProfileModal: React.FC<Props> = ({ onClose }) => {
       const contactDataChanged = 
         myHelper.telefon !== formattedPhone ||
         myHelper.emailEltern !== emailEltern.trim() ||
-        myHelper.telefonEltern !== formattedPhoneEltern;
+        myHelper.telefonEltern !== formattedPhoneEltern ||
+        (myHelper.strasse || '') !== strasse.trim() ||
+        (myHelper.plz || '') !== plz.trim() ||
+        (myHelper.ort || '') !== ort.trim();
 
       const consentChanged = myHelper.consentConfirmed !== consentConfirmed;
 
@@ -111,6 +121,9 @@ export const MyProfileModal: React.FC<Props> = ({ onClose }) => {
         telefon: formattedPhone,
         emailEltern: emailEltern.trim(),
         telefonEltern: formattedPhoneEltern,
+        strasse: strasse.trim() || undefined,
+        plz: plz.trim() || undefined,
+        ort: ort.trim() || undefined,
         consentConfirmed,
       };
 
@@ -129,12 +142,14 @@ export const MyProfileModal: React.FC<Props> = ({ onClose }) => {
         });
 
         if (adminUsers.length > 0) {
+          const addressString = [strasse.trim(), plz.trim(), ort.trim()].filter(Boolean).join(', ') || '-';
+          
           const notificationTask: Partial<AgendaItem> = {
             id: `sys-info-${now}`,
             schemaVersion: '1.0',
             type: 'INFO',
             title: `System: Daten-Update (${myHelper.name})`,
-            description: `Das Mitglied ${myHelper.name} hat seine Kontaktdaten über den Self-Service der App aktualisiert.\n\n**Neue Daten:**\nTelefon: ${formattedPhone || '-'}\nE-Mail (Eltern): ${emailEltern.trim() || '-'}\nTelefon (Eltern): ${formattedPhoneEltern || '-'}\n\nBitte diese neuen Daten in den externen Systemen (Kasse, DTTB, Verteiler) prüfen und bei Bedarf aktualisieren. Klicke auf "Verwerfen", wenn du fertig bist.`,
+            description: `Das Mitglied ${myHelper.name} hat seine Kontaktdaten über den Self-Service der App aktualisiert.\n\n**Neue Daten:**\nTelefon: ${formattedPhone || '-'}\nE-Mail (Eltern): ${emailEltern.trim() || '-'}\nTelefon (Eltern): ${formattedPhoneEltern || '-'}\nAnschrift: ${addressString}\n\nBitte diese neuen Daten in den externen Systemen (Kasse, DTTB, Verteiler) prüfen und bei Bedarf aktualisieren. Klicke auf "Verwerfen", wenn du fertig bist.`,
             status: 'OFFEN',
             progress: 0,
             assigneeUserIds: adminUsers.map(a => a.id),
@@ -156,6 +171,10 @@ export const MyProfileModal: React.FC<Props> = ({ onClose }) => {
       setIsSaving(false);
     }
   };
+
+  // Google Maps URL generieren
+  const fullAddressQuery = [strasse, plz, ort].filter(Boolean).join(', ');
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddressQuery)}`;
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
@@ -237,6 +256,53 @@ export const MyProfileModal: React.FC<Props> = ({ onClose }) => {
                   className="w-full border border-gray-300 rounded-xl p-2.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-white" 
                 />
               </div>
+            </div>
+          </div>
+
+          {/* NEU: Wohnort & Anschrift Block */}
+          <div>
+            <h3 className="font-bold text-gray-800 border-b pb-2 mb-4 flex items-center">
+              <MapPin className="w-5 h-5 mr-2 text-gray-500" />
+              Wohnort & Anschrift
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200">
+              <div className="md:col-span-3">
+                <label className="block text-sm font-bold text-gray-700 mb-1">Straße & Hausnummer</label>
+                <input
+                  type="text" value={strasse} onChange={(e) => setStrasse(e.target.value)} disabled={isSaving}
+                  placeholder="Musterstraße 12"
+                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">PLZ</label>
+                <input
+                  type="text" value={plz} onChange={(e) => setPlz(e.target.value)} disabled={isSaving}
+                  placeholder="80331"
+                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-white"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-bold text-gray-700 mb-1">Ort</label>
+                <input
+                  type="text" value={ort} onChange={(e) => setOrt(e.target.value)} disabled={isSaving}
+                  placeholder="München"
+                  className="w-full border border-gray-300 rounded-xl p-2.5 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-white"
+                />
+              </div>
+
+              {(strasse || plz || ort) && (
+                <div className="md:col-span-3 pt-2">
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center text-sm font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-lg border border-blue-200 transition-colors shadow-sm"
+                  >
+                    <MapPin className="w-4 h-4 mr-2 text-blue-600" /> In Google Maps öffnen / Route planen
+                  </a>
+                </div>
+              )}
             </div>
           </div>
 

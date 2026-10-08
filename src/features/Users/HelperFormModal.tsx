@@ -1,14 +1,12 @@
+// [2026-10-08] - FEATURE: Adressfelder (Strasse, PLZ, Ort) inklusive aufklappbarem Akkordeon und Google-Maps-Navi-Button integriert.
 // [2026-07-28] - TS-FIX: Ungenutzten Import 'FileSignature' entfernt (TS6133).
 // [2026-07-28] - UX-FEATURE: Aktenlage (DSGVO-Papier & Jugendarbeit) vom App-Sichtbarkeitsschalter getrennt eingebaut. Automatisches Opt-In bei Papiereingang.
 // [2026-07-22] - BUGFIX: DSGVO Reset-Button für den Admin hinzugefügt, um Verweigerer (oder alte Zustimmungen) zurückzusetzen und eine Neuabfrage zu erzwingen.
-// 2026-04-16 16:40 - FEATURE: Eingabefelder für Eintrittsdatum und Mitgliedsstatus hinzugefügt
-// 2026-04-23 15:30 - FEATURE: Eingabefeld für Tel. Eltern hinzugefügt
-// 2026-04-30 18:20 - FEATURE: Eingabefeld für E-Mail (Eltern) hinzugefügt
 // src/features/Users/HelperFormModal.tsx
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import type { Helper } from '../../core/types/models';
-import { X, Save, AlertTriangle, AlertCircle, ShieldCheck, RefreshCw, FolderOpen } from 'lucide-react';
+import { X, Save, AlertTriangle, AlertCircle, ShieldCheck, RefreshCw, FolderOpen, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
 import { DSGVO_CONFIG } from '../../config/dsgvoConfig';
 
 interface HelperFormModalProps {
@@ -27,6 +25,12 @@ export const HelperFormModal: React.FC<HelperFormModalProps> = ({ onClose, exist
   const [emailEltern, setEmailEltern] = useState(existingHelper?.emailEltern || '');
   const [geburtsdatum, setGeburtsdatum] = useState(existingHelper?.geburtsdatum || '');
   
+  // NEU: Adressfelder
+  const [strasse, setStrasse] = useState(existingHelper?.strasse || '');
+  const [plz, setPlz] = useState(existingHelper?.plz || '');
+  const [ort, setOrt] = useState(existingHelper?.ort || '');
+  const [isAddressOpen, setIsAddressOpen] = useState(!!(existingHelper?.strasse || existingHelper?.plz || existingHelper?.ort));
+
   const [eintrittsdatum, setEintrittsdatum] = useState(existingHelper?.eintrittsdatum || '');
   const [memberStatus, setMemberStatus] = useState<'AKTIV' | 'PASSIV' | 'JUGEND'>(existingHelper?.memberStatus || 'AKTIV');
 
@@ -137,6 +141,11 @@ export const HelperFormModal: React.FC<HelperFormModalProps> = ({ onClose, exist
       eintrittsdatum: eintrittsdatum || undefined,
       memberStatus,
       
+      // Adressfelder speichern (leere Strings als undefined bereinigen)
+      strasse: strasse.trim() || undefined,
+      plz: plz.trim() || undefined,
+      ort: ort.trim() || undefined,
+      
       hasWrittenDsgvoConsent,
       hasYouthWorkClearance,
 
@@ -158,6 +167,10 @@ export const HelperFormModal: React.FC<HelperFormModalProps> = ({ onClose, exist
     }
     onClose();
   };
+
+  // Google Maps URL generieren
+  const fullAddressQuery = [strasse, plz, ort].filter(Boolean).join(', ');
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddressQuery)}`;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -251,6 +264,66 @@ export const HelperFormModal: React.FC<HelperFormModalProps> = ({ onClose, exist
                 className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500" 
               />
             </div>
+          </div>
+
+          {/* ANSCHRIFTEN-AKKORDEON (Damit die Telefone im Fokus bleiben) */}
+          <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50/50">
+            <div 
+              onClick={() => setIsAddressOpen(!isAddressOpen)}
+              className="p-3 flex items-center justify-between cursor-pointer hover:bg-gray-100/80 transition-colors select-none"
+            >
+              <div className="flex items-center text-sm font-bold text-gray-700">
+                <MapPin className="w-4 h-4 mr-2 text-blue-600" />
+                Anschrift / Wohnort {(strasse || plz || ort) && <span className="ml-2 text-xs font-normal text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">Hinterlegt</span>}
+              </div>
+              <div className="text-gray-400">
+                {isAddressOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </div>
+            </div>
+
+            {isAddressOpen && (
+              <div className="p-4 pt-1 border-t border-gray-200 space-y-3 bg-white">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Straße & Hausnummer</label>
+                  <input 
+                    type="text" value={strasse} onChange={(e) => setStrasse(e.target.value)} disabled={isSaving}
+                    placeholder="Musterstraße 12"
+                    className="w-full p-2 text-sm border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500" 
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">PLZ</label>
+                    <input 
+                      type="text" value={plz} onChange={(e) => setPlz(e.target.value)} disabled={isSaving}
+                      placeholder="80331"
+                      className="w-full p-2 text-sm border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500" 
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Ort</label>
+                    <input 
+                      type="text" value={ort} onChange={(e) => setOrt(e.target.value)} disabled={isSaving}
+                      placeholder="München"
+                      className="w-full p-2 text-sm border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500" 
+                    />
+                  </div>
+                </div>
+
+                {(strasse || plz || ort) && (
+                  <div className="pt-2">
+                    <a 
+                      href={mapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200 transition-colors"
+                    >
+                      <MapPin className="w-3.5 h-3.5 mr-1.5 text-blue-600" /> In Google Maps öffnen / Route planen
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-3 rounded-lg border border-gray-200">

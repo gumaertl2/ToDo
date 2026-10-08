@@ -1,3 +1,4 @@
+// [2026-10-08] - FEATURE: CSV-Import um Adressfelder (Strasse, PLZ, Ort) erweitert, inklusive intelligentem Merge für bestehende Profile.
 // [2026-07-28] - FEATURE: CSV-Import um Aktenlage-Felder ('DSGVO Papier' und 'Erw. Führungszeugnis') erweitert.
 // [2026-04-16] - FEATURE: CSV-Import um Eintrittsdatum und Mitgliedsstatus erweitert
 // [2026-04-23] - FEATURE: CSV-Import um Feld telefonEltern erweitert
@@ -121,9 +122,13 @@ export const CsvImportModal: React.FC<Props> = ({ onClose }) => {
       const idxTelEltern = mapIndex(['eltern', 'tel. eltern', 'telefon eltern', 'elterntelefon', 'telefoneltern']);
       const idxEmailEltern = mapIndex(['email eltern', 'eltern email', 'e-mail eltern', 'eltern e-mail', 'elternmail']);
       
-      // CHIRURGISCHER EINGRIFF: Aktenlage Indices
       const idxDsgvo = mapIndex(['dsgvo papier', 'dsgvo', 'papier', 'einwilligung']);
       const idxFz = mapIndex(['erw. führungszeugnis', 'führungszeugnis', 'unbedenklichkeit', 'jugendarbeit']);
+
+      // NEU: Adressfelder mappen
+      const idxStrasse = mapIndex(['straße', 'strasse', 'anschrift']);
+      const idxPlz = mapIndex(['plz', 'postleitzahl']);
+      const idxOrt = mapIndex(['ort', 'stadt', 'wohnort']);
 
       if (idxName === -1) throw new Error('Spalte "Name" wurde nicht gefunden.');
 
@@ -157,6 +162,11 @@ export const CsvImportModal: React.FC<Props> = ({ onClose }) => {
 
         const rawDsgvo = idxDsgvo >= 0 ? cols[idxDsgvo] : '';
         const rawFz = idxFz >= 0 ? cols[idxFz] : '';
+
+        // NEU: Adressdaten auslesen
+        const rawStrasse = idxStrasse >= 0 ? cols[idxStrasse] : '';
+        const rawPlz = idxPlz >= 0 ? cols[idxPlz] : '';
+        const rawOrt = idxOrt >= 0 ? cols[idxOrt] : '';
 
         const phone = sanitizePhone(rawPhone);
         const phoneEltern = sanitizePhone(rawTelEltern);
@@ -193,6 +203,12 @@ export const CsvImportModal: React.FC<Props> = ({ onClose }) => {
               bezug: rawBezug || existingMatch.bezug,
               hasWrittenDsgvoConsent: isDsgvoPaper || existingMatch.hasWrittenDsgvoConsent,
               hasYouthWorkClearance: isFzPaper || existingMatch.hasYouthWorkClearance,
+              
+              // NEU: Adressdaten anreichern (vorhandene bleiben bestehen, wenn die CSV-Zelle leer ist)
+              strasse: rawStrasse || existingMatch.strasse,
+              plz: rawPlz || existingMatch.plz,
+              ort: rawOrt || existingMatch.ort,
+
               lastActivityAt: Date.now()
             }
           });
@@ -218,6 +234,12 @@ export const CsvImportModal: React.FC<Props> = ({ onClose }) => {
               eintrittsdatum: eintritt,
               memberStatus: parsedStatus || 'AKTIV',
               bezug: rawBezug,
+              
+              // NEU: Adressdaten setzen
+              strasse: rawStrasse,
+              plz: rawPlz,
+              ort: rawOrt,
+
               hasWrittenDsgvoConsent: isDsgvoPaper,
               hasYouthWorkClearance: isFzPaper,
               consentConfirmed: isDsgvoPaper, // Auto-Opt-In
@@ -302,7 +324,7 @@ export const CsvImportModal: React.FC<Props> = ({ onClose }) => {
             <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-blue-200 bg-blue-50/30 rounded-xl p-8 text-center">
               <FileText className="w-12 h-12 text-blue-400 mb-3" />
               <h3 className="font-bold text-gray-800 mb-1">CSV-Datei hochladen</h3>
-              <p className="text-sm text-gray-500 mb-6 max-w-md">Kopfzeilen: Name, Telefon, Tel. Eltern, Email, Email Eltern, Geburt, Eintritt, Status, DSGVO Papier, Führungszeugnis.</p>
+              <p className="text-sm text-gray-500 mb-6 max-w-md">Kopfzeilen: Name, Telefon, Tel. Eltern, Email, Email Eltern, Geburt, Eintritt, Status, Strasse, PLZ, Ort, DSGVO Papier, Führungszeugnis.</p>
               
               <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
               
@@ -335,6 +357,7 @@ export const CsvImportModal: React.FC<Props> = ({ onClose }) => {
                         <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
                         <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Alias</th>
                         <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Mitglieds-Status</th>
+                        <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Wohnort</th>
                         <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Papierakte</th>
                         <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Telefon</th>
                         <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">E-Mail</th>
@@ -352,6 +375,9 @@ export const CsvImportModal: React.FC<Props> = ({ onClose }) => {
                             <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${row.data.memberStatus === 'PASSIV' ? 'bg-gray-200 text-gray-600' : row.data.memberStatus === 'JUGEND' ? 'bg-purple-200 text-purple-700' : 'bg-green-200 text-green-800'}`}>
                               {row.data.memberStatus}
                             </span>
+                          </td>
+                          <td className="px-4 py-2 text-sm font-mono text-gray-600">
+                            {row.data.ort ? `${row.data.plz || ''} ${row.data.ort}`.trim() : '-'}
                           </td>
                           <td className="px-4 py-2 text-sm font-mono text-gray-600">
                             {row.data.hasWrittenDsgvoConsent ? 'DSGVO ✓ ' : ''} 

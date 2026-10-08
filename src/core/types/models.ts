@@ -1,3 +1,4 @@
+// [2026-10-08] - FEATURE: Optionale Adressfelder (strasse, plz, ort) zum Helper-Modell hinzugefügt.
 // [2026-10-08] - SCHEMA: 'PollConfig' und 'EventPollResponse' für flexibles RSVP/Umfrage-Feature (WhatsApp-Style) hinzugefügt.
 // [2026-10-08] - SCHEMA: 'isSetByMF' im MatchLineup-Modell hinzugefügt (Fremdsteuerung durch MF).
 // [2026-10-04] - SCHEMA: 'lastSyncAttemptAt' im CalendarSubscription-Modell hinzugefügt, um fehlgeschlagene Versuche vom letzten erfolgreichen Sync (lastSyncedAt) zu trennen.
@@ -108,7 +109,7 @@ export interface User extends BaseDocument {
 
 export interface Team extends BaseDocument {
   name: string;
-  captainHelperIds?: string[];       
+  captainHelperIds?: string[];      
   defaultLineupHelperIds?: string[]; 
   lineupFreezeLeadDays?: number;     
   lineupLockMessage?: string;        
@@ -132,6 +133,10 @@ export interface Helper extends BaseDocument {
   geburtsdatum?: string; 
   eintrittsdatum?: string;
   memberStatus?: 'AKTIV' | 'PASSIV' | 'JUGEND';
+
+  strasse?: string;
+  plz?: string;
+  ort?: string;
   
   hasWrittenDsgvoConsent?: boolean;
   hasYouthWorkClearance?: boolean;
@@ -166,13 +171,13 @@ export interface ClubEvent extends BaseDocument {
   location?: string;
   status: 'PLANUNG' | 'AKTIV' | 'ABGESCHLOSSEN';
   eventType?: 'TERMIN' | 'DIENST'; 
-  reminderSenderUserId?: string;   
-  reminderLeadDays?: number;       
-  reminderSentAt?: number;         
-  reminderCustomText?: string;     
+  reminderSenderUserId?: string;  
+  reminderLeadDays?: number;      
+  reminderSentAt?: number;        
+  reminderCustomText?: string;    
   isPublished: boolean; 
   isPublic?: boolean; 
-  seriesId?: string;     
+  seriesId?: string;    
   isArchived?: boolean; 
   participantUserIds: string[];
   participantGroupIds: string[];
@@ -227,9 +232,9 @@ export interface AgendaItem extends BaseDocument {
   assigneeGroupIds: string[]; 
   assigneeHelperIds?: string[];
   assigneeTeamIds?: string[];    
-  reminderSenderUserId?: string;   
-  reminderLeadDays?: number;       
-  reminderSentAt?: number;         
+  reminderSenderUserId?: string;  
+  reminderLeadDays?: number;      
+  reminderSentAt?: number;        
   comments: ItemComment[];
   checkliste: { id: string; text: string; isDone: boolean }[];
   
@@ -282,8 +287,8 @@ export interface CalendarSubscription extends BaseDocument {
   cachedEvents?: CachedIcsEvent[];
   sortOrder?: number; 
   showInMatchPlan?: boolean;
-  reminderSenderUserId?: string;   
-  reminderLeadDays?: number;       
+  reminderSenderUserId?: string;  
+  reminderLeadDays?: number;      
   reminderCustomText?: string;
   
   reminderRecipientUserIds?: string[];
@@ -304,10 +309,10 @@ export interface CalendarEvent extends BaseDocument {
   seriesId?: string; 
   showInMatchPlan?: boolean;
   eventType?: 'TERMIN' | 'DIENST'; 
-  reminderSenderUserId?: string;   
-  reminderLeadDays?: number;       
-  reminderSentAt?: number;         
-  reminderCustomText?: string;     
+  reminderSenderUserId?: string;  
+  reminderLeadDays?: number;      
+  reminderSentAt?: number;        
+  reminderCustomText?: string;    
 
   reminderRecipientUserIds?: string[];
   reminderRecipientGroupIds?: string[];

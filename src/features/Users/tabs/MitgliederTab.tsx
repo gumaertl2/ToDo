@@ -1,3 +1,5 @@
+// [2026-10-08] - BUGFIX: Vite/Oxc Parse-Error behoben. Verschachtelte Template-Strings in der handlePrintKorrektur Funktion in saubere String-Konkatenationen aufgelöst.
+// [2026-10-08] - UX-FEATURE: Google-Maps Icon (📍) direkt in die Namens-Zelle der Mitglieder-Tabelle eingebaut für blitzschnelle Navigation.
 // [2026-07-28] - TS-FIX: 'title'-Attribut bei Lucide-Icons (FileSignature, ShieldAlert) auf umhüllenden span-Tag verschoben (TS2322).
 // [2026-07-28] - UX-FEATURE: Aktenlage-Icons (DSGVO Papier & Jugendarbeit) in der Tabelle visualisiert und in den CSV-Export/Druck integriert.
 // [2026-07-27] - UX-FEATURE: Persistente Filter-Speicherung (localStorage) für die Mitgliederansicht integriert (Status, Teams, Eltern-Info).
@@ -19,7 +21,7 @@
 // 2026-05-14 14:30 - FEATURE: 3-Stufen App-Zugangs-Indikator (Grau/Gelb/Grün) basierend auf nativem Gast-Login integriert
 // src/features/Users/tabs/MitgliederTab.tsx
 import React, { useState, useMemo, useEffect } from 'react';
-import { ArrowUpDown, ArrowUp, ArrowDown, Cake, Edit2, Trash2, Filter, Search, X, Printer, FileDown, Eye, EyeOff, Phone, Users, ShieldAlert, FileSignature } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, Cake, Edit2, Trash2, Filter, Search, X, Printer, FileDown, Eye, EyeOff, Phone, Users, ShieldAlert, FileSignature, MapPin } from 'lucide-react';
 import { useClubStore } from '../../../store/useClubStore';
 import type { Helper } from '../../../core/types/models';
 import { EditableCell } from '../components/EditableCell';
@@ -271,12 +273,12 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
 
   const handleExportCSV = () => {
     let csv = '\uFEFF' + "Name;Telefon;Email;Status;Alias;Tel. Eltern;Email Eltern";
-    if (hasSensitiveAccess) csv += ";Geburt;Eintritt;DSGVO Papier;Erw. Führungszeugnis";
+    if (hasSensitiveAccess) csv += ";Geburt;Eintritt;DSGVO Papier;Erw. Führungszeugnis;Strasse;PLZ;Ort";
     csv += "\n";
     filteredAndSortedHelpers.forEach(h => {
        csv += `${h.name || ''};${h.telefon || ''};${h.email || ''};${h.memberStatus || 'AKTIV'};${h.alias || ''};${h.telefonEltern || ''};${h.emailEltern || ''}`;
        if (hasSensitiveAccess) {
-         csv += `;${h.geburtsdatum || ''};${h.eintrittsdatum || ''};${h.hasWrittenDsgvoConsent ? 'Ja' : 'Nein'};${h.hasYouthWorkClearance ? 'Ja' : 'Nein'}`;
+         csv += `;${h.geburtsdatum || ''};${h.eintrittsdatum || ''};${h.hasWrittenDsgvoConsent ? 'Ja' : 'Nein'};${h.hasYouthWorkClearance ? 'Ja' : 'Nein'};${h.strasse || ''};${h.plz || ''};${h.ort || ''}`;
        }
        csv += "\n";
     });
@@ -290,11 +292,33 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
   };
 
   const handlePrintKorrektur = () => {
-    let html = `<html><head><title>Korrekturliste</title><style>body{font-family:sans-serif;padding:20px;}h1{font-size:18px;border-bottom:1px solid #000;padding-bottom:10px;}table{width:100%;border-collapse:collapse;margin-top:20px;}th,td{border:1px solid #ccc;padding:8px;text-align:left;font-size:11px;}th{background:#f0f0f0;}.corr{width:25%;}@media print{@page{size:landscape;} .no-print{display:none;}}</style></head><body><h1>Korrekturliste Mitglieder (Stand: ${new Date().toLocaleDateString()})</h1><p>Bitte Daten prüfen und Korrekturen rechts eintragen. <span class="no-print">Geburtsdaten sind hier ausgeblendet.</span></p><table><thead><tr><th>Name</th><th>Telefon</th><th>Email</th><th>Status</th><th>Alias</th>${showParentInfo ? '<th>Tel. Eltern</th><th>Email Eltern</th>' : ''}<th class="corr">Korrekturen / Unterschrift</th></tr></thead><tbody>`;
+    // FIX: String-Konkatenation statt fehleranfälliger Template-Verschachtelungen
+    let html = `<html><head><title>Korrekturliste</title><style>body{font-family:sans-serif;padding:20px;}h1{font-size:18px;border-bottom:1px solid #000;padding-bottom:10px;}table{width:100%;border-collapse:collapse;margin-top:20px;}th,td{border:1px solid #ccc;padding:8px;text-align:left;font-size:11px;}th{background:#f0f0f0;}.corr{width:25%;}@media print{@page{size:landscape;} .no-print{display:none;}}</style></head><body><h1>Korrekturliste Mitglieder (Stand: ${new Date().toLocaleDateString()})</h1><p>Bitte Daten prüfen und Korrekturen rechts eintragen. <span class="no-print">Geburtsdaten sind hier ausgeblendet.</span></p><table><thead><tr><th>Name</th><th>Telefon</th><th>Email</th><th>Status</th><th>Alias</th>`;
+    
+    if (showParentInfo) {
+      html += `<th>Tel. Eltern</th><th>Email Eltern</th>`;
+    }
+    
+    html += `<th class="corr">Korrekturen / Unterschrift</th></tr></thead><tbody>`;
+    
     filteredAndSortedHelpers.forEach(h => {
-      html += `<tr><td><strong>${h.name}</strong></td><td>${h.telefon || ''}</td><td>${h.email || ''}</td><td>${h.memberStatus || 'AKTIV'}</td><td>${h.alias || ''}</td>${showParentInfo ? `<td>${h.telefonEltern || ''}</td><td>${h.emailEltern || ''}</td>` : ''}<td></td></tr>`;
+      html += `<tr>`;
+      html += `<td><strong>${h.name}</strong></td>`;
+      html += `<td>${h.telefon || ''}</td>`;
+      html += `<td>${h.email || ''}</td>`;
+      html += `<td>${h.memberStatus || 'AKTIV'}</td>`;
+      html += `<td>${h.alias || ''}</td>`;
+      
+      if (showParentInfo) {
+        html += `<td>${h.telefonEltern || ''}</td>`;
+        html += `<td>${h.emailEltern || ''}</td>`;
+      }
+      
+      html += `<td></td></tr>`;
     });
+    
     html += `</tbody></table><script>window.onload=function(){window.print();window.close();}</script></body></html>`;
+    
     const w = window.open('', '_blank');
     if(w){ w.document.write(html); w.document.close(); }
   };
@@ -337,6 +361,12 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
         title={lastActive > 0 ? `Inaktiv (Zuletzt online: ${new Date(lastActive).toLocaleDateString()})` : "Hat App-Zugang, aber noch nie eingeloggt"}
       />
     );
+  };
+
+  // Hilfsfunktion: Map-URL generieren
+  const getMapsUrl = (h: Helper) => {
+    const fullAddress = [h.strasse, h.plz, h.ort].filter(Boolean).join(', ');
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`;
   };
 
   return (
@@ -495,6 +525,7 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
             {filteredAndSortedHelpers.map(h => {
               const isBirthdayMonth = h.geburtsdatum?.split('-')[1] === currentMonth.toString().padStart(2, '0');
               const isSelectedTeamMember = selectedTeamFilter && h.teamIds?.includes(selectedTeamFilter);
+              const hasAddress = !!(h.strasse || h.plz || h.ort);
               
               return (
                 <tr 
@@ -515,7 +546,6 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
                       )}
                       {renderAppAccessIndicator(h)}
                       
-                      {/* CHIRURGISCHER EINGRIFF: TS-Fix für Icon-Titel */}
                       {canManageMitglieder && (
                         <div className="flex items-center gap-0.5 mr-1 shrink-0">
                           {h.hasWrittenDsgvoConsent && <span title="Schriftliche DSGVO-Erklärung liegt vor" className="flex items-center"><FileSignature className="w-3.5 h-3.5 text-slate-400" /></span>}
@@ -524,6 +554,19 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
                       )}
 
                       <EditableCell value={h.name} onSave={val => handleInlineUpdateHelper(h, 'name', val)} disabled={!canManageMitglieder} placeholder="Vorname Nachname" />
+                      
+                      {/* NEU: Das Google Maps Icon (Direkt neben dem Namen) */}
+                      {hasAddress && (
+                        <a 
+                          href={getMapsUrl(h)} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="ml-1 text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-1 rounded-full transition-colors flex shrink-0" 
+                          title={`Route planen:\n${[h.strasse, h.plz, h.ort].filter(Boolean).join(', ')}`}
+                        >
+                          <MapPin className="w-3.5 h-3.5" />
+                        </a>
+                      )}
                     </div>
                   </td>
                   
