@@ -1,3 +1,5 @@
+// [2026-10-08] - SEC-FIX: Rechteprüfung für 'Name ändern' robuster gemacht. Nutzt nun auch roleProfiles aus dem Store und erlaubt Umbenennung bei Neuanlage.
+// [2026-10-08] - SEC-FEATURE: Feld "Name" im TeamFormModal für Mannschaftsführer gesperrt (Role-Based Access). Nur Admins dürfen umbenennen.
 // [2026-09-30] - UX-FIX: Standard-Vorschlagstext für 'lineupLockMessage' auf den exakten, ausführlichen Best-Practice-Satz des Vereins aktualisiert.
 // [2026-09-30] - FEATURE: 'lineupFreezeLeadDays' und 'lineupLockMessage' Konfigurationsfelder für Captains integriert.
 // [2026-05-15] - FEATURE: Option B - TeamFormModal (Eingabefenster für die Team-Verwaltung)
@@ -13,7 +15,20 @@ interface TeamFormModalProps {
 }
 
 export const TeamFormModal: React.FC<TeamFormModalProps> = ({ onClose, existingTeam }) => {
-  const { addTeam, updateTeam } = useClubStore();
+  const { addTeam, updateTeam, user, roleProfiles } = useClubStore();
+  
+  // Saubere Rechteprüfung: Direktes User-Recht ODER Profil-Recht aus der RBAC-Matrix ODER Fallback auf Rollen-Namen
+  const userProfile = roleProfiles?.find(p => p.id === user?.roleProfileId);
+  const hasMitgliederRecht = 
+    user?.permissions?.manageMitglieder === true || 
+    userProfile?.permissions?.manageMitglieder === true ||
+    user?.rolle?.toUpperCase() === 'ADMIN' || 
+    user?.rolle?.toUpperCase() === 'VORSTAND';
+
+  // Logik: Name darf bearbeitet werden, wenn es ein neues Team ist ODER der Nutzer die Rechte hat
+  const isNewTeam = !existingTeam;
+  const canEditName = isNewTeam || hasMitgliederRecht;
+
   const [name, setName] = useState('');
   
   // Konfigurations-Felder für den Auto-Freeze inkl. Best-Practice Standardwert
@@ -76,7 +91,7 @@ export const TeamFormModal: React.FC<TeamFormModalProps> = ({ onClose, existingT
         {/* Header */}
         <div className="flex justify-between items-center p-4 sm:p-6 border-b border-gray-100 shrink-0 bg-gray-50">
           <h2 className="text-xl font-bold text-gray-900">
-            {existingTeam ? 'Team bearbeiten' : 'Neues Team anlegen'}
+            {existingTeam ? 'Team-Einstellungen' : 'Neues Team anlegen'}
           </h2>
           <button 
             onClick={onClose} 
@@ -106,9 +121,10 @@ export const TeamFormModal: React.FC<TeamFormModalProps> = ({ onClose, existingT
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="z. B. Herren 1, U19, Festkomitee"
-                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                autoFocus
+                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed disabled:border-gray-200"
+                autoFocus={canEditName}
                 required
+                disabled={!canEditName}
               />
               <p className="mt-1 text-xs text-gray-500">
                 Dieser Name wird später bei den Mitgliedern zur Zuweisung angezeigt.

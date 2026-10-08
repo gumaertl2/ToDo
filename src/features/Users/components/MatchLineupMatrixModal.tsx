@@ -1,3 +1,4 @@
+// [2026-10-08] - FEATURE: MF-Override (Schraffiertes Design). Captains können nun die Verfügbarkeit anderer Spieler ändern (isSetByMF Flag).
 // [2026-10-01] - UX-FIX: Safari AutoFill für die Joker-Suche deaktiviert (autoComplete, autoCorrect, spellCheck).
 // [2026-09-30] - FEATURE: Base & Override V2 (Bottom-Up). Spieler können ihre eigene Zelle anklicken (Verfügbarkeit: Da/Weg).
 // [2026-09-30] - FEATURE: Auto-Freeze und manuelles Siegel (🔒) in die Matrix integriert. Notfall-Alert bei verspäteten Absagen eingebaut.
@@ -31,6 +32,7 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
   const [localOverrides, setLocalOverrides] = useState<Record<string, string[]>>({});
   const [localAvailOverrides, setLocalAvailOverrides] = useState<Record<string, Record<string, 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN'>>>({});
   const [localLockOverrides, setLocalLockOverrides] = useState<Record<string, boolean>>({});
+  const [localSetByMFOverrides, setLocalSetByMFOverrides] = useState<Record<string, Record<string, boolean>>>({});
 
   // Finde heraus, wer gerade eingeloggt ist (um eigene Spalte zu identifizieren)
   const myHelperId = useMemo(() => {
@@ -114,6 +116,7 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
       teamId: team.id,
       lineupHelperIds: newActiveIds,
       availabilities: storeLineup?.availabilities || {},
+      isSetByMF: storeLineup?.isSetByMF || {},
       isLocked: storeLineup?.isLocked,
       updatedAt: Date.now()
     };
@@ -127,8 +130,11 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
 
   // --- VERFÜGBARKEIT ÄNDERN (Da / Weg / ?) ---
   const handleToggleAvailability = async (rawEventId: string, helperId: string, isPlaying: boolean, isFrozenLocal: boolean) => {
-    // Man darf nur sich selbst ändern!
-    if (helperId !== myHelperId) return;
+    const isMyColumn = helperId === myHelperId;
+    const isCaptainAction = !isReadOnly;
+
+    // Nur der Spieler selbst oder der MF dürfen die Verfügbarkeit ändern
+    if (!isMyColumn && !isCaptainAction) return;
 
     const safeEventId = sanitizeId(rawEventId);
     const storeLineup = matchLineups.find(m => m.id === safeEventId);
@@ -148,6 +154,9 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
        return;
     }
 
+    // Last-Writer-Wins: Wenn der MF klickt, bekommt das Feld den Stempel. Klickt der Spieler selbst, wird der Stempel entfernt.
+    const newIsSetByMF = !isMyColumn;
+
     // Optimistic Update
     setLocalAvailOverrides(prev => ({
        ...prev,
@@ -155,6 +164,14 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
           ...(prev[safeEventId] || {}),
           [helperId]: nextAvail
        }
+    }));
+    
+    setLocalSetByMFOverrides(prev => ({
+      ...prev,
+      [safeEventId]: {
+        ...(prev[safeEventId] || {}),
+        [helperId]: newIsSetByMF
+      }
     }));
 
     const newLineup: MatchLineup = {
@@ -165,6 +182,10 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
       availabilities: {
         ...(storeLineup?.availabilities || {}),
         [helperId]: nextAvail
+      },
+      isSetByMF: {
+        ...(storeLineup?.isSetByMF || {}),
+        [helperId]: newIsSetByMF
       },
       isLocked: storeLineup?.isLocked,
       updatedAt: Date.now()
@@ -185,6 +206,7 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
       teamId: team.id,
       lineupHelperIds: storeLineup?.lineupHelperIds || team.defaultLineupHelperIds || [],
       availabilities: storeLineup?.availabilities || {},
+      isSetByMF: storeLineup?.isSetByMF || {},
       isLocked: newState,
       updatedAt: Date.now()
     };
@@ -398,13 +420,26 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                         if (isOverride) checkColor = 'text-orange-500';
                         else if (category === 'STAMM') checkColor = 'text-green-600';
 
-                        // Spieler-Verfügbarkeit abrufen
+                        // Spieler-Verfügbarkeit & MF-Stempel abrufen
                         const avail = localAvailOverrides[safeEventId]?.[m.id] || storeLineup?.availabilities?.[m.id] || 'UNKNOWN';
+                        const isSetByMF = localSetByMFOverrides[safeEventId]?.[m.id] !== undefined 
+                            ? localSetByMFOverrides[safeEventId]?.[m.id] 
+                            : (storeLineup?.isSetByMF?.[m.id] || false);
+
                         let availBgClass = isFocusedRow ? 'bg-blue-50/50' : (isPast ? 'bg-gray-100' : 'bg-white');
                         if (avail === 'AVAILABLE') availBgClass = 'bg-green-100/60';
                         if (avail === 'UNAVAILABLE') availBgClass = 'bg-red-100/60';
 
-                        const canEditAvail = isMyColumn && (!isPast || isFocusedRow);
+                        // Schraffiertes Design, falls MF überschrieben hat
+                        const stripedStyle = (isSetByMF && avail !== 'UNKNOWN') ? {
+                            backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.6), rgba(255,255,255,0.6) 6px, transparent 6px, transparent 12px)'
+                        } : undefined;
+
+                        const canEditAvail = (isMyColumn || !isReadOnly) && (!isPast || isFocusedRow);
+                        
+                        let tooltipText = "";
+                        if (canEditAvail) tooltipText = isMyColumn ? "Klicken, um deine eigene Verfügbarkeit zu ändern (Da / Weg / ?)" : "Klicken, um die Verfügbarkeit als Mannschaftsführer zu überschreiben";
+                        else if (isSetByMF) tooltipText = "Status wurde manuell vom Mannschaftsführer gesetzt";
 
                         return (
                           <td 
@@ -412,12 +447,13 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                             className={`relative p-0 align-middle ${borderClasses} border-r border-gray-100 transition-colors ${availBgClass} ${
                               canEditAvail ? 'cursor-pointer hover:brightness-95 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.1)]' : ''
                             }`}
+                            style={stripedStyle}
                             onClick={() => {
                               if (canEditAvail) {
                                 handleToggleAvailability(event.uid, m.id, isPlaying, isFrozen);
                               }
                             }}
-                            title={canEditAvail ? "Klicken, um deine eigene Verfügbarkeit zu ändern (Da / Weg / ?)" : ""}
+                            title={tooltipText}
                           >
                             <div className="w-full h-full min-h-[60px] flex flex-col items-center justify-center relative pt-2 pb-4">
                               {/* Die Checkbox (Lineup-Nominierung durch Captain) */}
@@ -430,7 +466,7 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                                     handleTogglePlayer(event.uid, m.id, activePlayers);
                                   }
                                 }}
-                                className={`p-1.5 rounded-md ${!isReadOnly && (!isPast || isFocusedRow) ? 'cursor-pointer hover:bg-black/5' : 'cursor-default'}`}
+                                className={`p-1.5 rounded-md z-10 ${!isReadOnly && (!isPast || isFocusedRow) ? 'cursor-pointer hover:bg-black/5' : 'cursor-default'}`}
                                 title={!isReadOnly ? "Kader-Nominierung setzen/entfernen" : ""}
                               >
                                 {isPlaying ? (
@@ -442,8 +478,8 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
 
                               {/* Der Status-Indikator (Verfügbarkeit) */}
                               <div className="absolute bottom-1 w-full text-center pointer-events-none">
-                                {avail === 'AVAILABLE' && <span className="text-[9px] font-extrabold text-green-700">DA</span>}
-                                {avail === 'UNAVAILABLE' && <span className="text-[9px] font-extrabold text-red-700">WEG</span>}
+                                {avail === 'AVAILABLE' && <span className="text-[9px] font-extrabold text-green-800">DA</span>}
+                                {avail === 'UNAVAILABLE' && <span className="text-[9px] font-extrabold text-red-800">WEG</span>}
                                 {avail === 'UNKNOWN' && isMyColumn && <span className="text-[9px] font-bold text-gray-400">?</span>}
                               </div>
                             </div>

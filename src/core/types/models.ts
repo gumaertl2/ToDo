@@ -1,3 +1,4 @@
+// [2026-10-08] - SCHEMA: 'isSetByMF' im MatchLineup-Modell hinzugefügt (Fremdsteuerung durch MF).
 // [2026-10-04] - SCHEMA: 'lastSyncAttemptAt' im CalendarSubscription-Modell hinzugefügt, um fehlgeschlagene Versuche vom letzten erfolgreichen Sync (lastSyncedAt) zu trennen.
 // [2026-10-04] - SCHEMA: 'lastSyncBy' und 'lastSyncError' im CalendarSubscription-Modell hinzugefügt (für Admin-Transparenz).
 // [2026-09-30] - SCHEMA: 'lineupFreezeLeadDays' und 'lineupLockMessage' zum Team-Modell hinzugefügt (Auto-Freeze für Aufstellungen).
@@ -108,9 +109,8 @@ export interface Team extends BaseDocument {
   name: string;
   captainHelperIds?: string[];       
   defaultLineupHelperIds?: string[]; 
-  // ---> NEU: Auto-Freeze Settings <---
-  lineupFreezeLeadDays?: number;     // Z.B. 7 Tage vorher schließt die Planung automatisch
-  lineupLockMessage?: string;        // Eigener Zusatz-Text des Captains bei Sperr-Meldungen
+  lineupFreezeLeadDays?: number;     
+  lineupLockMessage?: string;        
 }
 
 export interface Group extends BaseDocument {
@@ -261,7 +261,7 @@ export interface CalendarSubscription extends BaseDocument {
   color: string;
   isActive: boolean;
   lastSyncedAt?: number;
-  lastSyncAttemptAt?: number;  // <--- HINZUGEFÜGT
+  lastSyncAttemptAt?: number;  
   lastSyncBy?: string;         
   lastSyncError?: string | null; 
   cachedEvents?: CachedIcsEvent[];
@@ -317,9 +317,9 @@ export interface MatchLineup {
   schemaVersion: string;
   teamId: string;
   lineupHelperIds: string[];
-  // ---> NEU: Bottom-Up Verfügbarkeit & Siegel <---
   isLocked?: boolean;
-  availabilities?: Record<string, 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN'>; // helperId -> Status
+  availabilities?: Record<string, 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN'>; 
+  isSetByMF?: Record<string, boolean>; // ---> NEU: True, wenn der Captain (Fremder) den Status überschrieben hat
   updatedAt?: number;
 }
 // --- END OF FILE ---
