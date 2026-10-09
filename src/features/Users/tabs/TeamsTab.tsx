@@ -1,4 +1,3 @@
-// [2026-10-08] - UX-FEATURE: Button "Umbenennen" in "Einstellungen" (Zahnrad) geändert und für Captains (MF) freigeschaltet.
 // [2026-09-28] - UX-FEATURE: Read-Only Modus für die Saison-Planung. Einfache Team-Mitglieder können die Matrix nun einsehen, aber nicht bearbeiten.
 // [2026-09-28] - BUGFIX: TypeScript Build-Fehler behoben (ungültige 'title'-Attribute an Lucide-Icons entfernt).
 // [2026-09-28] - UX-FIX: Footer der Team-Kachel für mobile Geräte optimiert (Stacked Layout mit w-full Buttons).
@@ -10,7 +9,7 @@
 // src/features/Users/tabs/TeamsTab.tsx
 import React, { useState, useMemo } from 'react';
 import { useClubStore } from '../../../store/useClubStore';
-import { Trash2, Users, User, Star, Shield, Calendar, Settings } from 'lucide-react';
+import { Edit2, Trash2, Users, User, Star, Shield, Calendar } from 'lucide-react';
 import type { Team } from '../../../core/types/models';
 import { MatchLineupMatrixModal } from '../components/MatchLineupMatrixModal';
 
@@ -170,28 +169,25 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ openTeamEditor, canManageMit
                     {hasFooterAccess ? 'Saison planen' : 'Saison-Übersicht'}
                   </button>
                   
-                  {/* Sekundäre Buttons für Admins und Captains */}
-                  {(canManageMitglieder || isCaptain) && (
+                  {/* Sekundäre Buttons für Admins - 50/50 aufgeteilt */}
+                  {canManageMitglieder && (
                     <div className="flex gap-2 w-full">
                       <button 
                         onClick={() => openTeamEditor(team)}
                         className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold text-gray-600 bg-white hover:text-blue-600 hover:bg-blue-50 border border-gray-200 rounded-lg transition shadow-sm"
-                        title="Team-Einstellungen (Fristen & Texte)"
+                        title="Team umbenennen"
                       >
-                        <Settings className="w-3.5 h-3.5" />
-                        Einstellungen
+                        <Edit2 className="w-3.5 h-3.5" />
+                        Umbenennen
                       </button>
-                      
-                      {canManageMitglieder && (
-                        <button 
-                          onClick={() => handleDelete(team)}
-                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold text-gray-600 bg-white hover:text-red-600 hover:bg-red-50 border border-gray-200 rounded-lg transition shadow-sm"
-                          title="Team löschen"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          Löschen
-                        </button>
-                      )}
+                      <button 
+                        onClick={() => handleDelete(team)}
+                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold text-gray-600 bg-white hover:text-red-600 hover:bg-red-50 border border-gray-200 rounded-lg transition shadow-sm"
+                        title="Team löschen"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Löschen
+                      </button>
                     </div>
                   )}
                 </div>
