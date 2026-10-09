@@ -1,3 +1,4 @@
+// [2026-10-09] - BUGFIX: TypeScript TS2339 / TS18049 in getCategory behoben (e.title sicher als String gecastet).
 // [2026-10-09] - UX-FIX: Namen der eingeteilten Fahrer/Betreuer direkt in den Titel der Logistik-Termine in der "Dienste"-Ansicht aufgenommen (inkl. "Offen" Status).
 // [2026-10-09] - FEATURE: Logistik-Dienste (Fahrer/Betreuer) in die "Dienste"-Ansicht des Kalenders integriert.
 // [2026-10-09] - UX-FEATURE: Dynamischer Dropdown-Filter in der Tabellen-Kopfzeile der Dienste-Ansicht hinzugefügt (Gruppierung nach Kategorien / Teams).
@@ -408,8 +409,9 @@ export const CalendarView: React.FC = () => {
     // Kategorie extrahieren (Thekendienst, Dienste J1, etc.)
     const getCategory = (e: AdaptedEvent) => {
        if (e.isLogisticsDuty) return `Dienste ${e.teamName}`;
-       if (e.title.includes(':')) return e.title.split(':')[0].trim();
-       return e.title.trim();
+       const titleStr = String(e.title || '');
+       if (titleStr.includes(':')) return titleStr.split(':')[0].trim();
+       return titleStr.trim();
     };
 
     const yearEvents = displayEvents.filter(e => e.start!.getFullYear() === currentDate.getFullYear());
