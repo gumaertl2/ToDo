@@ -1,3 +1,4 @@
+// [2026-10-09] - FEATURE: Logistik- und Betreuerplanung (requiresBetreuer, requiresFahrer, betreuerHelperIds, fahrerHelperIds) in Team und MatchLineup ergänzt.
 // [2026-10-08] - FEATURE: Optionale Adressfelder (strasse, plz, ort) zum Helper-Modell hinzugefügt.
 // [2026-10-08] - SCHEMA: 'PollConfig' und 'EventPollResponse' für flexibles RSVP/Umfrage-Feature (WhatsApp-Style) hinzugefügt.
 // [2026-10-08] - SCHEMA: 'isSetByMF' im MatchLineup-Modell hinzugefügt (Fremdsteuerung durch MF).
@@ -113,6 +114,8 @@ export interface Team extends BaseDocument {
   defaultLineupHelperIds?: string[]; 
   lineupFreezeLeadDays?: number;     
   lineupLockMessage?: string;        
+  requiresBetreuer?: boolean; // <--- NEU
+  requiresFahrer?: boolean;   // <--- NEU
 }
 
 export interface Group extends BaseDocument {
@@ -199,7 +202,7 @@ export interface ClubEvent extends BaseDocument {
   occurrenceCount?: number;
   nextEventDate?: number;
 
-  pollConfig?: PollConfig; // <--- HINZUGEFÜGT
+  pollConfig?: PollConfig; 
 }
 
 export type Event = ClubEvent;
@@ -319,7 +322,7 @@ export interface CalendarEvent extends BaseDocument {
   reminderRecipientTeamIds?: string[];
   reminderRecipientHelperIds?: string[];
 
-  pollConfig?: PollConfig; // <--- HINZUGEFÜGT
+  pollConfig?: PollConfig; 
 }
 
 export interface TeamPin extends BaseDocument {
@@ -342,10 +345,13 @@ export interface MatchLineup {
   isLocked?: boolean;
   availabilities?: Record<string, 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN'>; 
   isSetByMF?: Record<string, boolean>; 
+  
+  betreuerHelperIds?: string[]; // <--- NEU
+  fahrerHelperIds?: string[];   // <--- NEU
+  
   updatedAt?: number;
 }
 
-// ---> NEU: Die Schatten-Akte für die Umfrage/RSVP <---
 export interface EventPollResponse extends BaseDocument {
   eventId: string;
   helperId: string;

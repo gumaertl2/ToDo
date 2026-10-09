@@ -1,3 +1,7 @@
+// [2026-10-09] - UX-FIX: Namen der eingeteilten Fahrer/Betreuer direkt in den Titel der Logistik-Termine in der "Dienste"-Ansicht aufgenommen (inkl. "Offen" Status).
+// [2026-10-09] - FEATURE: Logistik-Dienste (Fahrer/Betreuer) in die "Dienste"-Ansicht des Kalenders integriert.
+// [2026-10-09] - UX-FEATURE: Dynamischer Dropdown-Filter in der Tabellen-Kopfzeile der Dienste-Ansicht hinzugefügt (Gruppierung nach Kategorien / Teams).
+// [2026-10-09] - BUGFIX: Deep-Link Logik (location.state.openEventId) erweitert, um virtuelle ICS- und Logistik-Termine anhand ihrer UID aufzulösen.
 // [2026-07-26] - BUGFIX: Dienstübernahme (Takeover) macht nun einen harten Schnitt und leert alle Platzhalter-Arrays (Admin), um Geister-Teilnehmer zu entfernen.
 // [2026-07-26] - BUGFIX: Domain-Language Fallback ('Gast' -> 'Mitglied') korrigiert, um Profil-Berechtigungen im Kalender wiederherzustellen.
 // [2026-07-24] - UX-FEATURE: Persistente Speicherung der Kalender-Filter (Abos, leere Tage, Historie) im localStorage eingebaut.
@@ -53,14 +57,15 @@ const getContrastYIQ = (hexcolor?: string) => {
 };
 
 interface AdaptedEvent extends RBCEvent {
-  id: string; sourceId: string; sourceEvent?: CalendarEvent; rawSitzung?: Event; color?: string; description?: string; location?: string; seriesId?: string; showInMatchPlan?: boolean;
+  id: string; sourceId: string; sourceEvent?: CalendarEvent | any; rawSitzung?: Event; color?: string; description?: string; location?: string; seriesId?: string; showInMatchPlan?: boolean;
+  isLogisticsDuty?: boolean; teamName?: string;
 }
 
 export const CalendarView: React.FC = () => {
   const { 
     user, roleProfiles, calendarEvents, calendarSubscriptions, 
     fetchCalendarData, isCalendarLoading, events, fetchEvents,
-    helpers, updateCalendarEvent
+    helpers, updateCalendarEvent, teams, matchLineups
   } = useClubStore();
   const navigate = useNavigate();
   const location = useLocation();
@@ -87,6 +92,7 @@ export const CalendarView: React.FC = () => {
 
   const [currentView, setCurrentView] = useState<'month' | 'week' | 'day' | 'agenda' | 'termine' | 'dienste'>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [dienstFilter, setDienstFilter] = useState<string>('ALL');
   
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [selectedEventToEdit, setSelectedEventToEdit] = useState<CalendarEvent | undefined>(undefined);
@@ -149,6 +155,7 @@ export const CalendarView: React.FC = () => {
 
   const handleViewChange = (v: any) => {
     setCurrentView(v);
+    setDienstFilter('ALL'); // Filter zurücksetzen bei Ansichtswechsel
     setActiveFilters(prev => {
       let next = [...prev];
       if (v === 'dienste' && !next.includes('dienste')) next.push('dienste');
@@ -223,18 +230,89 @@ export const CalendarView: React.FC = () => {
             id: `ics-${sub.id}-${ev.uid}-${index}`, sourceId: sub.id, 
             title: `${matchPrefix}${ev.title}`, description: ev.description || '', location: ev.location || '',
             start: new Date(ev.startTime), end: new Date(ev.endTime), allDay: ev.isAllDay, color: sub.color,
-            showInMatchPlan: sub.showInMatchPlan
+            showInMatchPlan: sub.showInMatchPlan,
+            sourceEvent: ev 
           };
         })
       );
-    return [...internalEvents, ...internalSitzungen, ...cachedExternalEvents];
-  }, [calendarEvents, events, calendarSubscriptions]);
+      
+    // NEU: Logistik-Einträge als Dienste generieren (inklusive Helfer-Namen)
+    const logisticsEvents: AdaptedEvent[] = [];
+    calendarSubscriptions.forEach(sub => {
+        if (!sub.isActive || !sub.cachedEvents) return;
+        const teamId = sub.reminderRecipientTeamIds?.[0];
+        const team = teamId ? teams.find(t => t.id === teamId) : null;
+        if (!team || (!team.requiresBetreuer && !team.requiresFahrer)) return;
+
+        sub.cachedEvents.forEach((ev, index) => {
+            const isHeim = ev.location?.toLowerCase().includes('maisach');
+            const isAuswaerts = ev.location && !isHeim;
+            const matchPrefix = sub.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
+
+            const safeEventId = ev.uid.replace(/[\/\\.#$\[\]]/g, '_');
+            const lineup = matchLineups.find(m => m.id === safeEventId);
+
+            const badges: string[] = [];
+            
+            if (team.requiresFahrer) {
+                const fahrerIds = lineup?.fahrerHelperIds || [];
+                if (fahrerIds.length === 0) {
+                    badges.push('🚗 Offen');
+                } else {
+                    const names = fahrerIds.map(id => {
+                        const h = helpers.find(x => x.id === id);
+                        return h ? (h.alias || h.name.split(' ')[0]) : '?';
+                    });
+                    badges.push(`🚗 ${names.join(', ')}`);
+                }
+            }
+
+            if (team.requiresBetreuer) {
+                const betreuerIds = lineup?.betreuerHelperIds || [];
+                if (betreuerIds.length === 0) {
+                    badges.push('🧑‍🏫 Offen');
+                } else {
+                    const names = betreuerIds.map(id => {
+                        const h = helpers.find(x => x.id === id);
+                        return h ? (h.alias || h.name.split(' ')[0]) : '?';
+                    });
+                    badges.push(`🧑‍🏫 ${names.join(', ')}`);
+                }
+            }
+
+            const badgesString = badges.length > 0 ? ` (${badges.join(' | ')})` : '';
+
+            logisticsEvents.push({
+                id: `logistics-${sub.id}-${ev.uid}-${index}`,
+                sourceId: sub.id, 
+                title: `Dienste ${team.name}: ${matchPrefix}${ev.title}${badgesString}`,
+                description: ev.description || '',
+                location: ev.location || '',
+                start: new Date(ev.startTime),
+                end: new Date(ev.endTime),
+                allDay: ev.isAllDay,
+                color: '#9333ea', // Auffälliges Lila für Logistik
+                sourceEvent: ev, 
+                isLogisticsDuty: true,
+                teamName: team.name
+            });
+        });
+    });
+
+    return [...internalEvents, ...internalSitzungen, ...cachedExternalEvents, ...logisticsEvents];
+  }, [calendarEvents, events, calendarSubscriptions, teams, helpers, matchLineups]);
 
   const filteredEvents = useMemo(() => {
     const todayStart = startOfDay(new Date()).getTime();
     const isListView = ['termine', 'dienste'].includes(currentView);
 
     return rbcEvents.filter(ev => {
+      // Logistik-Dienste gehören exklusiv in die Dienste-Ansicht
+      if (ev.isLogisticsDuty) {
+          if (currentView !== 'dienste') return false;
+          return activeFilters.includes('dienste');
+      }
+
       if (currentView === 'agenda' && !ev.showInMatchPlan) return false;
       if (isListView && !showPastEvents) {
         let exclusiveEnd = ev.end || ev.start!;
@@ -247,8 +325,8 @@ export const CalendarView: React.FC = () => {
   }, [rbcEvents, activeFilters, showPastEvents, currentView]);
 
   const displayEvents = useMemo(() => {
-    if (currentView === 'termine') return filteredEvents.filter(e => e.sourceId === 'manual' && !e.seriesId);
-    if (currentView === 'dienste') return filteredEvents.filter(e => !!e.seriesId);
+    if (currentView === 'termine') return filteredEvents.filter(e => e.sourceId === 'manual' && !e.seriesId && !e.isLogisticsDuty);
+    if (currentView === 'dienste') return filteredEvents.filter(e => !!e.seriesId || e.isLogisticsDuty);
     return filteredEvents;
   }, [filteredEvents, currentView]);
 
@@ -260,7 +338,11 @@ export const CalendarView: React.FC = () => {
   });
 
   const handleSelectEvent = (event: AdaptedEvent) => {
-    if (event.id.startsWith('ics-')) { setSelectedIcsEvent(event); setIsIcsDetailModalOpen(true); return; }
+    if (event.id.startsWith('ics-') || event.id.startsWith('logistics-')) { 
+      setSelectedIcsEvent(event); 
+      setIsIcsDetailModalOpen(true); 
+      return; 
+    }
     if (event.rawSitzung) { navigate(`/events/${event.rawSitzung.id}`); return; }
     
     if (event.sourceEvent) {
@@ -276,11 +358,22 @@ export const CalendarView: React.FC = () => {
 
     if (location.state?.openEventId && rbcEvents.length > 0) {
       const targetId = location.state.openEventId;
-      const target = rbcEvents.find(e =>
-        e.id === targetId ||
-        (e.sourceEvent && e.sourceEvent.id === targetId) ||
-        (e.rawSitzung && e.rawSitzung.id === targetId)
-      );
+      const target = rbcEvents.find(e => {
+        if (e.id === targetId) return true;
+        if (e.sourceEvent && e.sourceEvent.id === targetId) return true;
+        if (e.rawSitzung && e.rawSitzung.id === targetId) return true;
+        
+        // Deep-Link Resolver für virtuelle ICS-Events aus dem Dashboard (z.B. sub-AboID-UID)
+        if (targetId.startsWith('sub-')) {
+           const parts = targetId.split('-');
+           const subId = parts[1];
+           const evUid = parts.slice(2).join('-'); 
+           if (e.sourceId === subId && e.sourceEvent?.uid === evUid) {
+               return true;
+           }
+        }
+        return false;
+      });
 
       if (target) {
         navigate(location.pathname, { replace: true, state: {} });
@@ -310,24 +403,47 @@ export const CalendarView: React.FC = () => {
   };
 
   const renderYearlyList = () => {
+    const isDienste = currentView === 'dienste';
+    
+    // Kategorie extrahieren (Thekendienst, Dienste J1, etc.)
+    const getCategory = (e: AdaptedEvent) => {
+       if (e.isLogisticsDuty) return `Dienste ${e.teamName}`;
+       if (e.title.includes(':')) return e.title.split(':')[0].trim();
+       return e.title.trim();
+    };
+
     const yearEvents = displayEvents.filter(e => e.start!.getFullYear() === currentDate.getFullYear());
-    yearEvents.sort((a, b) => {
+    const categories = Array.from(new Set(yearEvents.map(getCategory))).sort();
+    
+    const filteredYearEvents = yearEvents.filter(e => dienstFilter === 'ALL' || getCategory(e) === dienstFilter);
+
+    filteredYearEvents.sort((a, b) => {
       if (a.start!.getTime() !== b.start!.getTime()) return a.start!.getTime() - b.start!.getTime();
       if (a.allDay && !b.allDay) return -1;
       if (!a.allDay && b.allDay) return 1;
       return 0;
     });
 
-    if (yearEvents.length === 0) {
+    if (filteredYearEvents.length === 0) {
       return (
-        <div className="flex-1 flex flex-col items-center justify-center text-gray-400 h-full p-8">
+        <div className="flex-1 flex flex-col items-center justify-center text-gray-400 h-full p-8 relative">
+          {isDienste && categories.length > 0 && (
+             <div className="absolute top-4 left-4">
+                <select 
+                   className="bg-white border border-gray-200 rounded-lg font-bold text-gray-700 outline-none cursor-pointer px-3 py-1.5 shadow-sm text-sm"
+                   value={dienstFilter}
+                   onChange={e => setDienstFilter(e.target.value)}
+                >
+                   <option value="ALL">Alle Dienste</option>
+                   {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+             </div>
+          )}
           <CalendarDays className="w-12 h-12 mb-3 opacity-20" />
           <p>Keine {currentView === 'termine' ? 'Termine' : 'Dienste'} für {currentDate.getFullYear()} gefunden.</p>
         </div>
       );
     }
-
-    const isDienste = currentView === 'dienste';
 
     return (
       <div className="flex flex-col w-full h-full">
@@ -340,7 +456,17 @@ export const CalendarView: React.FC = () => {
                     <th className="py-3 px-4 font-bold text-gray-700 w-16">KW</th>
                     <th className="py-3 px-4 font-bold text-gray-700 w-32">Start</th>
                     <th className="py-3 px-4 font-bold text-gray-700 w-32">Ende</th>
-                    <th className="py-3 px-4 font-bold text-gray-700">Dienst</th>
+                    <th className="py-3 px-4 font-bold text-gray-700 flex items-center">
+                       <select 
+                         className="bg-transparent border-none font-bold text-gray-800 uppercase tracking-wider p-0 outline-none cursor-pointer focus:ring-0 text-sm hover:text-blue-700 transition-colors"
+                         value={dienstFilter}
+                         onChange={(e) => setDienstFilter(e.target.value)}
+                         title="Dienste nach Kategorie filtern"
+                       >
+                         <option value="ALL">ALLE DIENSTE</option>
+                         {categories.map(c => <option key={c} value={c}>{c.toUpperCase()}</option>)}
+                       </select>
+                    </th>
                   </>
                 ) : (
                   <>
@@ -353,10 +479,10 @@ export const CalendarView: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {yearEvents.map(e => {
+              {filteredYearEvents.map(e => {
                 const startD = e.start!;
                 if (isDienste) {
-                  const actualEnd = e.sourceEvent?.endTime ? new Date(e.sourceEvent.endTime) : startD;
+                  const actualEnd = e.end || (e.sourceEvent?.endTime ? new Date(e.sourceEvent.endTime) : startD);
                   const kw = getISOWeek(startD);
                   return (
                     <tr key={e.id} className="border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors group" onClick={() => handleSelectEvent(e)}>
@@ -364,9 +490,9 @@ export const CalendarView: React.FC = () => {
                       <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{format(startD, 'dd.MM.yyyy', { locale: de })}</td>
                       <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{format(actualEnd, 'dd.MM.yyyy', { locale: de })}</td>
                       <td className="py-3 px-4">
-                        <div className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">
-                          <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ backgroundColor: e.color || '#3b82f6' }}></span>
-                          {e.title}
+                        <div className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors flex items-center gap-2">
+                          <span className="inline-block w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: e.color || '#3b82f6' }}></span>
+                          <span className="truncate">{e.title}</span>
                         </div>
                       </td>
                     </tr>

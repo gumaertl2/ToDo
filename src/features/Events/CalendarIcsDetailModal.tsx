@@ -1,3 +1,5 @@
+// [2026-10-09] - UX-FEATURE: Interaktive Logistik (Self-Service) auch direkt im Kalender-Detail-Modal verfügbar gemacht (+ Ich und Tausch-Logik).
+// [2026-10-09] - FEATURE: Logistik-Integration (Fahrer/Betreuer). Helfer sehen eingeteilte Logistik direkt in den Termindetails und können über den neuen Button in den Matrix-Self-Service (Tauschbörse) abspringen.
 // [2026-10-08] - FEATURE: EventPollWidget (WhatsApp-Style RSVP/Umfrage) im Termin-Detail eingebunden.
 // [2026-10-06] - FEATURE: nuScore Scanner eingebaut. Extrahiert Spiel-Codes und Unterschriften-PINs dynamisch per Mustererkennung aus dem Wettkampf-Tresor und zeigt sie mit Copy-Button im Termin-Detail an.
 // [2026-09-28] - UX-FEATURE: Read-Only Modus der Aufstellungs-Matrix auch im Kalender-Detail für reguläre Teammitglieder freigeschaltet.
@@ -8,9 +10,10 @@
 // src/features/Events/CalendarIcsDetailModal.tsx
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import { X, MapPin, AlignLeft, Calendar as CalIcon, Clock, Info, Edit3, UserPlus, Users, MessageCircle, Key, Copy, Check } from 'lucide-react';
+import { X, MapPin, AlignLeft, Calendar as CalIcon, Clock, Info, Edit3, UserPlus, Users, MessageCircle, Key, Copy, Check, Truck } from 'lucide-react';
 import { MatchLineupMatrixModal } from '../Users/components/MatchLineupMatrixModal';
 import { EventPollWidget } from './components/EventPollWidget';
+import type { MatchLineup } from '../../core/types/models';
 
 interface Props {
   event: any; // Das AdaptedEvent aus dem Kalender
@@ -31,7 +34,7 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
   canTakeOver, 
   onTakeOver 
 }) => {
-  const { user, teams, helpers, calendarSubscriptions, matchLineups, teamPins } = useClubStore();
+  const { user, teams, helpers, calendarSubscriptions, matchLineups, teamPins, saveMatchLineup } = useClubStore();
   const [isMatrixOpen, setIsMatrixOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -50,7 +53,8 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
   const canManageLineup = isAdmin || isCaptain;
   const isTeamMember = myHelperId && teamContext ? myHelper?.teamIds?.includes(teamContext.id) : false;
   
-  const showMatrixButton = canManageLineup || isTeamMember;
+  const hasLogistics = !!(teamContext?.requiresBetreuer || teamContext?.requiresFahrer);
+  const showMatrixButton = canManageLineup || isTeamMember || hasLogistics;
 
   const cachedEvent = sub?.cachedEvents?.find(ce => 
     ce.startTime === event.start.getTime() && 
@@ -65,6 +69,102 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
   const activePlayers = helpers
     .filter(h => activePlayerIds.includes(h.id))
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  // ---------------------
+
+  // --- LOGISTIK ENGINE (INTERAKTIV) ---
+  const handleLogisticsAction = async (type: 'fahrerHelperIds' | 'betreuerHelperIds', action: 'add' | 'remove' | 'takeover', targetHelperId: string, oldHelperId?: string) => {
+    if (!safeEventId || !teamContext) return;
+
+    const currentLineup = matchLineups.find(m => m.id === safeEventId);
+    const currentIds = currentLineup?.[type] || [];
+    let newIds = [...currentIds];
+
+    if (action === 'add') {
+      if (!newIds.includes(targetHelperId)) newIds.push(targetHelperId);
+    } else if (action === 'remove') {
+      newIds = newIds.filter(id => id !== targetHelperId);
+    } else if (action === 'takeover' && oldHelperId) {
+      newIds = newIds.filter(id => id !== oldHelperId);
+      if (!newIds.includes(targetHelperId)) newIds.push(targetHelperId);
+    }
+
+    const newLineup: MatchLineup = {
+      id: safeEventId,
+      schemaVersion: '1.0',
+      teamId: teamContext.id,
+      lineupHelperIds: currentLineup?.lineupHelperIds || teamContext.defaultLineupHelperIds || [],
+      availabilities: currentLineup?.availabilities || {},
+      isSetByMF: currentLineup?.isSetByMF || {},
+      isLocked: currentLineup?.isLocked,
+      betreuerHelperIds: type === 'betreuerHelperIds' ? newIds : (currentLineup?.betreuerHelperIds || []),
+      fahrerHelperIds: type === 'fahrerHelperIds' ? newIds : (currentLineup?.fahrerHelperIds || []),
+      updatedAt: Date.now()
+    };
+
+    await saveMatchLineup(newLineup);
+  };
+
+  const renderLogistics = (type: 'fahrerHelperIds' | 'betreuerHelperIds', label: string) => {
+    const ids = storeLineup?.[type] || [];
+    const isPast = event.start.getTime() < Date.now();
+
+    return (
+      <div>
+        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">{label}</span>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {ids.map(id => {
+            const h = helpers.find(x => x.id === id);
+            if (!h) return null;
+            const isMe = id === myHelperId;
+
+            return (
+              <button
+                key={id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isPast) return;
+                  if (canManageLineup) {
+                    if (window.confirm(`Möchtest du ${h.name} als ${label.split(' ')[1]} entfernen?`)) {
+                      handleLogisticsAction(type, 'remove', id);
+                    }
+                  } else if (!isMe) {
+                    if (window.confirm(`Möchtest du den Dienst von ${h.name} wirklich übernehmen?`)) {
+                      if (myHelperId) handleLogisticsAction(type, 'takeover', myHelperId, id);
+                    }
+                  }
+                }}
+                disabled={isPast || (!canManageLineup && isMe)}
+                className={`inline-block px-2 py-1.5 rounded text-xs font-bold shadow-sm transition-colors ${isMe ? 'bg-purple-100 text-purple-800 border border-purple-200' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}
+                title={canManageLineup ? "Klicken zum Entfernen" : (!isMe ? "Klicken zum Übernehmen (Tauschen)" : "Du bist fest eingeteilt")}
+              >
+                {h.alias || h.name.split(' ')[0]}
+              </button>
+            );
+          })}
+
+          {/* Action-Button: Hinzufügen / Ich */}
+          {!isPast && myHelperId && !ids.includes(myHelperId) && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (window.confirm(`Möchtest du dich verbindlich als ${label.split(' ')[1]} eintragen?`)) {
+                  handleLogisticsAction(type, 'add', myHelperId);
+                }
+              }}
+              className="text-[11px] font-bold bg-white border border-dashed border-gray-300 text-gray-500 rounded px-2.5 py-1.5 hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
+              title="Dienst verbindlich übernehmen"
+            >
+              + Ich
+            </button>
+          )}
+
+          {ids.length === 0 && (!myHelperId || ids.includes(myHelperId)) && (
+            <span className="text-xs text-gray-500 italic py-1">Noch offen</span>
+          )}
+        </div>
+      </div>
+    );
+  };
   // ---------------------
 
   // --- NUSCORE SCANNER LOGIC ---
@@ -283,6 +383,30 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* NEU: LOGISTIK & BETREUUNG (INTERAKTIV) */}
+                {hasLogistics && (
+                  <div className="flex items-start text-gray-700 pt-6 border-t border-gray-200">
+                    <Truck className="w-5 h-5 mr-3 mt-0.5 text-gray-400 shrink-0" />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="font-medium text-sm">Logistik & Betreuung</p>
+                      </div>
+                      
+                      <div className="flex flex-col gap-3">
+                        {teamContext.requiresBetreuer && renderLogistics('betreuerHelperIds', '🧑‍🏫 Betreuer')}
+                        {teamContext.requiresFahrer && renderLogistics('fahrerHelperIds', '🚗 Fahrer')}
+                      </div>
+                      
+                      <button 
+                        onClick={() => setIsMatrixOpen(true)}
+                        className="mt-4 w-full py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-bold rounded-lg transition-colors border border-blue-200 flex justify-center items-center shadow-sm"
+                      >
+                        Vollständigen Saison-Fahrplan öffnen
+                      </button>
+                    </div>
+                  </div>
+                )}
               </>
             )}
 

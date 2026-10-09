@@ -1,3 +1,7 @@
+// [2026-10-09] - BUGFIX: Z-Index Bug behoben (Logistik-Picker verschwindet nicht mehr hinter der nächsten Reihe). Safari-Autofill Hack ergänzt. Tausch-Logik-Wording präzisiert.
+// [2026-10-09] - UX-FEATURE: Dropdown-Menü für Logistik (Fahrer/Betreuer) durch einen durchsuchbaren Popover-Picker ersetzt (analog zum Joker-Menü).
+// [2026-10-09] - UX-FIX: Logistik-Reihen (Fahrer/Betreuer) im Saisonplaner platzsparend in einer Zeile (flex-row) angeordnet.
+// [2026-10-09] - FEATURE: Logistik-Modul (Fahrer & Betreuer) in Matrix integriert. Inklusive Self-Service Tauschbörse für Helfer und Dropdown-Zuweisung für Mannschaftsführer.
 // [2026-10-08] - FEATURE: MF-Override (Schraffiertes Design). Captains können nun die Verfügbarkeit anderer Spieler ändern (isSetByMF Flag).
 // [2026-10-01] - UX-FIX: Safari AutoFill für die Joker-Suche deaktiviert (autoComplete, autoCorrect, spellCheck).
 // [2026-09-30] - FEATURE: Base & Override V2 (Bottom-Up). Spieler können ihre eigene Zelle anklicken (Verfügbarkeit: Da/Weg).
@@ -33,6 +37,13 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
   const [localAvailOverrides, setLocalAvailOverrides] = useState<Record<string, Record<string, 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN'>>>({});
   const [localLockOverrides, setLocalLockOverrides] = useState<Record<string, boolean>>({});
   const [localSetByMFOverrides, setLocalSetByMFOverrides] = useState<Record<string, Record<string, boolean>>>({});
+  
+  // Lokaler State für die blitzschnelle Logistik-Anzeige
+  const [localLogisticsOverrides, setLocalLogisticsOverrides] = useState<Record<string, { fahrerHelperIds?: string[], betreuerHelperIds?: string[] }>>({});
+
+  // States für den Logistik Such-Picker
+  const [openLogisticsPicker, setOpenLogisticsPicker] = useState<string | null>(null);
+  const [logisticsSearchTerm, setLogisticsSearchTerm] = useState('');
 
   // Finde heraus, wer gerade eingeloggt ist (um eigene Spalte zu identifizieren)
   const myHelperId = useMemo(() => {
@@ -78,6 +89,19 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }, [helpers, displayMembers, jokerSearchTerm]);
 
+  const sortedAllHelpers = useMemo(() => {
+    return [...helpers].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [helpers]);
+
+  const filteredLogisticsHelpers = useMemo(() => {
+    const term = logisticsSearchTerm.toLowerCase().trim();
+    if (!term) return sortedAllHelpers;
+    return sortedAllHelpers.filter(h => 
+      (h.name || '').toLowerCase().includes(term) || 
+      (h.alias || '').toLowerCase().includes(term)
+    );
+  }, [sortedAllHelpers, logisticsSearchTerm]);
+
   const linkedSubscription = useMemo(() => {
     return calendarSubscriptions.find(sub => sub.reminderRecipientTeamIds?.includes(team.id));
   }, [calendarSubscriptions, team.id]);
@@ -118,6 +142,8 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
       availabilities: storeLineup?.availabilities || {},
       isSetByMF: storeLineup?.isSetByMF || {},
       isLocked: storeLineup?.isLocked,
+      betreuerHelperIds: storeLineup?.betreuerHelperIds || [],
+      fahrerHelperIds: storeLineup?.fahrerHelperIds || [],
       updatedAt: Date.now()
     };
 
@@ -188,6 +214,8 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
         [helperId]: newIsSetByMF
       },
       isLocked: storeLineup?.isLocked,
+      betreuerHelperIds: storeLineup?.betreuerHelperIds || [],
+      fahrerHelperIds: storeLineup?.fahrerHelperIds || [],
       updatedAt: Date.now()
     };
     
@@ -208,8 +236,61 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
       availabilities: storeLineup?.availabilities || {},
       isSetByMF: storeLineup?.isSetByMF || {},
       isLocked: newState,
+      betreuerHelperIds: storeLineup?.betreuerHelperIds || [],
+      fahrerHelperIds: storeLineup?.fahrerHelperIds || [],
       updatedAt: Date.now()
     };
+    await saveMatchLineup(newLineup);
+  };
+
+  // --- LOGISTIK ENGINE (Fahrer & Betreuer) ---
+  const handleLogisticsAction = async (
+    rawEventId: string,
+    type: 'fahrerHelperIds' | 'betreuerHelperIds',
+    action: 'add' | 'remove' | 'takeover',
+    targetHelperId: string,
+    oldHelperId?: string
+  ) => {
+    const safeEventId = sanitizeId(rawEventId);
+    const storeLineup = matchLineups.find(m => m.id === safeEventId);
+    
+    const currentIds = localLogisticsOverrides[safeEventId]?.[type] !== undefined 
+      ? localLogisticsOverrides[safeEventId][type]! 
+      : (storeLineup?.[type] || []);
+
+    let newIds = [...currentIds];
+
+    if (action === 'add') {
+      if (!newIds.includes(targetHelperId)) newIds.push(targetHelperId);
+    } else if (action === 'remove') {
+      newIds = newIds.filter(id => id !== targetHelperId);
+    } else if (action === 'takeover' && oldHelperId) {
+      newIds = newIds.filter(id => id !== oldHelperId);
+      if (!newIds.includes(targetHelperId)) newIds.push(targetHelperId);
+    }
+
+    // Optimistic UI für Logistik
+    setLocalLogisticsOverrides(prev => ({
+      ...prev,
+      [safeEventId]: {
+        ...(prev[safeEventId] || {}),
+        [type]: newIds
+      }
+    }));
+
+    const newLineup: MatchLineup = {
+      id: safeEventId,
+      schemaVersion: '1.0',
+      teamId: team.id,
+      lineupHelperIds: storeLineup?.lineupHelperIds || team.defaultLineupHelperIds || [],
+      availabilities: storeLineup?.availabilities || {},
+      isSetByMF: storeLineup?.isSetByMF || {},
+      isLocked: storeLineup?.isLocked,
+      betreuerHelperIds: type === 'betreuerHelperIds' ? newIds : (storeLineup?.betreuerHelperIds || []),
+      fahrerHelperIds: type === 'fahrerHelperIds' ? newIds : (storeLineup?.fahrerHelperIds || []),
+      updatedAt: Date.now()
+    };
+    
     await saveMatchLineup(newLineup);
   };
 
@@ -217,6 +298,142 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
     setTempJokers(prev => [...prev, helperId]);
     setIsJokerMenuOpen(false);
     setJokerSearchTerm('');
+  };
+
+  // --- RENDER HILFSFUNKTION FÜR LOGISTIK-REIHEN ---
+  const renderLogistics = (type: 'fahrerHelperIds' | 'betreuerHelperIds', label: string, event: any) => {
+    const safeEventId = sanitizeId(event.uid);
+    const pickerKey = `${safeEventId}-${type}`;
+    const isPickerOpen = openLogisticsPicker === pickerKey;
+    const storeLineup = matchLineups.find(m => m.id === safeEventId);
+    const isPast = event.startTime < Date.now();
+    
+    const ids = localLogisticsOverrides[safeEventId]?.[type] !== undefined 
+      ? localLogisticsOverrides[safeEventId][type]! 
+      : (storeLineup?.[type] || []);
+
+    return (
+      <div className="flex flex-row items-center gap-2">
+        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider w-20 shrink-0">{label}</span>
+        <div className="flex flex-wrap items-center gap-1.5 flex-1 relative">
+          {ids.map(id => {
+            const h = sortedAllHelpers.find(x => x.id === id);
+            if (!h) return null;
+            const isMe = id === myHelperId;
+            
+            return (
+              <button
+                key={id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isPast) return;
+                  if (!isReadOnly) {
+                    // Admin: Löschen
+                    if (window.confirm(`Möchtest du ${h.name} als ${label.split(' ')[1]} entfernen?`)) {
+                       handleLogisticsAction(event.uid, type, 'remove', id);
+                    }
+                  } else if (!isMe) {
+                    // Helfer: Tauschbörse
+                    if (window.confirm(`Möchtest du den Dienst von ${h.name} wirklich übernehmen?`)) {
+                       if (myHelperId) handleLogisticsAction(event.uid, type, 'takeover', myHelperId, id);
+                    }
+                  }
+                }}
+                disabled={isPast || (isReadOnly && isMe)}
+                className={`text-[11px] font-bold px-2 py-0.5 rounded border transition-colors shadow-sm ${isMe ? 'bg-purple-100 text-purple-800 border-purple-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                title={!isReadOnly ? "Klicken zum Entfernen" : (!isMe ? "Klicken zum Übernehmen (Tauschen)" : "Du bist fest eingeteilt")}
+              >
+                {h.alias || h.name.split(' ')[0]}
+              </button>
+            );
+          })}
+          
+          {/* Action-Button: Hinzufügen / Ich */}
+          {!isPast && (
+            !isReadOnly ? (
+              // Admin Picker (Smarter Popover statt Dropdown)
+              <div className="relative">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenLogisticsPicker(isPickerOpen ? null : pickerKey);
+                    setLogisticsSearchTerm('');
+                  }}
+                  className="text-[11px] font-bold bg-white border border-dashed border-gray-300 text-gray-500 rounded px-2 py-0.5 hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm flex items-center"
+                  title="Mitglied suchen und zuweisen"
+                >
+                  + Einfügen
+                </button>
+
+                {isPickerOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpenLogisticsPicker(null); }}></div>
+                    <div className="absolute left-0 top-full mt-1.5 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden flex flex-col">
+                      <div className="p-2 border-b border-gray-100 bg-gray-50 flex items-center relative">
+                        <Search className="w-3.5 h-3.5 text-gray-400 absolute left-4" />
+                        <input
+                          autoFocus
+                          type="text"
+                          placeholder="Name suchen..."
+                          value={logisticsSearchTerm}
+                          onChange={(e) => setLogisticsSearchTerm(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          autoComplete="new-password"
+                          autoCapitalize="none"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          className="w-full pl-7 pr-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div className="max-h-48 overflow-y-auto p-1 custom-scrollbar">
+                        {filteredLogisticsHelpers.length === 0 ? (
+                          <div className="p-3 text-center text-xs text-gray-500">Keine Spieler gefunden.</div>
+                        ) : (
+                          filteredLogisticsHelpers.map(h => (
+                            <button
+                              key={h.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleLogisticsAction(event.uid, type, 'add', h.id);
+                                setOpenLogisticsPicker(null);
+                              }}
+                              className="w-full text-left px-2 py-1.5 text-xs text-gray-800 hover:bg-blue-50 hover:text-blue-700 rounded transition-colors flex items-center justify-between"
+                            >
+                              <span className="font-medium truncate">{h.name}</span>
+                              {h.alias && <span className="text-[10px] text-gray-400 ml-2 shrink-0">{h.alias}</span>}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              // Self-Service Button (Opt-In)
+              myHelperId && !ids.includes(myHelperId) && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Möchtest du dich verbindlich als ${label.split(' ')[1]} eintragen?`)) {
+                      handleLogisticsAction(event.uid, type, 'add', myHelperId);
+                    }
+                  }}
+                  className="text-[11px] font-bold bg-white border border-dashed border-gray-300 text-gray-500 rounded px-2.5 py-0.5 hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
+                  title="Dienst verbindlich übernehmen"
+                >
+                  + Ich
+                </button>
+              )
+            )
+          )}
+          
+          {ids.length === 0 && isReadOnly && (!myHelperId || ids.includes(myHelperId)) && (
+             <span className="text-[10px] text-gray-400 italic py-0.5">Noch offen</span>
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -260,7 +477,8 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                           placeholder="Name suchen..."
                           value={jokerSearchTerm}
                           onChange={(e) => setJokerSearchTerm(e.target.value)}
-                          autoComplete="off"
+                          autoComplete="new-password"
+                          autoCapitalize="none"
                           autoCorrect="off"
                           spellCheck={false}
                           className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -332,6 +550,7 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                   
                   const safeEventId = sanitizeId(event.uid);
                   const isFocusedRow = focusedEventId === safeEventId;
+                  const isPickerOpenInThisRow = openLogisticsPicker?.startsWith(safeEventId);
                   
                   const storeLineup = matchLineups.find(m => m.id === safeEventId);
                   const hasLocalOverride = localOverrides[safeEventId] !== undefined;
@@ -368,8 +587,9 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                   return (
                     <tr key={event.uid} className={`group ${isFocusedRow ? 'bg-blue-50' : (isPast ? 'hover:bg-gray-200' : 'hover:bg-blue-50/40')} transition-colors`}>
                       
-                      <td className={`sticky left-0 z-10 ${rowBg} group-hover:bg-inherit ${borderClasses} border-r-2 px-4 py-3 w-[240px] sm:w-[280px] align-middle shadow-[1px_0px_0px_0px_#e5e7eb]`}>
-                        <div className="flex flex-col whitespace-normal">
+                      {/* BBUGFIX: Z-Index dynamisch auf z-50 erhöhen, falls der Picker in dieser Zeile offen ist */}
+                      <td className={`sticky left-0 ${isPickerOpenInThisRow ? 'z-50' : 'z-10'} ${rowBg} group-hover:bg-inherit ${borderClasses} border-r-2 px-4 py-3 w-[240px] sm:w-[280px] align-middle shadow-[1px_0px_0px_0px_#e5e7eb]`}>
+                        <div className="flex flex-col whitespace-normal h-full">
                           {isFocusedRow && (
                             <span className="text-[9px] font-bold text-blue-700 bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded uppercase tracking-wider mb-1.5 w-max">
                               Ausgewähltes Spiel
@@ -409,6 +629,15 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                               )
                             )}
                           </div>
+
+                          {/* LOGISTIK-BLOCK */}
+                          {(team.requiresFahrer || team.requiresBetreuer) && (
+                            <div className="mt-3 pt-2.5 border-t border-gray-200/60 flex flex-col gap-2">
+                              {team.requiresBetreuer && renderLogistics('betreuerHelperIds', '🧑‍🏫 Betreuer', event)}
+                              {team.requiresFahrer && renderLogistics('fahrerHelperIds', '🚗 Fahrer', event)}
+                            </div>
+                          )}
+
                         </div>
                       </td>
                       

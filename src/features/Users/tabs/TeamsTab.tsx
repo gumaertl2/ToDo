@@ -1,3 +1,4 @@
+// [2026-10-09] - UX-FIX: Button-Text in der Team-Kachel von "Umbenennen" in "Einstellungen" geändert.
 // [2026-09-28] - UX-FEATURE: Read-Only Modus für die Saison-Planung. Einfache Team-Mitglieder können die Matrix nun einsehen, aber nicht bearbeiten.
 // [2026-09-28] - BUGFIX: TypeScript Build-Fehler behoben (ungültige 'title'-Attribute an Lucide-Icons entfernt).
 // [2026-09-28] - UX-FIX: Footer der Team-Kachel für mobile Geräte optimiert (Stacked Layout mit w-full Buttons).
@@ -175,10 +176,10 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ openTeamEditor, canManageMit
                       <button 
                         onClick={() => openTeamEditor(team)}
                         className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold text-gray-600 bg-white hover:text-blue-600 hover:bg-blue-50 border border-gray-200 rounded-lg transition shadow-sm"
-                        title="Team umbenennen"
+                        title="Team-Einstellungen"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
-                        Umbenennen
+                        Einstellungen
                       </button>
                       <button 
                         onClick={() => handleDelete(team)}

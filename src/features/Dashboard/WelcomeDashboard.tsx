@@ -1,3 +1,6 @@
+// [2026-10-09] - UX-FIX: "Alle zeigen" Button bei Diensten als intelligenter Toggle (merkt sich den vorherigen Zeitraum und springt über "Standardansicht" wieder dorthin zurück).
+// [2026-10-09] - UX-FIX: "Alle zeigen" Button für Dienste ergänzt (setzt Lookahead auf 365 Tage). Deep-Link ID für Logistik-Dienste repariert, damit sich das Kalender-Modal öffnet.
+// [2026-10-09] - FEATURE: Logistik-Engine im Dashboard ergänzt. Das Dashboard scannt nun alle MatchLineup-Schattenakten und blendet zugewiesene Fahrer/Betreuer-Dienste vollautomatisch unter "Meine Dienste" als Action-Card ein.
 // [2026-06-11] - BUGFIX: Regression beim Routing behoben. Der Deep-Link Parameter 'openEventId' für externe Vereinstermine wurde wiederhergestellt, sodass ein Klick auf der Startseite nicht nur den Kalender öffnet, sondern auch sofort das zugehörige Event-Modal aufklappt.
 // [2026-06-11] - UX-FIX: Platzoptimierung bei den Vereinsterminen. Den redundanten Untertitel aus den Terminkarten entfernt.
 // [2026-06-11] - FEATURE: Abonnierte externe ICS-Kalender (calendarSubscriptions) in die "Vereinstermine"-Ansicht des Dashboards integriert. Striktes Need-to-Know-Prinzip greift.
@@ -40,7 +43,8 @@ export const WelcomeDashboard: React.FC = () => {
     helpers,
     roleProfiles,
     saveAgendaItem,
-    fetchTasks
+    fetchTasks,
+    matchLineups
   } = useClubStore();
 
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
@@ -64,6 +68,9 @@ export const WelcomeDashboard: React.FC = () => {
     const saved = localStorage.getItem('dashboard_services_lookahead');
     return saved !== null ? parseInt(saved, 10) : 14;
   });
+  
+  // NEU: Merkt sich den letzten eingestellten Dienst-Wert vor dem Klick auf "Alle zeigen"
+  const [previousServicesLookahead, setPreviousServicesLookahead] = useState<number>(14);
 
   const [tasksLookahead, setTasksLookahead] = useState<number>(() => {
     const saved = localStorage.getItem('dashboard_tasks_lookahead');
@@ -79,6 +86,16 @@ export const WelcomeDashboard: React.FC = () => {
   const handleLookaheadChange = (setter: React.Dispatch<React.SetStateAction<number>>) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseInt(e.target.value, 10);
     setter(isNaN(val) ? 0 : val);
+  };
+  
+  // NEU: Toggle-Funktion für Dienste Lookahead
+  const handleToggleServicesLookahead = () => {
+    if (servicesLookahead === 365) {
+      setServicesLookahead(previousServicesLookahead);
+    } else {
+      setPreviousServicesLookahead(servicesLookahead);
+      setServicesLookahead(365);
+    }
   };
 
   // --- RESOLUTION ENGINE ---
@@ -305,7 +322,7 @@ export const WelcomeDashboard: React.FC = () => {
     return combinedEvents.sort((a, b) => a.time - b.time);
   }, [events, calendarEvents, calendarSubscriptions, todayStart, eventsLookaheadDate, checkEventRelevance]);
 
-  // --- Dienste filtern ---
+  // --- Klassische Vereins-Dienste filtern ---
   const upcomingServices = useMemo(() => {
     if (!calendarEvents) return [];
     
@@ -319,6 +336,43 @@ export const WelcomeDashboard: React.FC = () => {
       return checkEventRelevance(ce);
     }).sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
   }, [calendarEvents, todayStart, servicesLookaheadDate, checkEventRelevance]);
+
+  // --- Logistik-Scanner (Matrix Schatten-Akten) ---
+  const myLogisticsDuties = useMemo(() => {
+    if (!myHelper || !calendarSubscriptions || !matchLineups) return [];
+    const duties: any[] = [];
+    
+    calendarSubscriptions.forEach(sub => {
+      if (!sub.isActive || !sub.cachedEvents) return;
+      sub.cachedEvents.forEach(ce => {
+         const ceTime = new Date(ce.startTime).getTime();
+         const ceEnd = ce.endTime ? new Date(ce.endTime).getTime() : ceTime;
+         
+         if (ceEnd >= todayStart && ceTime <= servicesLookaheadDate) {
+            const safeEventId = ce.uid.replace(/[\/\\.#$\[\]]/g, '_');
+            const lineup = matchLineups.find(m => m.id === safeEventId);
+            
+            if (lineup) {
+              const isFahrer = lineup.fahrerHelperIds?.includes(myHelper.id);
+              const isBetreuer = lineup.betreuerHelperIds?.includes(myHelper.id);
+              
+              if (isFahrer || isBetreuer) {
+                 duties.push({
+                   id: `logistics-${ce.uid}`,
+                   eventId: `sub-${sub.id}-${ce.uid}`, 
+                   title: `Saison-Dienst: ${ce.title}`,
+                   role: isFahrer && isBetreuer ? 'Fahrer & Betreuer' : (isFahrer ? 'Fahrer' : 'Betreuer'),
+                   time: ceTime
+                 });
+              }
+            }
+         }
+      });
+    });
+    return duties.sort((a, b) => a.time - b.time);
+  }, [myHelper, calendarSubscriptions, matchLineups, todayStart, servicesLookaheadDate]);
+
+  const totalServicesCount = upcomingServices.length + myLogisticsDuties.length;
 
   // --- WhatsApp Erinnerungen filtern (Deaktiviert für reine Helfer) ---
   const pendingWhatsAppReminders = useMemo(() => {
@@ -424,11 +478,11 @@ export const WelcomeDashboard: React.FC = () => {
             Hier ist dein Kompass. In deinem eingestellten Zeitraum stehen <strong className="text-blue-600">{upcomingEvents.length} Termine</strong>
             {isAppUser ? (
               <>
-                , <strong className="text-purple-600">{upcomingServices.length} Dienste</strong> und <strong className="text-red-600">{myTasks.length} fällige Aufgaben</strong> für dich an.
+                , <strong className="text-purple-600">{totalServicesCount} Dienste</strong> und <strong className="text-red-600">{myTasks.length} fällige Aufgaben</strong> für dich an.
               </>
             ) : (
               <>
-                {' '}und <strong className="text-purple-600">{upcomingServices.length} Dienste</strong> für dich an.
+                {' '}und <strong className="text-purple-600">{totalServicesCount} Dienste</strong> für dich an.
               </>
             )}
           </p>
@@ -482,7 +536,6 @@ export const WelcomeDashboard: React.FC = () => {
                   <div className="bg-white border border-gray-200 p-6 rounded-xl text-center text-gray-500">Keine relevanten Termine im gewählten Zeitraum.</div>
                 ) : (
                   upcomingEvents.map(ev => (
-                    // CHIRURGISCHER EINGRIFF: openEventId Deep-Link Payload wieder eingebaut
                     <button key={ev.id} onClick={() => ev.type === 'INTERN' ? navigate(`/events/${ev.id}`) : navigate('/calendar', { state: { openEventId: ev.id, targetDate: ev.time } })} className="w-full text-left bg-white border border-gray-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-blue-300 transition-all group">
                       <div className="flex justify-between items-start">
                         <div>
@@ -498,35 +551,61 @@ export const WelcomeDashboard: React.FC = () => {
             </section>
 
             <section className="relative z-10">
-              <div className="flex items-center mb-4">
-                <h2 className="text-xl font-bold text-gray-900 flex items-center">
-                  <Coffee className="w-5 h-5 mr-2 text-purple-600" /> Meine Dienste
-                </h2>
-                <div className="flex items-center ml-3 bg-purple-50 border border-purple-200 rounded-lg px-2 py-0.5 shadow-sm" title="Vorschau in Tagen">
-                   <input 
-                     type="number" min="1" max="365" 
-                     value={servicesLookahead} 
-                     onChange={handleLookaheadChange(setServicesLookahead)} 
-                     className="w-10 text-center text-sm font-bold text-purple-600 bg-transparent outline-none" 
-                   />
-                   <span className="text-[10px] uppercase font-bold text-purple-400 ml-1">Tage</span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
+                <div className="flex items-center">
+                  <h2 className="text-xl font-bold text-gray-900 flex items-center">
+                    <Coffee className="w-5 h-5 mr-2 text-purple-600" /> Meine Dienste
+                  </h2>
+                  <div className="flex items-center ml-3 bg-purple-50 border border-purple-200 rounded-lg px-2 py-0.5 shadow-sm" title="Vorschau in Tagen">
+                     <input 
+                       type="number" min="1" max="365" 
+                       value={servicesLookahead} 
+                       onChange={handleLookaheadChange(setServicesLookahead)} 
+                       className="w-10 text-center text-sm font-bold text-purple-600 bg-transparent outline-none" 
+                     />
+                     <span className="text-[10px] uppercase font-bold text-purple-400 ml-1">Tage</span>
+                  </div>
                 </div>
+                {/* INTELLIGENTER TOGGLE BUTTON */}
+                <button 
+                  onClick={handleToggleServicesLookahead} 
+                  className="text-sm font-medium text-purple-600 hover:text-purple-800 transition-colors flex items-center"
+                >
+                  {servicesLookahead === 365 ? (
+                    <>Standardansicht <ArrowRight className="w-4 h-4 ml-1" /></>
+                  ) : (
+                    <>Alle zeigen <ArrowRight className="w-4 h-4 ml-1" /></>
+                  )}
+                </button>
               </div>
               <div className="space-y-3">
-                {upcomingServices.length === 0 ? (
+                {totalServicesCount === 0 ? (
                   <div className="bg-purple-50/50 border border-purple-100 p-6 rounded-xl text-center text-purple-600/70 text-sm">Keine Dienste im gewählten Zeitraum.</div>
                 ) : (
-                  upcomingServices.map(srv => (
-                    <button key={srv.id} onClick={() => navigate('/calendar', { state: { openEventId: srv.id, targetDate: new Date(srv.startTime).getTime() } })} className="w-full text-left bg-purple-50 border border-purple-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-purple-400 transition-all group">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <span className="inline-block px-2 py-1 bg-purple-200 text-purple-900 text-xs font-bold rounded mb-2">{formatDate(new Date(srv.startTime).getTime())}</span>
-                          <h3 className="font-bold text-purple-900">{srv.title}</h3>
+                  <>
+                    {upcomingServices.map(srv => (
+                      <button key={srv.id} onClick={() => navigate('/calendar', { state: { openEventId: srv.id, targetDate: new Date(srv.startTime).getTime() } })} className="w-full text-left bg-purple-50 border border-purple-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-purple-400 transition-all group">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="inline-block px-2 py-1 bg-purple-200 text-purple-900 text-xs font-bold rounded mb-2">{formatDate(new Date(srv.startTime).getTime())}</span>
+                            <h3 className="font-bold text-purple-900">{srv.title}</h3>
+                          </div>
+                          <ChevronRight className="w-5 h-5 text-purple-400 group-hover:text-purple-600 mt-2" />
                         </div>
-                        <ChevronRight className="w-5 h-5 text-purple-400 group-hover:text-purple-600 mt-2" />
-                      </div>
-                    </button>
-                  ))
+                      </button>
+                    ))}
+                    {myLogisticsDuties.map(duty => (
+                      <button key={duty.id} onClick={() => navigate('/calendar', { state: { openEventId: duty.eventId, targetDate: duty.time } })} className="w-full text-left bg-purple-50 border border-purple-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-purple-400 transition-all group">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="inline-block px-2 py-1 bg-purple-200 text-purple-900 text-xs font-bold rounded mb-2">{formatDate(duty.time)} • {duty.role}</span>
+                            <h3 className="font-bold text-purple-900">{duty.title}</h3>
+                          </div>
+                          <ChevronRight className="w-5 h-5 text-purple-400 group-hover:text-purple-600 mt-2" />
+                        </div>
+                      </button>
+                    ))}
+                  </>
                 )}
               </div>
             </section>
