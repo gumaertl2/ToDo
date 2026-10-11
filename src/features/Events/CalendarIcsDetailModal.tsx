@@ -1,3 +1,4 @@
+// [2026-10-11] - BUGFIX: Guard-Clause in sanitizeId eingebaut, um TypeError (undefined is not an object) bei Events ohne UID abzufangen.
 // [2026-10-11] - UX-FIX: Abfahrtszeit im Detail-Modal für normale Nutzer als reinen Text gerendert. Verhindert iOS-Ghost-Zeiten (12:30 PM) bei deaktivierten Zeitfeldern.
 // [2026-10-11] - BUGFIX: 24h-Format (hour12: false und lang="de-DE") für Zeitangaben und Input-Felder erzwungen, um AM/PM-Anzeigen bei abweichenden OS-Locales zu verhindern.
 // [2026-10-11] - FEATURE: Abfahrtszeit (departureTime) in Logistik-Block integriert (Anzeige und direkte Bearbeitung für Admins/Captains).
@@ -27,7 +28,7 @@ interface Props {
   onTakeOver?: () => void;
 }
 
-const sanitizeId = (id: string) => id.replace(/[\/\\.#$\[\]]/g, '_');
+const sanitizeId = (id?: string) => (id ? String(id).replace(/[\/\\.#$\[\]]/g, '_') : '');
 
 export const CalendarIcsDetailModal: React.FC<Props> = ({ 
   event, 

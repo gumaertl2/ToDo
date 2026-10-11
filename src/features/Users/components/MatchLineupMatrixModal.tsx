@@ -1,3 +1,5 @@
+// [2026-10-11] - UX-FIX: "+ Einfügen" und "+ Ich" Buttons zu "+" verkleinert und Abstände reduziert, um Platz in der Logistik-Zeile zu schaffen (verhindert Umbruch bei Zeitfeld).
+// [2026-10-11] - UX-FIX: Logistik-Labels in der Matrix auf platzsparende Emojis mit Tooltips reduziert, um Layout-Umbrüche zu verhindern.
 // [2026-10-11] - BUGFIX: 24h-Format (hour12: false und lang="de-DE") für Zeitangaben und Input-Felder erzwungen, um AM/PM-Anzeigen bei abweichenden OS-Locales zu verhindern.
 // [2026-10-11] - FEATURE: Abfahrtszeit (departureTime) in Logistik-Reihe (Fahrer) eingebaut. Basis für zukünftige Google Maps Integration.
 // [2026-10-09] - BUGFIX: Z-Index Bug behoben (Logistik-Picker verschwindet nicht mehr hinter der nächsten Reihe). Safari-Autofill Hack ergänzt. Tausch-Logik-Wording präzisiert.
@@ -346,9 +348,12 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
       ? localLogisticsOverrides[safeEventId].departureTime!
       : (storeLineup?.departureTime || '');
 
+    const [emoji, ...textParts] = label.split(' ');
+    const roleName = textParts.join(' ');
+
     return (
-      <div className="flex flex-row items-center gap-2">
-        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider w-20 shrink-0">{label}</span>
+      <div className="flex flex-row items-center gap-1.5">
+        <span className="text-base cursor-help shrink-0 w-6 text-center" title={roleName}>{emoji}</span>
         <div className="flex flex-wrap items-center gap-1.5 flex-1 relative">
           {ids.map(id => {
             const h = sortedAllHelpers.find(x => x.id === id);
@@ -362,7 +367,7 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                   e.stopPropagation();
                   if (isPast) return;
                   if (!isReadOnly) {
-                    if (window.confirm(`Möchtest du ${h.name} als ${label.split(' ')[1]} entfernen?`)) {
+                    if (window.confirm(`Möchtest du ${h.name} als ${roleName} entfernen?`)) {
                        handleLogisticsAction(event.uid, type, 'remove', id);
                     }
                   } else if (!isMe) {
@@ -389,10 +394,10 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                     setOpenLogisticsPicker(isPickerOpen ? null : pickerKey);
                     setLogisticsSearchTerm('');
                   }}
-                  className="text-[11px] font-bold bg-white border border-dashed border-gray-300 text-gray-500 rounded px-2 py-0.5 hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm flex items-center"
-                  title="Mitglied suchen und zuweisen"
+                  className="text-[14px] leading-none font-bold bg-white border border-dashed border-gray-300 text-gray-500 rounded w-6 h-6 flex items-center justify-center hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
+                  title={`${roleName} zuweisen`}
                 >
-                  + Einfügen
+                  +
                 </button>
 
                 {isPickerOpen && (
@@ -444,14 +449,14 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (window.confirm(`Möchtest du dich verbindlich als ${label.split(' ')[1]} eintragen?`)) {
+                    if (window.confirm(`Möchtest du dich verbindlich als ${roleName} eintragen?`)) {
                       handleLogisticsAction(event.uid, type, 'add', myHelperId);
                     }
                   }}
-                  className="text-[11px] font-bold bg-white border border-dashed border-gray-300 text-gray-500 rounded px-2.5 py-0.5 hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
-                  title="Dienst verbindlich übernehmen"
+                  className="text-[14px] leading-none font-bold bg-white border border-dashed border-gray-300 text-gray-500 rounded w-6 h-6 flex items-center justify-center hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
+                  title="Dienst verbindlich übernehmen (Ich)"
                 >
-                  + Ich
+                  +
                 </button>
               )
             )
@@ -461,9 +466,9 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
              <span className="text-[10px] text-gray-400 italic py-0.5">Noch offen</span>
           )}
 
-          {/* CHIRURGISCHER EINGRIFF: Abfahrtszeit Input mit lang="de-DE" für 24h Anzeige */}
+          {/* CHIRURGISCHER EINGRIFF: Abfahrtszeit Input kompakter */}
           {type === 'fahrerHelperIds' && (ids.length > 0 || !isReadOnly) && (
-            <div className="flex items-center ml-2 border-l border-gray-200/60 pl-2 shrink-0">
+            <div className="flex items-center ml-1 border-l border-gray-200/60 pl-1 shrink-0">
                <Clock className="w-3 h-3 text-gray-400 mr-1" />
                <input
                  type="time"
