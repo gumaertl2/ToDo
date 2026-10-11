@@ -1,3 +1,4 @@
+// [2026-10-11] - FEATURE: Feld 'departureTime' zum MatchLineup-Modell hinzugefügt (Grundlage für spätere Google Maps Integration).
 // [2026-10-09] - FEATURE: Logistik- und Betreuerplanung (requiresBetreuer, requiresFahrer, betreuerHelperIds, fahrerHelperIds) in Team und MatchLineup ergänzt.
 // [2026-10-08] - FEATURE: Optionale Adressfelder (strasse, plz, ort) zum Helper-Modell hinzugefügt.
 // [2026-10-08] - SCHEMA: 'PollConfig' und 'EventPollResponse' für flexibles RSVP/Umfrage-Feature (WhatsApp-Style) hinzugefügt.
@@ -114,8 +115,8 @@ export interface Team extends BaseDocument {
   defaultLineupHelperIds?: string[]; 
   lineupFreezeLeadDays?: number;     
   lineupLockMessage?: string;        
-  requiresBetreuer?: boolean; // <--- NEU
-  requiresFahrer?: boolean;   // <--- NEU
+  requiresBetreuer?: boolean; 
+  requiresFahrer?: boolean;   
 }
 
 export interface Group extends BaseDocument {
@@ -346,8 +347,9 @@ export interface MatchLineup {
   availabilities?: Record<string, 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN'>; 
   isSetByMF?: Record<string, boolean>; 
   
-  betreuerHelperIds?: string[]; // <--- NEU
-  fahrerHelperIds?: string[];   // <--- NEU
+  betreuerHelperIds?: string[]; 
+  fahrerHelperIds?: string[];   
+  departureTime?: string; // <--- NEU (z.B. "17:45")
   
   updatedAt?: number;
 }

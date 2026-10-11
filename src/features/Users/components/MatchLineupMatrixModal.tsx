@@ -1,3 +1,5 @@
+// [2026-10-11] - BUGFIX: 24h-Format (hour12: false und lang="de-DE") für Zeitangaben und Input-Felder erzwungen, um AM/PM-Anzeigen bei abweichenden OS-Locales zu verhindern.
+// [2026-10-11] - FEATURE: Abfahrtszeit (departureTime) in Logistik-Reihe (Fahrer) eingebaut. Basis für zukünftige Google Maps Integration.
 // [2026-10-09] - BUGFIX: Z-Index Bug behoben (Logistik-Picker verschwindet nicht mehr hinter der nächsten Reihe). Safari-Autofill Hack ergänzt. Tausch-Logik-Wording präzisiert.
 // [2026-10-09] - UX-FEATURE: Dropdown-Menü für Logistik (Fahrer/Betreuer) durch einen durchsuchbaren Popover-Picker ersetzt (analog zum Joker-Menü).
 // [2026-10-09] - UX-FIX: Logistik-Reihen (Fahrer/Betreuer) im Saisonplaner platzsparend in einer Zeile (flex-row) angeordnet.
@@ -11,7 +13,7 @@
 // src/features/Users/components/MatchLineupMatrixModal.tsx
 import React, { useMemo, useState } from 'react';
 import { useClubStore } from '../../../store/useClubStore';
-import { X, Calendar as CalendarIcon, Lock, Unlock, CheckSquare, Square, UserPlus, Search, Users } from 'lucide-react';
+import { X, Calendar as CalendarIcon, Lock, Unlock, CheckSquare, Square, UserPlus, Search, Users, Clock } from 'lucide-react';
 import type { Team, MatchLineup, Helper } from '../../../core/types/models';
 
 interface MatchLineupMatrixModalProps {
@@ -39,7 +41,7 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
   const [localSetByMFOverrides, setLocalSetByMFOverrides] = useState<Record<string, Record<string, boolean>>>({});
   
   // Lokaler State für die blitzschnelle Logistik-Anzeige
-  const [localLogisticsOverrides, setLocalLogisticsOverrides] = useState<Record<string, { fahrerHelperIds?: string[], betreuerHelperIds?: string[] }>>({});
+  const [localLogisticsOverrides, setLocalLogisticsOverrides] = useState<Record<string, { fahrerHelperIds?: string[], betreuerHelperIds?: string[], departureTime?: string }>>({});
 
   // States für den Logistik Such-Picker
   const [openLogisticsPicker, setOpenLogisticsPicker] = useState<string | null>(null);
@@ -144,6 +146,7 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
       isLocked: storeLineup?.isLocked,
       betreuerHelperIds: storeLineup?.betreuerHelperIds || [],
       fahrerHelperIds: storeLineup?.fahrerHelperIds || [],
+      departureTime: storeLineup?.departureTime,
       updatedAt: Date.now()
     };
 
@@ -159,7 +162,6 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
     const isMyColumn = helperId === myHelperId;
     const isCaptainAction = !isReadOnly;
 
-    // Nur der Spieler selbst oder der MF dürfen die Verfügbarkeit ändern
     if (!isMyColumn && !isCaptainAction) return;
 
     const safeEventId = sanitizeId(rawEventId);
@@ -167,23 +169,19 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
     
     const currentAvail = localAvailOverrides[safeEventId]?.[helperId] || storeLineup?.availabilities?.[helperId] || 'UNKNOWN';
     
-    // Ampel weiterschalten
     let nextAvail: 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN' = 'UNKNOWN';
     if (currentAvail === 'UNKNOWN') nextAvail = 'AVAILABLE';
     else if (currentAvail === 'AVAILABLE') nextAvail = 'UNAVAILABLE';
     else nextAvail = 'UNKNOWN';
 
-    // NOTBREMSE: Verhindert stillschweigende Absagen nach der Nominierung!
     if (isFrozenLocal && isPlaying && nextAvail === 'UNAVAILABLE') {
        const defaultMsg = "🔒 Du bist für dieses Spiel fest aufgestellt und die Planung ist bereits versiegelt! Bei kurzfristigen Ausfällen kontaktiere bitte sofort deinen Mannschaftsführer.";
        alert(team.lineupLockMessage || defaultMsg);
        return;
     }
 
-    // Last-Writer-Wins: Wenn der MF klickt, bekommt das Feld den Stempel. Klickt der Spieler selbst, wird der Stempel entfernt.
     const newIsSetByMF = !isMyColumn;
 
-    // Optimistic Update
     setLocalAvailOverrides(prev => ({
        ...prev,
        [safeEventId]: {
@@ -216,6 +214,7 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
       isLocked: storeLineup?.isLocked,
       betreuerHelperIds: storeLineup?.betreuerHelperIds || [],
       fahrerHelperIds: storeLineup?.fahrerHelperIds || [],
+      departureTime: storeLineup?.departureTime,
       updatedAt: Date.now()
     };
     
@@ -238,6 +237,7 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
       isLocked: newState,
       betreuerHelperIds: storeLineup?.betreuerHelperIds || [],
       fahrerHelperIds: storeLineup?.fahrerHelperIds || [],
+      departureTime: storeLineup?.departureTime,
       updatedAt: Date.now()
     };
     await saveMatchLineup(newLineup);
@@ -269,7 +269,6 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
       if (!newIds.includes(targetHelperId)) newIds.push(targetHelperId);
     }
 
-    // Optimistic UI für Logistik
     setLocalLogisticsOverrides(prev => ({
       ...prev,
       [safeEventId]: {
@@ -288,9 +287,40 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
       isLocked: storeLineup?.isLocked,
       betreuerHelperIds: type === 'betreuerHelperIds' ? newIds : (storeLineup?.betreuerHelperIds || []),
       fahrerHelperIds: type === 'fahrerHelperIds' ? newIds : (storeLineup?.fahrerHelperIds || []),
+      departureTime: storeLineup?.departureTime,
       updatedAt: Date.now()
     };
     
+    await saveMatchLineup(newLineup);
+  };
+
+  // --- NEU: ABFAHRTSZEIT ENGINE ---
+  const handleDepartureTimeChange = async (rawEventId: string, newTime: string) => {
+    const safeEventId = sanitizeId(rawEventId);
+    const storeLineup = matchLineups.find(m => m.id === safeEventId);
+
+    setLocalLogisticsOverrides(prev => ({
+      ...prev,
+      [safeEventId]: {
+        ...(prev[safeEventId] || {}),
+        departureTime: newTime
+      }
+    }));
+
+    const newLineup: MatchLineup = {
+      id: safeEventId,
+      schemaVersion: '1.0',
+      teamId: team.id,
+      lineupHelperIds: storeLineup?.lineupHelperIds || team.defaultLineupHelperIds || [],
+      availabilities: storeLineup?.availabilities || {},
+      isSetByMF: storeLineup?.isSetByMF || {},
+      isLocked: storeLineup?.isLocked,
+      betreuerHelperIds: storeLineup?.betreuerHelperIds || [],
+      fahrerHelperIds: storeLineup?.fahrerHelperIds || [],
+      departureTime: newTime,
+      updatedAt: Date.now()
+    };
+
     await saveMatchLineup(newLineup);
   };
 
@@ -312,6 +342,10 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
       ? localLogisticsOverrides[safeEventId][type]! 
       : (storeLineup?.[type] || []);
 
+    const currentDepartureTime = localLogisticsOverrides[safeEventId]?.departureTime !== undefined
+      ? localLogisticsOverrides[safeEventId].departureTime!
+      : (storeLineup?.departureTime || '');
+
     return (
       <div className="flex flex-row items-center gap-2">
         <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider w-20 shrink-0">{label}</span>
@@ -328,12 +362,10 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                   e.stopPropagation();
                   if (isPast) return;
                   if (!isReadOnly) {
-                    // Admin: Löschen
                     if (window.confirm(`Möchtest du ${h.name} als ${label.split(' ')[1]} entfernen?`)) {
                        handleLogisticsAction(event.uid, type, 'remove', id);
                     }
                   } else if (!isMe) {
-                    // Helfer: Tauschbörse
                     if (window.confirm(`Möchtest du den Dienst von ${h.name} wirklich übernehmen?`)) {
                        if (myHelperId) handleLogisticsAction(event.uid, type, 'takeover', myHelperId, id);
                     }
@@ -348,10 +380,8 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
             );
           })}
           
-          {/* Action-Button: Hinzufügen / Ich */}
           {!isPast && (
             !isReadOnly ? (
-              // Admin Picker (Smarter Popover statt Dropdown)
               <div className="relative">
                 <button
                   onClick={(e) => {
@@ -410,7 +440,6 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                 )}
               </div>
             ) : (
-              // Self-Service Button (Opt-In)
               myHelperId && !ids.includes(myHelperId) && (
                 <button
                   onClick={(e) => {
@@ -430,6 +459,22 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
           
           {ids.length === 0 && isReadOnly && (!myHelperId || ids.includes(myHelperId)) && (
              <span className="text-[10px] text-gray-400 italic py-0.5">Noch offen</span>
+          )}
+
+          {/* CHIRURGISCHER EINGRIFF: Abfahrtszeit Input mit lang="de-DE" für 24h Anzeige */}
+          {type === 'fahrerHelperIds' && (ids.length > 0 || !isReadOnly) && (
+            <div className="flex items-center ml-2 border-l border-gray-200/60 pl-2 shrink-0">
+               <Clock className="w-3 h-3 text-gray-400 mr-1" />
+               <input
+                 type="time"
+                 lang="de-DE"
+                 value={currentDepartureTime}
+                 onChange={(e) => handleDepartureTimeChange(event.uid, e.target.value)}
+                 disabled={isReadOnly || isPast}
+                 className={`text-[11px] font-bold p-0.5 rounded border shadow-sm outline-none transition-colors ${isReadOnly || isPast ? 'bg-transparent border-transparent text-gray-600' : 'bg-white border-gray-300 text-gray-900 hover:border-gray-400 focus:border-blue-500 cursor-pointer'}`}
+                 title="Abfahrtszeit"
+               />
+            </div>
           )}
         </div>
       </div>
@@ -568,11 +613,9 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                     activePlayers = team.defaultLineupHelperIds || [];
                   }
 
-                  // AUTO-FREEZE BERECHNUNG
                   const leadDays = team.lineupFreezeLeadDays !== undefined ? team.lineupFreezeLeadDays : 7;
                   const msPerDay = 1000 * 60 * 60 * 24;
                   const daysUntil = (event.startTime - Date.now()) / msPerDay;
-                  // Gefroren, wenn in der Frist, aber nur bis 1 Tag nach dem Spiel (danach wieder irrelevant)
                   const isAutoFrozen = leadDays > 0 && daysUntil <= leadDays && daysUntil >= -1;
                   
                   const isManuallyLocked = localLockOverrides[safeEventId] !== undefined ? localLockOverrides[safeEventId] : (storeLineup?.isLocked === true);
@@ -582,12 +625,11 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                   const borderClasses = isFocusedRow ? 'border-b-4 border-t-4 border-blue-500 z-10 relative' : 'border-b border-gray-200';
                   
                   const shortDate = eventDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
-                  const shortTime = eventDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+                  const shortTime = eventDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', hour12: false });
 
                   return (
                     <tr key={event.uid} className={`group ${isFocusedRow ? 'bg-blue-50' : (isPast ? 'hover:bg-gray-200' : 'hover:bg-blue-50/40')} transition-colors`}>
                       
-                      {/* BBUGFIX: Z-Index dynamisch auf z-50 erhöhen, falls der Picker in dieser Zeile offen ist */}
                       <td className={`sticky left-0 ${isPickerOpenInThisRow ? 'z-50' : 'z-10'} ${rowBg} group-hover:bg-inherit ${borderClasses} border-r-2 px-4 py-3 w-[240px] sm:w-[280px] align-middle shadow-[1px_0px_0px_0px_#e5e7eb]`}>
                         <div className="flex flex-col whitespace-normal h-full">
                           {isFocusedRow && (
@@ -607,7 +649,6 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                               <Users className="w-3 h-3" /> {activePlayers.length}
                             </span>
                             
-                            {/* SIEGEL (Lock) ANZEIGE / BUTTON */}
                             {!isReadOnly && (!isPast || isFocusedRow) ? (
                               <button 
                                 onClick={(e) => { e.stopPropagation(); handleToggleLock(event.uid, !isManuallyLocked); }}
@@ -649,7 +690,6 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                         if (isOverride) checkColor = 'text-orange-500';
                         else if (category === 'STAMM') checkColor = 'text-green-600';
 
-                        // Spieler-Verfügbarkeit & MF-Stempel abrufen
                         const avail = localAvailOverrides[safeEventId]?.[m.id] || storeLineup?.availabilities?.[m.id] || 'UNKNOWN';
                         const isSetByMF = localSetByMFOverrides[safeEventId]?.[m.id] !== undefined 
                             ? localSetByMFOverrides[safeEventId]?.[m.id] 
@@ -659,7 +699,6 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                         if (avail === 'AVAILABLE') availBgClass = 'bg-green-100/60';
                         if (avail === 'UNAVAILABLE') availBgClass = 'bg-red-100/60';
 
-                        // Schraffiertes Design, falls MF überschrieben hat
                         const stripedStyle = (isSetByMF && avail !== 'UNKNOWN') ? {
                             backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.6), rgba(255,255,255,0.6) 6px, transparent 6px, transparent 12px)'
                         } : undefined;
@@ -685,12 +724,11 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                             title={tooltipText}
                           >
                             <div className="w-full h-full min-h-[60px] flex flex-col items-center justify-center relative pt-2 pb-4">
-                              {/* Die Checkbox (Lineup-Nominierung durch Captain) */}
                               <button
                                 type="button"
                                 disabled={isReadOnly || (isPast && !isFocusedRow)}
                                 onClick={(e) => {
-                                  e.stopPropagation(); // Verhindert, dass der Klick auf die Checkbox auch den Hintergrund (Verfügbarkeit) triggert
+                                  e.stopPropagation(); 
                                   if (!isReadOnly && (!isPast || isFocusedRow)) {
                                     handleTogglePlayer(event.uid, m.id, activePlayers);
                                   }
@@ -705,7 +743,6 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                                 )}
                               </button>
 
-                              {/* Der Status-Indikator (Verfügbarkeit) */}
                               <div className="absolute bottom-1 w-full text-center pointer-events-none">
                                 {avail === 'AVAILABLE' && <span className="text-[9px] font-extrabold text-green-800">DA</span>}
                                 {avail === 'UNAVAILABLE' && <span className="text-[9px] font-extrabold text-red-800">WEG</span>}

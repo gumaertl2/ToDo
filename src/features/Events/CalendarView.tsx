@@ -1,8 +1,8 @@
+// [2026-10-11] - BUGFIX: Deep-Link Logik (openEventSubId, openEventUid) repariert und Race Condition (setTimeout) beim Modal-Öffnen entfernt.
 // [2026-10-09] - BUGFIX: TypeScript TS2339 / TS18049 in getCategory behoben (e.title sicher als String gecastet).
 // [2026-10-09] - UX-FIX: Namen der eingeteilten Fahrer/Betreuer direkt in den Titel der Logistik-Termine in der "Dienste"-Ansicht aufgenommen (inkl. "Offen" Status).
 // [2026-10-09] - FEATURE: Logistik-Dienste (Fahrer/Betreuer) in die "Dienste"-Ansicht des Kalenders integriert.
 // [2026-10-09] - UX-FEATURE: Dynamischer Dropdown-Filter in der Tabellen-Kopfzeile der Dienste-Ansicht hinzugefügt (Gruppierung nach Kategorien / Teams).
-// [2026-10-09] - BUGFIX: Deep-Link Logik (location.state.openEventId) erweitert, um virtuelle ICS- und Logistik-Termine anhand ihrer UID aufzulösen.
 // [2026-07-26] - BUGFIX: Dienstübernahme (Takeover) macht nun einen harten Schnitt und leert alle Platzhalter-Arrays (Admin), um Geister-Teilnehmer zu entfernen.
 // [2026-07-26] - BUGFIX: Domain-Language Fallback ('Gast' -> 'Mitglied') korrigiert, um Profil-Berechtigungen im Kalender wiederherzustellen.
 // [2026-07-24] - UX-FEATURE: Persistente Speicherung der Kalender-Filter (Abos, leere Tage, Historie) im localStorage eingebaut.
@@ -357,30 +357,27 @@ export const CalendarView: React.FC = () => {
       setCurrentDate(new Date(location.state.targetDate));
     }
 
-    if (location.state?.openEventId && rbcEvents.length > 0) {
-      const targetId = location.state.openEventId;
-      const target = rbcEvents.find(e => {
-        if (e.id === targetId) return true;
-        if (e.sourceEvent && e.sourceEvent.id === targetId) return true;
-        if (e.rawSitzung && e.rawSitzung.id === targetId) return true;
-        
-        // Deep-Link Resolver für virtuelle ICS-Events aus dem Dashboard (z.B. sub-AboID-UID)
-        if (targetId.startsWith('sub-')) {
-           const parts = targetId.split('-');
-           const subId = parts[1];
-           const evUid = parts.slice(2).join('-'); 
-           if (e.sourceId === subId && e.sourceEvent?.uid === evUid) {
-               return true;
-           }
-        }
-        return false;
-      });
+    if (location.state && rbcEvents.length > 0) {
+      const { openEventId, openEventSubId, openEventUid } = location.state;
+      
+      if (openEventId || (openEventSubId && openEventUid)) {
+        const target = rbcEvents.find(e => {
+          if (openEventSubId && openEventUid) {
+             return e.sourceId === openEventSubId && e.sourceEvent?.uid === openEventUid;
+          }
+          if (openEventId) {
+             if (e.id === openEventId) return true;
+             if (e.sourceEvent && e.sourceEvent.id === openEventId) return true;
+             if (e.rawSitzung && e.rawSitzung.id === openEventId) return true;
+          }
+          return false;
+        });
 
-      if (target) {
-        navigate(location.pathname, { replace: true, state: {} });
-        setTimeout(() => {
-           handleSelectEvent(target);
-        }, 100);
+        if (target) {
+          // Direkt synchron aufrufen – ohne setTimeout, um Race Conditions zu vermeiden
+          handleSelectEvent(target);
+          navigate(location.pathname, { replace: true, state: {} });
+        }
       }
     }
   }, [location.state, rbcEvents, location.pathname, navigate]);

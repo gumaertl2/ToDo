@@ -1,3 +1,5 @@
+// [2026-10-11] - UX-FEATURE: Fahrer und Abfahrtszeit (departureTime) direkt in den Termin-Karten des Dashboards integriert. Bei fehlender Zeit wird bewusst keine Platzhalterzeit angezeigt.
+// [2026-10-09] - BUGFIX: Deep-Link Architektur repariert. Dashboard sendet nun saubere Datenpakete (openEventSubId, openEventUid) für Abos und Logistik an den Kalender, um Race Conditions beim String-Parsing zu vermeiden.
 // [2026-10-09] - UX-FIX: "Alle zeigen" Button bei Diensten als intelligenter Toggle (merkt sich den vorherigen Zeitraum und springt über "Standardansicht" wieder dorthin zurück).
 // [2026-10-09] - UX-FIX: "Alle zeigen" Button für Dienste ergänzt (setzt Lookahead auf 365 Tage). Deep-Link ID für Logistik-Dienste repariert, damit sich das Kalender-Modal öffnet.
 // [2026-10-09] - FEATURE: Logistik-Engine im Dashboard ergänzt. Das Dashboard scannt nun alle MatchLineup-Schattenakten und blendet zugewiesene Fahrer/Betreuer-Dienste vollautomatisch unter "Meine Dienste" als Action-Card ein.
@@ -69,7 +71,6 @@ export const WelcomeDashboard: React.FC = () => {
     return saved !== null ? parseInt(saved, 10) : 14;
   });
   
-  // NEU: Merkt sich den letzten eingestellten Dienst-Wert vor dem Klick auf "Alle zeigen"
   const [previousServicesLookahead, setPreviousServicesLookahead] = useState<number>(14);
 
   const [tasksLookahead, setTasksLookahead] = useState<number>(() => {
@@ -77,18 +78,15 @@ export const WelcomeDashboard: React.FC = () => {
     return saved !== null ? parseInt(saved, 10) : 14;
   });
 
-  // LocalStorage aktualisieren, wenn sich die Werte ändern
   useEffect(() => { localStorage.setItem('dashboard_events_lookahead', eventsLookahead.toString()); }, [eventsLookahead]);
   useEffect(() => { localStorage.setItem('dashboard_services_lookahead', servicesLookahead.toString()); }, [servicesLookahead]);
   useEffect(() => { localStorage.setItem('dashboard_tasks_lookahead', tasksLookahead.toString()); }, [tasksLookahead]);
 
-  // Input Handler, um leere Felder oder NaN abzufangen
   const handleLookaheadChange = (setter: React.Dispatch<React.SetStateAction<number>>) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseInt(e.target.value, 10);
     setter(isNaN(val) ? 0 : val);
   };
   
-  // NEU: Toggle-Funktion für Dienste Lookahead
   const handleToggleServicesLookahead = () => {
     if (servicesLookahead === 365) {
       setServicesLookahead(previousServicesLookahead);
@@ -121,7 +119,6 @@ export const WelcomeDashboard: React.FC = () => {
     };
   }, [user, helpers, eventsLookahead, servicesLookahead, tasksLookahead]);
 
-  // ZENTRALE RELEVANZ-PRÜFUNG FÜR TERMINE (Inkl. Helfer & Teams)
   const checkEventRelevance = (item: any) => {
     if (!user) return false;
     
@@ -159,14 +156,12 @@ export const WelcomeDashboard: React.FC = () => {
     return false;
   };
 
-  // --- ToDo Engine (Deaktiviert für reine Helfer) ---
   const allMyOpenTasks = useMemo(() => {
     if (!isAppUser || !user || !tasks) return [];
     
     return tasks.filter(t => {
       if (t.isTemplate) return false;
       if (t.progress === 100 || t.status === 'ERLEDIGT' || t.status === 'TRASH') return false;
-      
       if (t.isHistorical === true) return false;
 
       if (t.eventId && events) {
@@ -197,7 +192,6 @@ export const WelcomeDashboard: React.FC = () => {
     return allMyOpenTasks.filter(t => !t.dueDate || t.dueDate <= tasksLookaheadDate);
   }, [allMyOpenTasks, tasksLookaheadDate]);
 
-  // --- Nächste Sitzungen (Deaktiviert für reine Helfer) ---
   const upcomingSessions = useMemo(() => {
     if (!isAppUser) return [];
 
@@ -217,7 +211,6 @@ export const WelcomeDashboard: React.FC = () => {
       .slice(0, 3);
   }, [events, user, canManageEvents, todayStart, isAppUser, userGroupIds]);
 
-  // --- Termine filtern ---
   const upcomingEvents = useMemo(() => {
     const combinedEvents: any[] = [];
     const processedEventKeys = new Set<string>();
@@ -279,12 +272,10 @@ export const WelcomeDashboard: React.FC = () => {
       });
     }
 
-    // Abonnierte Kalender (ICS) einlesen und auf Need-to-Know filtern
     if (calendarSubscriptions) {
       calendarSubscriptions.forEach(sub => {
         if (!sub.isActive || !sub.cachedEvents) return;
         
-        // Firewall: Ist der Nutzer Empfänger für Erinnerungen dieses Abos?
         if (checkEventRelevance(sub)) {
           sub.cachedEvents.forEach(cachedEv => {
             const evTime = new Date(cachedEv.startTime).getTime();
@@ -305,12 +296,28 @@ export const WelcomeDashboard: React.FC = () => {
 
               if (!isDuplicate) {
                 processedEventKeys.add(`${dateStr}|${normalizedTitle}`);
+                
+                // --- NEU: Logistik Info aus der Matrix laden ---
+                const safeEventId = cachedEv.uid.replace(/[\/\\.#$\[\]]/g, '_');
+                const lineup = matchLineups?.find(m => m.id === safeEventId);
+                let driverNames = '';
+                if (lineup?.fahrerHelperIds?.length && helpers) {
+                    driverNames = lineup.fahrerHelperIds.map(id => {
+                        const h = helpers.find(x => x.id === id);
+                        return h ? (h.alias || h.name.split(' ')[0]) : '';
+                    }).filter(Boolean).join(', ');
+                }
+
                 combinedEvents.push({
                   id: `sub-${sub.id}-${cachedEv.uid}`,
+                  subId: sub.id,
+                  uid: cachedEv.uid,
                   title: `${sub.name}: ${cachedEv.title}`,
                   time: evTime,
-                  type: 'EXTERN',
-                  source: 'Über externes Abo'
+                  type: 'ABO_CALENDAR',
+                  source: 'Über externes Abo',
+                  driverNames,
+                  departureTime: lineup?.departureTime || ''
                 });
               }
             }
@@ -320,9 +327,8 @@ export const WelcomeDashboard: React.FC = () => {
     }
 
     return combinedEvents.sort((a, b) => a.time - b.time);
-  }, [events, calendarEvents, calendarSubscriptions, todayStart, eventsLookaheadDate, checkEventRelevance]);
+  }, [events, calendarEvents, calendarSubscriptions, todayStart, eventsLookaheadDate, checkEventRelevance, matchLineups, helpers]);
 
-  // --- Klassische Vereins-Dienste filtern ---
   const upcomingServices = useMemo(() => {
     if (!calendarEvents) return [];
     
@@ -337,7 +343,6 @@ export const WelcomeDashboard: React.FC = () => {
     }).sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
   }, [calendarEvents, todayStart, servicesLookaheadDate, checkEventRelevance]);
 
-  // --- Logistik-Scanner (Matrix Schatten-Akten) ---
   const myLogisticsDuties = useMemo(() => {
     if (!myHelper || !calendarSubscriptions || !matchLineups) return [];
     const duties: any[] = [];
@@ -357,12 +362,24 @@ export const WelcomeDashboard: React.FC = () => {
               const isBetreuer = lineup.betreuerHelperIds?.includes(myHelper.id);
               
               if (isFahrer || isBetreuer) {
+                 // --- NEU: Alle Fahrer-Namen laden ---
+                 let driverNames = '';
+                 if (lineup.fahrerHelperIds?.length && helpers) {
+                     driverNames = lineup.fahrerHelperIds.map(id => {
+                         const h = helpers.find(x => x.id === id);
+                         return h ? (h.alias || h.name.split(' ')[0]) : '';
+                     }).filter(Boolean).join(', ');
+                 }
+
                  duties.push({
                    id: `logistics-${ce.uid}`,
-                   eventId: `sub-${sub.id}-${ce.uid}`, 
+                   subId: sub.id,
+                   uid: ce.uid,
                    title: `Saison-Dienst: ${ce.title}`,
                    role: isFahrer && isBetreuer ? 'Fahrer & Betreuer' : (isFahrer ? 'Fahrer' : 'Betreuer'),
-                   time: ceTime
+                   time: ceTime,
+                   driverNames,
+                   departureTime: lineup.departureTime || ''
                  });
               }
             }
@@ -370,11 +387,10 @@ export const WelcomeDashboard: React.FC = () => {
       });
     });
     return duties.sort((a, b) => a.time - b.time);
-  }, [myHelper, calendarSubscriptions, matchLineups, todayStart, servicesLookaheadDate]);
+  }, [myHelper, calendarSubscriptions, matchLineups, todayStart, servicesLookaheadDate, helpers]);
 
   const totalServicesCount = upcomingServices.length + myLogisticsDuties.length;
 
-  // --- WhatsApp Erinnerungen filtern (Deaktiviert für reine Helfer) ---
   const pendingWhatsAppReminders = useMemo(() => {
     if (!isAppUser || !user) return 0;
     
@@ -449,7 +465,6 @@ export const WelcomeDashboard: React.FC = () => {
     return count;
   }, [user, calendarEvents, tasks, events, calendarSubscriptions, todayStart, isAppUser]);
 
-  // --- HILFSFUNKTIONEN ---
   const formatDate = (ms: number) => {
     const d = new Date(ms);
     return d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -488,7 +503,6 @@ export const WelcomeDashboard: React.FC = () => {
           </p>
         </div>
 
-        {/* Kachel für WhatsApp Erinnerungen */}
         {isAppUser && pendingWhatsAppReminders > 0 && (
           <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl shadow-md p-4 sm:p-5 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8 animate-in fade-in slide-in-from-bottom-4">
             <div className="flex items-center">
@@ -536,13 +550,37 @@ export const WelcomeDashboard: React.FC = () => {
                   <div className="bg-white border border-gray-200 p-6 rounded-xl text-center text-gray-500">Keine relevanten Termine im gewählten Zeitraum.</div>
                 ) : (
                   upcomingEvents.map(ev => (
-                    <button key={ev.id} onClick={() => ev.type === 'INTERN' ? navigate(`/events/${ev.id}`) : navigate('/calendar', { state: { openEventId: ev.id, targetDate: ev.time } })} className="w-full text-left bg-white border border-gray-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-blue-300 transition-all group">
+                    <button 
+                      key={ev.id} 
+                      onClick={() => {
+                        if (ev.type === 'INTERN') {
+                          navigate(`/events/${ev.id}`);
+                        } else if (ev.type === 'ABO_CALENDAR') {
+                          navigate('/calendar', { state: { openEventSubId: ev.subId, openEventUid: ev.uid, targetDate: ev.time } });
+                        } else {
+                          navigate('/calendar', { state: { openEventId: ev.id, targetDate: ev.time } });
+                        }
+                      }} 
+                      className="w-full text-left bg-white border border-gray-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-blue-300 transition-all group"
+                    >
                       <div className="flex justify-between items-start">
                         <div>
                           <span className={`inline-block px-2 py-1 text-xs font-bold rounded mb-2 ${ev.type === 'INTERN' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>{formatDate(ev.time)} Uhr</span>
-                          <h3 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{ev.title}</h3>
+                          <h3 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors leading-snug">{ev.title}</h3>
+                          
+                          {/* FAHRER-INFO (Vereinstermine) */}
+                          {(ev as any).driverNames && (
+                            <div className="mt-2 text-xs text-gray-600 flex items-center bg-gray-50 border border-gray-200 px-2 py-1 rounded-md w-max shadow-sm">
+                              <span className="mr-1.5">🚗</span>
+                              {(ev as any).departureTime ? (
+                                <span>Abfahrt: <strong className="text-gray-900">{(ev as any).departureTime} Uhr</strong> ({(ev as any).driverNames})</span>
+                              ) : (
+                                <span>Fahrer: <strong className="text-gray-900">{(ev as any).driverNames}</strong></span>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-blue-500 mt-2" />
+                        <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-blue-500 mt-2 shrink-0" />
                       </div>
                     </button>
                   ))
@@ -566,7 +604,6 @@ export const WelcomeDashboard: React.FC = () => {
                      <span className="text-[10px] uppercase font-bold text-purple-400 ml-1">Tage</span>
                   </div>
                 </div>
-                {/* INTELLIGENTER TOGGLE BUTTON */}
                 <button 
                   onClick={handleToggleServicesLookahead} 
                   className="text-sm font-medium text-purple-600 hover:text-purple-800 transition-colors flex items-center"
@@ -588,20 +625,36 @@ export const WelcomeDashboard: React.FC = () => {
                         <div className="flex justify-between items-start">
                           <div>
                             <span className="inline-block px-2 py-1 bg-purple-200 text-purple-900 text-xs font-bold rounded mb-2">{formatDate(new Date(srv.startTime).getTime())}</span>
-                            <h3 className="font-bold text-purple-900">{srv.title}</h3>
+                            <h3 className="font-bold text-purple-900 leading-snug">{srv.title}</h3>
                           </div>
-                          <ChevronRight className="w-5 h-5 text-purple-400 group-hover:text-purple-600 mt-2" />
+                          <ChevronRight className="w-5 h-5 text-purple-400 group-hover:text-purple-600 mt-2 shrink-0" />
                         </div>
                       </button>
                     ))}
                     {myLogisticsDuties.map(duty => (
-                      <button key={duty.id} onClick={() => navigate('/calendar', { state: { openEventId: duty.eventId, targetDate: duty.time } })} className="w-full text-left bg-purple-50 border border-purple-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-purple-400 transition-all group">
+                      <button 
+                        key={duty.id} 
+                        onClick={() => navigate('/calendar', { state: { openEventSubId: duty.subId, openEventUid: duty.uid, targetDate: duty.time } })} 
+                        className="w-full text-left bg-purple-50 border border-purple-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-purple-400 transition-all group"
+                      >
                         <div className="flex justify-between items-start">
                           <div>
                             <span className="inline-block px-2 py-1 bg-purple-200 text-purple-900 text-xs font-bold rounded mb-2">{formatDate(duty.time)} • {duty.role}</span>
-                            <h3 className="font-bold text-purple-900">{duty.title}</h3>
+                            <h3 className="font-bold text-purple-900 leading-snug">{duty.title}</h3>
+                            
+                            {/* FAHRER-INFO (Logistik-Dienste) */}
+                            {duty.driverNames && (
+                              <div className="mt-2 text-xs text-purple-700 flex items-center bg-purple-100/50 border border-purple-200 px-2 py-1 rounded-md w-max shadow-sm">
+                                <span className="mr-1.5">🚗</span>
+                                {duty.departureTime ? (
+                                  <span>Abfahrt: <strong className="text-purple-900">{duty.departureTime} Uhr</strong> ({duty.driverNames})</span>
+                                ) : (
+                                  <span>Fahrer: <strong className="text-purple-900">{duty.driverNames}</strong></span>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          <ChevronRight className="w-5 h-5 text-purple-400 group-hover:text-purple-600 mt-2" />
+                          <ChevronRight className="w-5 h-5 text-purple-400 group-hover:text-purple-600 mt-2 shrink-0" />
                         </div>
                       </button>
                     ))}
@@ -610,7 +663,6 @@ export const WelcomeDashboard: React.FC = () => {
               </div>
             </section>
             
-            {/* Nächste Sitzungen Block (NUR für AppUser) */}
             {isAppUser && (
               <section className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col relative z-20">
                 <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between rounded-t-xl">
@@ -708,7 +760,6 @@ export const WelcomeDashboard: React.FC = () => {
             <div className="lg:col-span-5">
               <section className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col h-full sticky top-4">
                 
-                {/* Die Buttons sind jetzt prominent und griffsicher im Header */}
                 <div className="p-4 border-b border-gray-100 bg-gray-50 flex flex-col gap-4">
                   <div className="flex items-center flex-wrap gap-2 justify-between">
                     <div className="flex items-center">

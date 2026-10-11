@@ -1,3 +1,6 @@
+// [2026-10-11] - UX-FIX: Abfahrtszeit im Detail-Modal für normale Nutzer als reinen Text gerendert. Verhindert iOS-Ghost-Zeiten (12:30 PM) bei deaktivierten Zeitfeldern.
+// [2026-10-11] - BUGFIX: 24h-Format (hour12: false und lang="de-DE") für Zeitangaben und Input-Felder erzwungen, um AM/PM-Anzeigen bei abweichenden OS-Locales zu verhindern.
+// [2026-10-11] - FEATURE: Abfahrtszeit (departureTime) in Logistik-Block integriert (Anzeige und direkte Bearbeitung für Admins/Captains).
 // [2026-10-09] - UX-FEATURE: Interaktive Logistik (Self-Service) auch direkt im Kalender-Detail-Modal verfügbar gemacht (+ Ich und Tausch-Logik).
 // [2026-10-09] - FEATURE: Logistik-Integration (Fahrer/Betreuer). Helfer sehen eingeteilte Logistik direkt in den Termindetails und können über den neuen Button in den Matrix-Self-Service (Tauschbörse) abspringen.
 // [2026-10-08] - FEATURE: EventPollWidget (WhatsApp-Style RSVP/Umfrage) im Termin-Detail eingebunden.
@@ -58,10 +61,10 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
 
   const cachedEvent = sub?.cachedEvents?.find(ce => 
     ce.startTime === event.start.getTime() && 
-    event.title.includes(ce.title)
+    event.title.includes(ce.title.replace(/[\u{1F300}-\u{1F9FF}]/gu, '').trim()) // Fallback-Sicherheit für Emojis
   );
   
-  const safeEventId = cachedEvent ? sanitizeId(cachedEvent.uid) : null;
+  const safeEventId = cachedEvent ? sanitizeId(cachedEvent.uid) : (event.sourceEvent ? sanitizeId(event.sourceEvent.uid) : null);
 
   const storeLineup = matchLineups.find(m => m.id === safeEventId);
   const activePlayerIds = storeLineup ? storeLineup.lineupHelperIds : (teamContext?.defaultLineupHelperIds || []);
@@ -98,6 +101,29 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
       isLocked: currentLineup?.isLocked,
       betreuerHelperIds: type === 'betreuerHelperIds' ? newIds : (currentLineup?.betreuerHelperIds || []),
       fahrerHelperIds: type === 'fahrerHelperIds' ? newIds : (currentLineup?.fahrerHelperIds || []),
+      departureTime: currentLineup?.departureTime,
+      updatedAt: Date.now()
+    };
+
+    await saveMatchLineup(newLineup);
+  };
+
+  const handleDepartureTimeChange = async (newTime: string) => {
+    if (!safeEventId || !teamContext) return;
+    
+    const currentLineup = matchLineups.find(m => m.id === safeEventId);
+    
+    const newLineup: MatchLineup = {
+      id: safeEventId,
+      schemaVersion: '1.0',
+      teamId: teamContext.id,
+      lineupHelperIds: currentLineup?.lineupHelperIds || teamContext.defaultLineupHelperIds || [],
+      availabilities: currentLineup?.availabilities || {},
+      isSetByMF: currentLineup?.isSetByMF || {},
+      isLocked: currentLineup?.isLocked,
+      betreuerHelperIds: currentLineup?.betreuerHelperIds || [],
+      fahrerHelperIds: currentLineup?.fahrerHelperIds || [],
+      departureTime: newTime,
       updatedAt: Date.now()
     };
 
@@ -110,7 +136,33 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
 
     return (
       <div>
-        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">{label}</span>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{label}</span>
+          
+          {/* ABFAHRTSZEIT (Nur bei Fahrern) */}
+          {type === 'fahrerHelperIds' && (
+            (canManageLineup && !isPast) ? (
+              <div className="flex items-center gap-1.5" title="Abfahrtszeit bearbeiten">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Abfahrt:</span>
+                <input
+                  type="time"
+                  lang="de-DE"
+                  value={storeLineup?.departureTime || ''}
+                  onChange={(e) => handleDepartureTimeChange(e.target.value)}
+                  className="text-xs font-bold px-1 py-0.5 rounded border bg-white border-gray-300 text-gray-900 shadow-sm hover:border-gray-400 focus:border-blue-500 cursor-pointer outline-none transition-colors"
+                />
+              </div>
+            ) : (
+              storeLineup?.departureTime && (
+                <div className="flex items-center gap-1.5" title="Abfahrtszeit">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Abfahrt:</span>
+                  <span className="text-xs font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">{storeLineup.departureTime} Uhr</span>
+                </div>
+              )
+            )
+          )}
+        </div>
+        
         <div className="flex flex-wrap items-center gap-1.5">
           {ids.map(id => {
             const h = helpers.find(x => x.id === id);
@@ -200,7 +252,7 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
   const formatDateTime = (date: Date, allDay: boolean) => {
     const dateStr = date.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     if (allDay) return dateStr;
-    const timeStr = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    const timeStr = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', hour12: false });
     return `${dateStr}, ${timeStr} Uhr`;
   };
 
@@ -226,7 +278,7 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
       } else if (!event.allDay) {
         return (
           <p className="text-sm mt-0.5">
-            {startStr.split(',')[0]}, {event.start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} - {event.end.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr
+            {startStr.split(',')[0]}, {event.start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', hour12: false })} - {event.end.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', hour12: false })} Uhr
           </p>
         );
       }
@@ -237,10 +289,16 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
   const handleWhatsAppShare = () => {
     let timeStr = formatDateTime(event.start, event.allDay);
     if (!event.allDay && event.end && event.end.getTime() > event.start.getTime()) {
-       timeStr += ` - ${event.end.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`;
+       timeStr += ` - ${event.end.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', hour12: false })} Uhr`;
     }
 
-    const text = `📅 *${event.title.replace(/\s\([^)]+\)$/, '')}*\n⏰ ${timeStr}\n📍 ${event.location || 'Kein Ort angegeben'}\n\n👟 *Kader (${activePlayers.length}):*\n${activePlayers.map(p => p.alias || p.name.split(' ')[0]).join(', ')}\n\n(Bitte sagt rechtzeitig ab, falls sich etwas ändert!)`;
+    // Departure time for WhatsApp if available
+    let departureInfo = '';
+    if (teamContext?.requiresFahrer && storeLineup?.departureTime) {
+      departureInfo = `\n🚗 Abfahrt: ${storeLineup.departureTime} Uhr`;
+    }
+
+    const text = `📅 *${event.title.replace(/\s\([^)]+\)$/, '')}*\n⏰ ${timeStr}${departureInfo}\n📍 ${event.location || 'Kein Ort angegeben'}\n\n👟 *Kader (${activePlayers.length}):*\n${activePlayers.map(p => p.alias || p.name.split(' ')[0]).join(', ')}\n\n(Bitte sagt rechtzeitig ab, falls sich etwas ändert!)`;
     
     window.open(`whatsapp://send?text=${encodeURIComponent(text)}`, '_blank');
   };
@@ -384,7 +442,7 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {/* NEU: LOGISTIK & BETREUUNG (INTERAKTIV) */}
+                {/* LOGISTIK & BETREUUNG (INTERAKTIV) */}
                 {hasLogistics && (
                   <div className="flex items-start text-gray-700 pt-6 border-t border-gray-200">
                     <Truck className="w-5 h-5 mr-3 mt-0.5 text-gray-400 shrink-0" />
@@ -422,7 +480,6 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
               </div>
             )}
             
-            {/* --- NEU: RSVP / UMFRAGE WIDGET --- */}
             {event.sourceEvent?.pollConfig?.isActive && (
               <EventPollWidget 
                 eventId={event.sourceEvent.id} 
