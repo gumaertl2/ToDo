@@ -1,3 +1,4 @@
+// [2026-10-12] - BUGFIX: URL-based Deep-Linking (?matrix=teamId) hinzugefügt, um Safari-Reloads (z.B. beim Zurückkehren von Google Maps) sicher zu überleben.
 // [2026-10-09] - UX-FIX: Button-Text in der Team-Kachel von "Umbenennen" in "Einstellungen" geändert.
 // [2026-09-28] - UX-FEATURE: Read-Only Modus für die Saison-Planung. Einfache Team-Mitglieder können die Matrix nun einsehen, aber nicht bearbeiten.
 // [2026-09-28] - BUGFIX: TypeScript Build-Fehler behoben (ungültige 'title'-Attribute an Lucide-Icons entfernt).
@@ -8,7 +9,8 @@
 // [2026-05-15] - FEATURE: Deep-Link Support (Kader-Namen sind klickbar und setzen focusedHelperId)
 // [2026-05-15] - FEATURE: TeamsTab - Kader-Anzeige für alle Nutzer (Namen-Liste in den Kacheln)
 // src/features/Users/tabs/TeamsTab.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useClubStore } from '../../../store/useClubStore';
 import { Edit2, Trash2, Users, User, Star, Shield, Calendar } from 'lucide-react';
 import type { Team } from '../../../core/types/models';
@@ -21,7 +23,38 @@ interface TeamsTabProps {
 
 export const TeamsTab: React.FC<TeamsTabProps> = ({ openTeamEditor, canManageMitglieder }) => {
   const { teams, helpers, deleteTeam, updateTeam, setFocusedHelperId, user } = useClubStore();
+  
+  // --- DEEP LINKING STATE ---
+  const [searchParams, setSearchParams] = useSearchParams();
   const [planningTeam, setPlanningTeam] = useState<Team | null>(null);
+
+  // Synchronisiert die URL mit dem Modal-State
+  useEffect(() => {
+    const matrixTeamId = searchParams.get('matrix');
+    if (matrixTeamId) {
+      const team = teams.find(t => t.id === matrixTeamId);
+      if (team) setPlanningTeam(team);
+    } else {
+      setPlanningTeam(null);
+    }
+  }, [searchParams, teams]);
+
+  const handleOpenMatrix = (team: Team) => {
+    if (team.id) {
+      setSearchParams(prev => {
+        prev.set('matrix', team.id as string);
+        return prev;
+      }, { replace: true });
+    }
+  };
+
+  const handleCloseMatrix = () => {
+    setSearchParams(prev => {
+      prev.delete('matrix');
+      return prev;
+    }, { replace: true });
+    setPlanningTeam(null);
+  };
 
   const currentUserHelperId = useMemo(() => {
     if (!user || !user.email) return null;
@@ -162,7 +195,7 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ openTeamEditor, canManageMit
                 <div className="p-3 border-t border-gray-100 flex flex-col gap-2 bg-gray-50 rounded-b-xl">
                   {/* Primärer Button für Captains, Admins & Team-Mitglieder - Volle Breite */}
                   <button 
-                    onClick={() => setPlanningTeam(team)}
+                    onClick={() => handleOpenMatrix(team)}
                     className={`flex items-center justify-center w-full gap-1.5 px-3 py-2 text-sm font-bold text-white rounded-lg transition shadow-sm ${hasFooterAccess ? 'bg-blue-600 hover:bg-blue-700' : 'bg-indigo-500 hover:bg-indigo-600'}`}
                     title={hasFooterAccess ? "Saison-Planung (Aufstellung) öffnen" : "Saison-Übersicht ansehen"}
                   >
@@ -203,7 +236,7 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ openTeamEditor, canManageMit
         <MatchLineupMatrixModal 
           team={planningTeam} 
           isReadOnly={!(canManageMitglieder || (currentUserHelperId && planningTeam.captainHelperIds?.includes(currentUserHelperId)))}
-          onClose={() => setPlanningTeam(null)} 
+          onClose={handleCloseMatrix} 
         />
       )}
     </div>
