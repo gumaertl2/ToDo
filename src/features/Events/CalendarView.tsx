@@ -1,42 +1,38 @@
+// [2026-10-12] - REFACTOR: Hauptkomponente drastisch vereinfacht. Daten-Logik (useCalendarEvents) und komplexe Ansichten (CalendarListView, CalendarAgendaView) in eigene Dateien ausgelagert.
 // [2026-10-12] - BUGFIX: TS6133 'idx' is declared but its value is never read behoben.
 // [2026-10-12] - BUGFIX: Auto-Scroll in Listenansichten (Termine/Dienste) angepasst. Nutzt nun offsetTop - 45px anstelle von scrollIntoView, damit zukünftige Termine nicht unter dem Sticky-Header verschwinden.
 // [2026-10-12] - FEATURE: Auto-Scroll (Contextual Nav) in den Listenansichten (Termine/Dienste) integriert. Scrollt beim Laden automatisch zum ersten zukünftigen Event, sodass die Historie oben "aus dem Weg" ist.
 // [2026-10-12] - FEATURE: Heimspiel-Logik in "Dienste" implementiert. Blendet "🚗 Offen" bei Heimspielen aus.
 // [2026-10-12] - FEATURE: Abfahrtszeit (departureTime) aus dem MatchLineup direkt in die Dienste-Liste als Vorschau (Abfahrt: ...) integriert.
 // [2026-10-11] - BUGFIX: Deep-Link Logik (openEventSubId, openEventUid) repariert und Race Condition (setTimeout) beim Modal-Öffnen entfernt.
-// [2026-10-09] - BUGFIX: TypeScript TS2339 / TS18049 in getCategory behoben (e.title sicher als String gecastet).
-// [2026-10-09] - UX-FIX: Namen der eingeteilten Fahrer/Betreuer direkt in den Titel der Logistik-Termine in der "Dienste"-Ansicht aufgenommen (inkl. "Offen" Status).
 // [2026-10-09] - FEATURE: Logistik-Dienste (Fahrer/Betreuer) in die "Dienste"-Ansicht des Kalenders integriert.
-// [2026-10-09] - UX-FEATURE: Dynamischer Dropdown-Filter in der Tabellen-Kopfzeile der Dienste-Ansicht hinzugefügt (Gruppierung nach Kategorien / Teams).
 // [2026-07-26] - BUGFIX: Dienstübernahme (Takeover) macht nun einen harten Schnitt und leert alle Platzhalter-Arrays (Admin), um Geister-Teilnehmer zu entfernen.
-// [2026-07-26] - BUGFIX: Domain-Language Fallback ('Gast' -> 'Mitglied') korrigiert, um Profil-Berechtigungen im Kalender wiederherzustellen.
-// [2026-07-24] - UX-FEATURE: Persistente Speicherung der Kalender-Filter (Abos, leere Tage, Historie) im localStorage eingebaut.
-// [2026-05-30] - UX-FEATURE: Bestätigungsdialog (confirm) vor Dienst-Übernahme eingebaut. Liest den aktuellen Dienstleistenden aus dem Titel aus, um die Abfrage zu personalisieren.
-// [2026-05-30] - BUGFIX: Visuelles Feedback bei "Dienst übernehmen" hinzugefügt. Der Titel des Termins wird nun automatisch mit dem Alias des neuen Helfers aktualisiert.
 // [2026-05-30] - UX-OPTIMIERUNG: Einheitlicher Workflow für alle Nutzer. Jeder Klick auf einen Termin öffnet nun zuerst das detailreiche CalendarIcsDetailModal.
 // src/features/Events/CalendarView.tsx
-import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
-import type { Event as RBCEvent } from 'react-big-calendar';
 import { format } from 'date-fns/format';
 import { parse } from 'date-fns/parse';
 import { startOfWeek } from 'date-fns/startOfWeek';
 import { endOfWeek } from 'date-fns/endOfWeek';
 import { getDay } from 'date-fns/getDay';
-import { eachDayOfInterval } from 'date-fns/eachDayOfInterval';
-import { startOfDay } from 'date-fns/startOfDay';
-import { addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, addYears, subYears, getISOWeek } from 'date-fns';
+import { addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, addYears, subYears } from 'date-fns';
 import { de } from 'date-fns/locale/de';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { useClubStore } from '../../store/useClubStore';
-import { Plus, DownloadCloud, Globe, Settings, Edit3, Printer, ChevronLeft, ChevronRight, Home, List as ListIcon, CalendarDays, Filter, CalendarPlus, Copy, Check, X } from 'lucide-react';
+import { Plus, DownloadCloud, Globe, Settings, Edit3, Printer, ChevronLeft, ChevronRight, Home, List as ListIcon, Filter, CalendarPlus, Copy, Check, X } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import type { CalendarEvent, Event } from '../../core/types/models';
+
 import { CalendarEventFormModal } from './CalendarEventFormModal';
 import { CalendarSubscriptionModal } from './CalendarSubscriptionModal';
 import { CalendarIcsDetailModal } from './CalendarIcsDetailModal';
 import { CalendarBulkEventModal } from './CalendarBulkEventModal';
 import { CalendarExportModal } from './CalendarExportModal';
+
+import { useCalendarEvents } from './hooks/useCalendarEvents';
+import type { AdaptedEvent } from './hooks/useCalendarEvents';
+import { CalendarListView } from './components/CalendarListView';
+import { useCalendarAgendaView } from './components/CalendarAgendaView';
 
 const locales = { 'de': de };
 
@@ -62,22 +58,14 @@ const getContrastYIQ = (hexcolor?: string) => {
   return (yiq >= 128) ? '#1f2937' : 'white'; 
 };
 
-interface AdaptedEvent extends RBCEvent {
-  id: string; sourceId: string; sourceEvent?: CalendarEvent | any; rawSitzung?: Event; color?: string; description?: string; location?: string; seriesId?: string; showInMatchPlan?: boolean;
-  isLogisticsDuty?: boolean; teamName?: string;
-}
-
 export const CalendarView: React.FC = () => {
   const { 
-    user, roleProfiles, calendarEvents, calendarSubscriptions, 
-    fetchCalendarData, isCalendarLoading, events, fetchEvents,
-    helpers, updateCalendarEvent, teams, matchLineups
+    user, roleProfiles, calendarSubscriptions, 
+    fetchCalendarData, isCalendarLoading, fetchEvents,
+    helpers, updateCalendarEvent
   } = useClubStore();
   const navigate = useNavigate();
   const location = useLocation();
-
-  // Ref für den Auto-Scroll im Listen-Modus
-  const listContainerRef = useRef<HTMLDivElement>(null);
 
   const currentProfile = useMemo(() => {
     return roleProfiles.find(p => p.id === user?.roleProfileId) || 
@@ -95,16 +83,14 @@ export const CalendarView: React.FC = () => {
   const [tempTitle, setTempTitle] = useState('');
 
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
-  
   const [showEmptyDays, setShowEmptyDays] = useState(() => localStorage.getItem('papatodo_show_empty_days') === 'true');
   const [showPastEvents, setShowPastEvents] = useState(() => localStorage.getItem('papatodo_show_past_events') === 'true');
 
   const [currentView, setCurrentView] = useState<'month' | 'week' | 'day' | 'agenda' | 'termine' | 'dienste'>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [dienstFilter, setDienstFilter] = useState<string>('ALL');
   
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
-  const [selectedEventToEdit, setSelectedEventToEdit] = useState<CalendarEvent | undefined>(undefined);
+  const [selectedEventToEdit, setSelectedEventToEdit] = useState<any>(undefined);
   const [isSubModalOpen, setIsSubModalOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | undefined>(undefined);
@@ -114,7 +100,6 @@ export const CalendarView: React.FC = () => {
   const [touchStart, setTouchStart] = useState<number | null>(null);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-
   const [showAboModal, setShowAboModal] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
 
@@ -138,31 +123,56 @@ export const CalendarView: React.FC = () => {
     }
   }, [calendarSubscriptions]);
 
-  // --- AUTO-SCROLL LOGIK FÜR LISTENANSICHT (CHIRURGISCHER EINGRIFF: Sticky-Header fix) ---
-  useLayoutEffect(() => {
-    if (['termine', 'dienste'].includes(currentView) && listContainerRef.current) {
-      // Kurze Verzögerung, damit der DOM sicher fertig gezeichnet ist
-      const timeoutId = setTimeout(() => {
-        const wrapper = listContainerRef.current;
-        if (!wrapper) return;
-        
-        // Der eigentliche scrollbare Container ist das erste Kind mit overflow-y-auto
-        const scrollContainer = wrapper.querySelector('.overflow-y-auto') || wrapper;
-        
-        // Finde das erste Element, das als "Zukunft" markiert ist
-        const firstFutureEl = scrollContainer.querySelector('[data-is-future-row="true"]') as HTMLElement;
-        if (firstFutureEl) {
-          // Wir ziehen ~45px für den sticky Tabellenkopf ab, anstatt blind auf Element-Start zu scrollen
-          scrollContainer.scrollTo({
-             top: Math.max(0, firstFutureEl.offsetTop - 45),
-             behavior: 'smooth'
-          });
-        }
-      }, 100);
-      return () => clearTimeout(timeoutId);
+  // --- HOOKS FÜR LOGIK UND ANSICHTEN ---
+  const { rbcEvents, displayEvents } = useCalendarEvents({ currentView, activeFilters, showPastEvents });
+  
+  const handleSelectEvent = (event: AdaptedEvent) => {
+    if (event.id.startsWith('ics-') || event.id.startsWith('logistics-')) { 
+      setSelectedIcsEvent(event); 
+      setIsIcsDetailModalOpen(true); 
+      return; 
     }
-  }, [currentView, currentDate, showPastEvents, dienstFilter, activeFilters, isCalendarLoading]);
+    if (event.rawSitzung) { navigate(`/events/${event.rawSitzung.id}`); return; }
+    
+    if (event.sourceEvent) {
+      setSelectedIcsEvent(event);
+      setIsIcsDetailModalOpen(true);
+    }
+  };
 
+  const CustomAgendaView = useCalendarAgendaView(showEmptyDays, handleSelectEvent);
+
+  // --- DEEP LINKING ---
+  useEffect(() => {
+    if (location.state?.targetDate) {
+      setCurrentDate(new Date(location.state.targetDate));
+    }
+
+    if (location.state && rbcEvents.length > 0) {
+      const { openEventId, openEventSubId, openEventUid } = location.state;
+      
+      if (openEventId || (openEventSubId && openEventUid)) {
+        const target = rbcEvents.find(e => {
+          if (openEventSubId && openEventUid) {
+             return e.sourceId === openEventSubId && e.sourceEvent?.uid === openEventUid;
+          }
+          if (openEventId) {
+             if (e.id === openEventId) return true;
+             if (e.sourceEvent && e.sourceEvent.id === openEventId) return true;
+             if (e.rawSitzung && e.rawSitzung.id === openEventId) return true;
+          }
+          return false;
+        });
+
+        if (target) {
+          handleSelectEvent(target);
+          navigate(location.pathname, { replace: true, state: {} });
+        }
+      }
+    }
+  }, [location.state, rbcEvents, location.pathname, navigate]);
+
+  // --- NAVIGATION ---
   const handleCopyLink = () => {
     navigator.clipboard.writeText(`${window.location.origin}/api/calendar`);
     setIsCopied(true);
@@ -189,7 +199,6 @@ export const CalendarView: React.FC = () => {
 
   const handleViewChange = (v: any) => {
     setCurrentView(v);
-    setDienstFilter('ALL'); // Filter zurücksetzen bei Ansichtswechsel
     setActiveFilters(prev => {
       let next = [...prev];
       if (v === 'dienste' && !next.includes('dienste')) next.push('dienste');
@@ -228,205 +237,6 @@ export const CalendarView: React.FC = () => {
     setTouchStart(null);
   };
 
-  const rbcEvents: AdaptedEvent[] = useMemo(() => {
-    const internalEvents = calendarEvents.map(ev => {
-      const isHeim = ev.location?.toLowerCase().includes('maisach');
-      const isAuswaerts = ev.location && !isHeim;
-      const matchPrefix = ev.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
-      const baseTitle = `${matchPrefix}${ev.title}`;
-
-      return {
-        id: ev.id, sourceId: 'manual', seriesId: ev.seriesId, 
-        title: ev.isPublic ? baseTitle : `🔒 ${baseTitle}`,
-        description: ev.description || '', location: ev.location || '',
-        start: new Date(ev.startTime), end: ev.endTime ? new Date(ev.endTime) : new Date(ev.startTime + (1000 * 60 * 60)), 
-        allDay: ev.isAllDay, sourceEvent: ev, color: ev.color || '#3b82f6',
-        showInMatchPlan: ev.showInMatchPlan
-      };
-    });
-    
-    const internalSitzungen = events.filter(ev => ev.plannedStartTime && ev.status !== 'ABGESCHLOSSEN').map(ev => ({
-      id: ev.id, sourceId: 'manual', seriesId: undefined, 
-      title: ev.isPublic ? `Sitzung: ${ev.title}` : `🔒 Sitzung: ${ev.title}`,
-      description: ev.description || '', location: ev.location || '',
-      start: new Date(ev.plannedStartTime!), end: ev.plannedEndTime ? new Date(ev.plannedEndTime) : new Date(ev.plannedStartTime! + (1000 * 60 * 60 * 2)), 
-      allDay: false, rawSitzung: ev, color: '#8b5cf6',
-      showInMatchPlan: false
-    }));
-
-    const cachedExternalEvents = calendarSubscriptions.filter(sub => sub.isActive && sub.cachedEvents).flatMap(sub => 
-        sub.cachedEvents!.map((ev, index) => {
-          const isHeim = ev.location?.toLowerCase().includes('maisach');
-          const isAuswaerts = ev.location && !isHeim;
-          const matchPrefix = sub.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
-
-          return {
-            id: `ics-${sub.id}-${ev.uid}-${index}`, sourceId: sub.id, 
-            title: `${matchPrefix}${ev.title}`, description: ev.description || '', location: ev.location || '',
-            start: new Date(ev.startTime), end: new Date(ev.endTime), allDay: ev.isAllDay, color: sub.color,
-            showInMatchPlan: sub.showInMatchPlan,
-            sourceEvent: ev 
-          };
-        })
-      );
-      
-    // NEU: Logistik-Einträge als Dienste generieren (inklusive Helfer-Namen)
-    const logisticsEvents: AdaptedEvent[] = [];
-    calendarSubscriptions.forEach(sub => {
-        if (!sub.isActive || !sub.cachedEvents) return;
-        const teamId = sub.reminderRecipientTeamIds?.[0];
-        const team = teamId ? teams.find(t => t.id === teamId) : null;
-        if (!team || (!team.requiresBetreuer && !team.requiresFahrer)) return;
-
-        sub.cachedEvents.forEach((ev, index) => {
-            const isHeim = ev.location?.toLowerCase().includes('maisach');
-            const isAuswaerts = ev.location && !isHeim;
-            const matchPrefix = sub.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
-
-            const safeEventId = ev.uid.replace(/[\/\\.#$\[\]]/g, '_');
-            const lineup = matchLineups.find(m => m.id === safeEventId);
-
-            const badges: string[] = [];
-            
-            // Heimspiel-Logik für Fahrer
-            if (team.requiresFahrer) {
-                const fahrerIds = lineup?.fahrerHelperIds || [];
-                // Fahrer nur anzeigen, wenn es kein Heimspiel ist, ODER wenn bei einem Heimspiel explizit ein Fahrer eingetragen wurde.
-                if (!isHeim || fahrerIds.length > 0) {
-                    if (fahrerIds.length === 0) {
-                        badges.push('🚗 Offen');
-                    } else {
-                        const names = fahrerIds.map(id => {
-                            const h = helpers.find(x => x.id === id);
-                            return h ? (h.alias || h.name.split(' ')[0]) : '?';
-                        });
-                        // Abfahrtszeit an Namen anhängen
-                        let fahrerStr = `🚗 ${names.join(', ')}`;
-                        if (lineup?.departureTime) {
-                             fahrerStr += ` (Abfahrt: ${lineup.departureTime} Uhr)`;
-                        }
-                        badges.push(fahrerStr);
-                    }
-                }
-            }
-
-            if (team.requiresBetreuer) {
-                const betreuerIds = lineup?.betreuerHelperIds || [];
-                if (betreuerIds.length === 0) {
-                    badges.push('🧑‍🏫 Offen');
-                } else {
-                    const names = betreuerIds.map(id => {
-                        const h = helpers.find(x => x.id === id);
-                        return h ? (h.alias || h.name.split(' ')[0]) : '?';
-                    });
-                    badges.push(`🧑‍🏫 ${names.join(', ')}`);
-                }
-            }
-
-            // Wenn bei einem Heimspiel kein Betreuer konfiguriert ist und der Fahrer versteckt wurde, gibt es gar keinen Dienst für dieses Spiel.
-            if (badges.length === 0) return;
-
-            const badgesString = badges.length > 0 ? ` (${badges.join(' | ')})` : '';
-
-            logisticsEvents.push({
-                id: `logistics-${sub.id}-${ev.uid}-${index}`,
-                sourceId: sub.id, 
-                title: `Dienste ${team.name}: ${matchPrefix}${ev.title}${badgesString}`,
-                description: ev.description || '',
-                location: ev.location || '',
-                start: new Date(ev.startTime),
-                end: new Date(ev.endTime),
-                allDay: ev.isAllDay,
-                color: '#9333ea', // Auffälliges Lila für Logistik
-                sourceEvent: ev, 
-                isLogisticsDuty: true,
-                teamName: team.name
-            });
-        });
-    });
-
-    return [...internalEvents, ...internalSitzungen, ...cachedExternalEvents, ...logisticsEvents];
-  }, [calendarEvents, events, calendarSubscriptions, teams, helpers, matchLineups]);
-
-  const filteredEvents = useMemo(() => {
-    const todayStart = startOfDay(new Date()).getTime();
-    const isListView = ['termine', 'dienste'].includes(currentView);
-
-    return rbcEvents.filter(ev => {
-      // Logistik-Dienste gehören exklusiv in die Dienste-Ansicht
-      if (ev.isLogisticsDuty) {
-          if (currentView !== 'dienste') return false;
-          return activeFilters.includes('dienste');
-      }
-
-      if (currentView === 'agenda' && !ev.showInMatchPlan) return false;
-      if (isListView && !showPastEvents) {
-        let exclusiveEnd = ev.end || ev.start!;
-        if (ev.allDay && exclusiveEnd.getTime() > ev.start!.getTime()) exclusiveEnd = new Date(exclusiveEnd.getTime() - 1000);
-        if (exclusiveEnd.getTime() < todayStart) return false;
-      }
-      if (ev.sourceId === 'manual') return ev.seriesId ? activeFilters.includes('dienste') : activeFilters.includes('manual');
-      return activeFilters.includes(ev.sourceId);
-    });
-  }, [rbcEvents, activeFilters, showPastEvents, currentView]);
-
-  const displayEvents = useMemo(() => {
-    if (currentView === 'termine') return filteredEvents.filter(e => e.sourceId === 'manual' && !e.seriesId && !e.isLogisticsDuty);
-    if (currentView === 'dienste') return filteredEvents.filter(e => !!e.seriesId || e.isLogisticsDuty);
-    return filteredEvents;
-  }, [filteredEvents, currentView]);
-
-  const eventStyleGetter = (event: AdaptedEvent) => ({ 
-    style: { 
-      backgroundColor: event.color || '#3b82f6', borderRadius: '6px', opacity: 0.9, 
-      color: getContrastYIQ(event.color || '#3b82f6'), border: 'none', display: 'block', cursor: 'pointer' 
-    } 
-  });
-
-  const handleSelectEvent = (event: AdaptedEvent) => {
-    if (event.id.startsWith('ics-') || event.id.startsWith('logistics-')) { 
-      setSelectedIcsEvent(event); 
-      setIsIcsDetailModalOpen(true); 
-      return; 
-    }
-    if (event.rawSitzung) { navigate(`/events/${event.rawSitzung.id}`); return; }
-    
-    if (event.sourceEvent) {
-      setSelectedIcsEvent(event);
-      setIsIcsDetailModalOpen(true);
-    }
-  };
-
-  useEffect(() => {
-    if (location.state?.targetDate) {
-      setCurrentDate(new Date(location.state.targetDate));
-    }
-
-    if (location.state && rbcEvents.length > 0) {
-      const { openEventId, openEventSubId, openEventUid } = location.state;
-      
-      if (openEventId || (openEventSubId && openEventUid)) {
-        const target = rbcEvents.find(e => {
-          if (openEventSubId && openEventUid) {
-             return e.sourceId === openEventSubId && e.sourceEvent?.uid === openEventUid;
-          }
-          if (openEventId) {
-             if (e.id === openEventId) return true;
-             if (e.sourceEvent && e.sourceEvent.id === openEventId) return true;
-             if (e.rawSitzung && e.rawSitzung.id === openEventId) return true;
-          }
-          return false;
-        });
-
-        if (target) {
-          // Direkt synchron aufrufen – ohne setTimeout, um Race Conditions zu vermeiden
-          handleSelectEvent(target);
-          navigate(location.pathname, { replace: true, state: {} });
-        }
-      }
-    }
-  }, [location.state, rbcEvents, location.pathname, navigate]);
-
   const getNavLabel = () => {
     if (['termine', 'dienste'].includes(currentView)) return format(currentDate, 'yyyy', { locale: de });
     
@@ -445,221 +255,7 @@ export const CalendarView: React.FC = () => {
     return format(currentDate, 'MMMM yyyy', { locale: de });
   };
 
-  const renderYearlyList = () => {
-    const isDienste = currentView === 'dienste';
-    const today = startOfDay(new Date());
-    
-    // Kategorie extrahieren (Thekendienst, Dienste J1, etc.)
-    const getCategory = (e: AdaptedEvent) => {
-       if (e.isLogisticsDuty) return `Dienste ${e.teamName}`;
-       const titleStr = String(e.title || '');
-       if (titleStr.includes(':')) return titleStr.split(':')[0].trim();
-       return titleStr.trim();
-    };
-
-    const yearEvents = displayEvents.filter(e => e.start!.getFullYear() === currentDate.getFullYear());
-    const categories = Array.from(new Set(yearEvents.map(getCategory))).sort();
-    
-    const filteredYearEvents = yearEvents.filter(e => dienstFilter === 'ALL' || getCategory(e) === dienstFilter);
-
-    filteredYearEvents.sort((a, b) => {
-      if (a.start!.getTime() !== b.start!.getTime()) return a.start!.getTime() - b.start!.getTime();
-      if (a.allDay && !b.allDay) return -1;
-      if (!a.allDay && b.allDay) return 1;
-      return 0;
-    });
-
-    if (filteredYearEvents.length === 0) {
-      return (
-        <div className="flex-1 flex flex-col items-center justify-center text-gray-400 h-full p-8 relative">
-          {isDienste && categories.length > 0 && (
-             <div className="absolute top-4 left-4">
-                <select 
-                   className="bg-white border border-gray-200 rounded-lg font-bold text-gray-700 outline-none cursor-pointer px-3 py-1.5 shadow-sm text-sm"
-                   value={dienstFilter}
-                   onChange={e => setDienstFilter(e.target.value)}
-                >
-                   <option value="ALL">Alle Dienste</option>
-                   {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-             </div>
-          )}
-          <CalendarDays className="w-12 h-12 mb-3 opacity-20" />
-          <p>Keine {currentView === 'termine' ? 'Termine' : 'Dienste'} für {currentDate.getFullYear()} gefunden.</p>
-        </div>
-      );
-    }
-
-    return (
-      <div className="flex flex-col w-full h-full relative" ref={listContainerRef}>
-        <div className="overflow-y-auto overflow-x-auto w-full flex-1 custom-scrollbar pb-4 relative">
-          <table className="w-full text-left border-collapse min-w-[600px] relative">
-            <thead className="sticky top-0 bg-white shadow-sm z-10">
-              <tr className="border-b-2 border-gray-800 text-sm">
-                {isDienste ? (
-                  <>
-                    <th className="py-3 px-4 font-bold text-gray-700 w-16">KW</th>
-                    <th className="py-3 px-4 font-bold text-gray-700 w-32">Start</th>
-                    <th className="py-3 px-4 font-bold text-gray-700 w-32">Ende</th>
-                    <th className="py-3 px-4 font-bold text-gray-700 flex items-center">
-                       <select 
-                         className="bg-transparent border-none font-bold text-gray-800 uppercase tracking-wider p-0 outline-none cursor-pointer focus:ring-0 text-sm hover:text-blue-700 transition-colors"
-                         value={dienstFilter}
-                         onChange={(e) => setDienstFilter(e.target.value)}
-                         title="Dienste nach Kategorie filtern"
-                       >
-                         <option value="ALL">ALLE DIENSTE</option>
-                         {categories.map(c => <option key={c} value={c}>{c.toUpperCase()}</option>)}
-                       </select>
-                    </th>
-                  </>
-                ) : (
-                  <>
-                    <th className="py-3 px-4 font-bold text-gray-700 w-32">Datum</th>
-                    <th className="py-3 px-4 font-bold text-gray-700 w-32">Zeit</th>
-                    <th className="py-3 px-4 font-bold text-gray-700">Termin</th>
-                    <th className="py-3 px-4 font-bold text-gray-700 w-48">Ort</th>
-                  </>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredYearEvents.map(e => {
-                const startD = e.start!;
-                
-                // Data-Attribut für Auto-Scroll
-                const isFutureRow = startOfDay(startD).getTime() >= today.getTime();
-                const dataIsFutureRow = isFutureRow ? "true" : "false";
-
-                if (isDienste) {
-                  const actualEnd = e.end || (e.sourceEvent?.endTime ? new Date(e.sourceEvent.endTime) : startD);
-                  const kw = getISOWeek(startD);
-                  return (
-                    <tr key={e.id} data-is-future-row={dataIsFutureRow} className={`border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors group ${!isFutureRow ? 'opacity-60 bg-gray-50/50' : ''}`} onClick={() => handleSelectEvent(e)}>
-                      <td className="py-3 px-4 text-gray-900 font-medium whitespace-nowrap">{kw}</td>
-                      <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{format(startD, 'dd.MM.yyyy', { locale: de })}</td>
-                      <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{format(actualEnd, 'dd.MM.yyyy', { locale: de })}</td>
-                      <td className="py-3 px-4">
-                        <div className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors flex items-center gap-2">
-                          <span className="inline-block w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: e.color || '#3b82f6' }}></span>
-                          <span className="truncate">{e.title}</span>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                } else {
-                  const dateStr = format(startD, 'dd.MM.yyyy', { locale: de });
-                  let timeStr = 'Ganztägig';
-                  if (!e.allDay) {
-                    timeStr = format(startD, 'HH:mm');
-                    if (e.sourceEvent?.endTime && e.sourceEvent.endTime !== e.sourceEvent.startTime) {
-                       timeStr += ' - ' + format(new Date(e.sourceEvent.endTime), 'HH:mm');
-                    } else if (e.rawSitzung?.plannedEndTime) {
-                       timeStr += ' - ' + format(new Date(e.rawSitzung.plannedEndTime), 'HH:mm');
-                    } else if (!e.sourceEvent && !e.rawSitzung && e.end && format(e.end, 'HH:mm') !== format(startD, 'HH:mm')) {
-                       timeStr += ' - ' + format(e.end, 'HH:mm');
-                    }
-                  }
-                  
-                  return (
-                    <tr key={e.id} data-is-future-row={dataIsFutureRow} className={`border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors group ${!isFutureRow ? 'opacity-60 bg-gray-50/50' : ''}`} onClick={() => handleSelectEvent(e)}>
-                      <td className="py-3 px-4 text-gray-900 font-medium whitespace-nowrap">{dateStr}</td>
-                      <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{timeStr}</td>
-                      <td className="py-3 px-4">
-                        <div className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">
-                          <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ backgroundColor: e.color || '#3b82f6' }}></span>
-                          {e.title}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-gray-600 truncate max-w-[200px]" title={e.location}>{e.location}</td>
-                    </tr>
-                  );
-                }
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
-
-  const CustomAgendaView = useMemo(() => {
-    const View = ({ date, events }: { date: Date, events: AdaptedEvent[] }) => {
-      const scrollRef = useRef<HTMLDivElement>(null);
-      const today = startOfDay(new Date());
-
-      const { start: rangeStart, end: rangeEnd } = useMemo(() => {
-        const month = date.getMonth();
-        const startYear = month < 4 ? date.getFullYear() - 1 : date.getFullYear();
-        return { start: new Date(startYear, 4, 1), end: new Date(startYear + 1, 4, 31) };
-      }, [date]);
-
-      const daysInInterval = eachDayOfInterval({ start: rangeStart, end: rangeEnd });
-      
-      useEffect(() => {
-        if (scrollRef.current) {
-          setTimeout(() => {
-            const container = scrollRef.current;
-            if (!container) return;
-            const todayEl = container.querySelector('[data-is-future="true"]') as HTMLElement;
-            if (todayEl) {
-              container.scrollTop = Math.max(0, todayEl.offsetTop - 8);
-            }
-          }, 50);
-        }
-      }, [date, events, showEmptyDays]); 
-
-      return (
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-4 bg-gray-50/30 h-full relative print:bg-white print:overflow-visible">
-          {daysInInterval.map(day => {
-            const dayEvents = events.filter(e => {
-              const eStart = startOfDay(e.start!);
-              let exclusiveEnd = e.end || e.start!;
-              if (e.allDay && exclusiveEnd.getTime() > e.start!.getTime()) exclusiveEnd = new Date(exclusiveEnd.getTime() - 1000); 
-              return day >= eStart && day <= startOfDay(exclusiveEnd);
-            });
-            
-            if (!showEmptyDays && dayEvents.length === 0) return null;
-            
-            dayEvents.sort((a, b) => { if (a.allDay && !b.allDay) return -1; if (!a.allDay && b.allDay) return 1; return a.start!.getTime() - b.start!.getTime(); });
-            
-            const isToday = day.getTime() === today.getTime();
-            const isFutureOrToday = day >= today;
-
-            return (
-              <div 
-                key={day.toISOString()} 
-                data-is-future={isFutureOrToday ? "true" : "false"}
-                className={`bg-white rounded-lg shadow-sm border ${isToday ? 'border-blue-300 ring-2 ring-blue-100' : 'border-gray-200'} overflow-hidden print:border-b print:shadow-none print:rounded-none`}
-              >
-                <div className={`px-4 py-2 border-b ${isToday ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'} print:bg-transparent print:border-black`}>
-                  <h3 className={`text-sm font-bold ${isToday ? 'text-blue-800 print:text-black' : 'text-gray-700 print:text-black'}`}>
-                    {format(day, 'EEEE, dd. MMMM yyyy', { locale: de })}
-                    {isToday && <span className="ml-2 text-[10px] uppercase tracking-wider font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full print:hidden">Heute</span>}
-                  </h3>
-                </div>
-                <div className="p-1.5">
-                  {dayEvents.length === 0 ? <p className="p-2 text-xs text-gray-400 italic text-center print:hidden">Keine Termine</p> : (
-                    <div className="space-y-1">
-                      {dayEvents.map(e => (
-                        <div key={`${e.id}-${day.toISOString()}`} onClick={() => handleSelectEvent(e)} className="flex flex-col sm:flex-row sm:items-center p-2 rounded hover:bg-gray-50 cursor-pointer transition print:border-l-[4px]" style={{ borderLeftWidth: '4px', borderLeftColor: e.color || '#3b82f6' }}>
-                          <div className="w-20 shrink-0 text-xs font-bold text-gray-500 mb-1 sm:mb-0 print:text-black">{e.allDay ? 'Ganztägig' : `${format(e.start!, 'HH:mm')} Uhr`}</div>
-                          <div className="flex-1"><div className="font-bold text-gray-900 text-sm print:text-black">{e.title}</div>{e.location && <div className="text-xs text-gray-500 mt-0.5 flex items-center print:text-black">📍 {e.location}</div>}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-          <div className="h-[80vh] print:hidden" aria-hidden="true" />
-        </div>
-      );
-    };
-    View.title = () => ''; View.navigate = () => new Date(); return View;
-  }, [showEmptyDays]);
-
+  // --- RENDER HILFSFUNKTIONEN FÜR DAS PANEL ---
   const renderActionButtons = () => (
     <>
       <button onClick={() => { setIsSettingsOpen(false); setIsExportModalOpen(true); }} className="flex items-center px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-50 transition shadow-sm justify-center">
@@ -746,8 +342,8 @@ export const CalendarView: React.FC = () => {
   return (
     <div className="h-full flex flex-col space-y-3 relative">
       
+      {/* HEADER & NAV */}
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between bg-white p-2 rounded-xl shadow-sm border border-gray-200 gap-3 z-20 relative">
-        
         <div className="flex items-center justify-between lg:justify-start gap-1 flex-1">
           <button onClick={handleNavPrev} className="p-2 bg-gray-50 rounded-lg text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors"><ChevronLeft className="w-5 h-5"/></button>
           <button onClick={() => setCurrentDate(new Date())} className="p-2 bg-blue-50 rounded-lg text-blue-700 border border-blue-100 hover:bg-blue-100 transition-colors" title="Heute"><Home className="w-5 h-5"/></button>
@@ -783,6 +379,7 @@ export const CalendarView: React.FC = () => {
         </div>
       </div>
 
+      {/* FILTER & EINSTELLUNGEN PANEL */}
       {isSettingsOpen && (
         <div className="bg-white p-4 rounded-xl shadow-md border border-gray-200 z-10 flex flex-col gap-4 animate-fade-in relative">
           <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-gray-100 pb-4 gap-4">
@@ -806,19 +403,33 @@ export const CalendarView: React.FC = () => {
         </div>
       )}
       
+      {/* HAUPT-ANSICHT (RBC oder Listen) */}
       <div 
         className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 p-2 sm:p-3 overflow-hidden flex flex-col min-h-[700px] lg:min-h-[850px] xl:min-h-[1000px]"
         onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}
       >
-        {isCalendarLoading ? ( <div className="flex-1 flex items-center justify-center text-gray-400 animate-pulse font-medium">Lade Vereinskalender...</div> ) : 
-         ['termine', 'dienste'].includes(currentView) ? renderYearlyList() : (
+        {isCalendarLoading ? ( 
+          <div className="flex-1 flex items-center justify-center text-gray-400 animate-pulse font-medium">Lade Vereinskalender...</div> 
+        ) : ['termine', 'dienste'].includes(currentView) ? (
+          <CalendarListView 
+             currentView={currentView as 'termine' | 'dienste'} 
+             displayEvents={displayEvents} 
+             currentDate={currentDate} 
+             onSelectEvent={handleSelectEvent} 
+          />
+        ) : (
           <Calendar
             culture="de" localizer={localizer} events={displayEvents} startAccessor="start" endAccessor="end"
             view={currentView as any} toolbar={false} onView={handleViewChange}
             views={{ month: true, week: true, day: true, agenda: CustomAgendaView }}
             date={currentDate} onNavigate={(date) => setCurrentDate(date)}
-            eventPropGetter={eventStyleGetter} 
-            onSelectEvent={(event) => handleSelectEvent(event)} 
+            eventPropGetter={(event: AdaptedEvent) => ({ 
+              style: { 
+                backgroundColor: event.color || '#3b82f6', borderRadius: '6px', opacity: 0.9, 
+                color: getContrastYIQ(event.color || '#3b82f6'), border: 'none', display: 'block', cursor: 'pointer' 
+              } 
+            })} 
+            onSelectEvent={handleSelectEvent} 
             popup 
             messages={{ showMore: (total) => `+${total} weitere` }}
             className="font-sans text-xs sm:text-sm"
@@ -826,6 +437,7 @@ export const CalendarView: React.FC = () => {
         )}
       </div>
 
+      {/* MODALS */}
       {showAboModal && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/50 animate-fade-in" onClick={() => setShowAboModal(false)}>
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -847,7 +459,6 @@ export const CalendarView: React.FC = () => {
                 >
                    Apple Kalender (iPhone / Mac)
                 </a>
-                
                 <a 
                   href={`https://calendar.google.com/calendar/render?cid=${encodeURIComponent(`webcal://${window.location.host}/api/calendar`)}`}
                   target="_blank"
@@ -901,8 +512,6 @@ export const CalendarView: React.FC = () => {
             if (!selectedIcsEvent.sourceEvent || !myHelper || !updateCalendarEvent) return;
             
             const ev = selectedIcsEvent.sourceEvent;
-
-            // --- BESTÄTIGUNGS-DIALOG ---
             let existingName = "";
             if (ev.title.includes(':')) {
               existingName = ev.title.split(':')[1].trim();
@@ -912,12 +521,9 @@ export const CalendarView: React.FC = () => {
               ? `Willst du den Dienst von ${existingName} wirklich übernehmen?`
               : `Willst du diesen Dienst wirklich übernehmen?`;
               
-            if (!window.confirm(confirmMessage)) {
-              return;
-            }
+            if (!window.confirm(confirmMessage)) return;
 
             try {
-              // Sichtbaren Titel sofort anpassen!
               let newTitle = ev.title;
               const displayName = myHelper.alias || myHelper.name;
               if (newTitle.includes(':')) {
@@ -926,7 +532,6 @@ export const CalendarView: React.FC = () => {
                 newTitle = newTitle.trim() + ': ' + displayName;
               }
 
-              // CHIRURGISCHER EINGRIFF: Harter Schnitt! (Alle anderen Empfänger leeren)
               await updateCalendarEvent({ 
                 ...ev, 
                 title: newTitle,
