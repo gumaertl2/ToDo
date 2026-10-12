@@ -1,5 +1,5 @@
 #!/bin/bash
-# Wechselt automatisch in das Verzeichnis, in dem diese Datei liegt. 
+# Wechselt automatisch in das Verzeichnis, in dem diese Datei liegt..
 cd "$(dirname "$0")" 
 
 # Startet den node server im Hintergrund
