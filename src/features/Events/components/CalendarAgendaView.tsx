@@ -1,6 +1,7 @@
+// [2026-10-12] - BUGFIX: TS6133 'React' is declared but its value is never read behoben.
 // [2026-10-12] - REFACTOR: Spielplan-Ansicht (CustomAgendaView) aus CalendarView in eigene Komponente ausgelagert.
 // src/features/Events/components/CalendarAgendaView.tsx
-import React, { useRef, useEffect, useMemo } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
 import { startOfDay } from 'date-fns/startOfDay';
 import { eachDayOfInterval } from 'date-fns/eachDayOfInterval';
 import { format } from 'date-fns/format';
