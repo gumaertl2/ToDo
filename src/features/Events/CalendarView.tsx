@@ -1,3 +1,4 @@
+// [2026-10-12] - BUGFIX: TS6133 'idx' is declared but its value is never read behoben.
 // [2026-10-12] - BUGFIX: Auto-Scroll in Listenansichten (Termine/Dienste) angepasst. Nutzt nun offsetTop - 45px anstelle von scrollIntoView, damit zukünftige Termine nicht unter dem Sticky-Header verschwinden.
 // [2026-10-12] - FEATURE: Auto-Scroll (Contextual Nav) in den Listenansichten (Termine/Dienste) integriert. Scrollt beim Laden automatisch zum ersten zukünftigen Event, sodass die Historie oben "aus dem Weg" ist.
 // [2026-10-12] - FEATURE: Heimspiel-Logik in "Dienste" implementiert. Blendet "🚗 Offen" bei Heimspielen aus.
@@ -523,7 +524,7 @@ export const CalendarView: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredYearEvents.map((e, idx) => {
+              {filteredYearEvents.map(e => {
                 const startD = e.start!;
                 
                 // Data-Attribut für Auto-Scroll
