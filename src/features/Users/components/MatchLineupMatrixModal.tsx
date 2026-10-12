@@ -1,26 +1,19 @@
+// [2026-10-12] - REFACTOR: Hauptdatei massiv verschlankt. Komplette Logik in useMatchLineupMatrix ausgelagert, Tabellen-Struktur in MatchLineupMatrixTable und MatchLineupLogisticsRow gekapselt.
 // [2026-10-12] - UX-FIX: Schließen-Button "X" oben rechts auf Handys sichtbar gemacht (hidden md:block entfernt).
 // [2026-10-12] - UX-FEATURE: Wochentage (Mo, Di, Mi...) in der Datumsanzeige der Spiele ergänzt.
 // [2026-10-12] - UX-FEATURE: Automatischer Spiele-Zähler (Anzahl Nominierungen) pro Spieler im Tabellenkopf ergänzt.
 // [2026-10-12] - FEATURE: Google Maps Routing-Button (🗺️) neben der Abfahrtszeit für Auswärtsspiele eingebaut (nutzt homeArenaAddress als festen Startpunkt).
-// [2026-10-11] - UX-FIX: "+ Einfügen" und "+ Ich" Buttons zu "+" verkleinert und Abstände reduziert, um Platz in der Logistik-Zeile zu schaffen (verhindert Umbruch bei Zeitfeld).
-// [2026-10-11] - UX-FIX: Logistik-Labels in der Matrix auf platzsparende Emojis mit Tooltips reduziert, um Layout-Umbrüche zu verhindern.
-// [2026-10-11] - BUGFIX: 24h-Format (hour12: false und lang="de-DE") für Zeitangaben und Input-Felder erzwungen, um AM/PM-Anzeigen bei abweichenden OS-Locales zu verhindern.
 // [2026-10-11] - FEATURE: Abfahrtszeit (departureTime) in Logistik-Reihe (Fahrer) eingebaut. Basis für zukünftige Google Maps Integration.
-// [2026-10-09] - BUGFIX: Z-Index Bug behoben (Logistik-Picker verschwindet nicht mehr hinter der nächsten Reihe). Safari-Autofill Hack ergänzt. Tausch-Logik-Wording präzisiert.
-// [2026-10-09] - UX-FEATURE: Dropdown-Menü für Logistik (Fahrer/Betreuer) durch einen durchsuchbaren Popover-Picker ersetzt (analog zum Joker-Menü).
-// [2026-10-09] - UX-FIX: Logistik-Reihen (Fahrer/Betreuer) im Saisonplaner platzsparend in einer Zeile (flex-row) angeordnet.
 // [2026-10-09] - FEATURE: Logistik-Modul (Fahrer & Betreuer) in Matrix integriert. Inklusive Self-Service Tauschbörse für Helfer und Dropdown-Zuweisung für Mannschaftsführer.
 // [2026-10-08] - FEATURE: MF-Override (Schraffiertes Design). Captains können nun die Verfügbarkeit anderer Spieler ändern (isSetByMF Flag).
-// [2026-10-01] - UX-FIX: Safari AutoFill für die Joker-Suche deaktiviert (autoComplete, autoCorrect, spellCheck).
 // [2026-09-30] - FEATURE: Base & Override V2 (Bottom-Up). Spieler können ihre eigene Zelle anklicken (Verfügbarkeit: Da/Weg).
 // [2026-09-30] - FEATURE: Auto-Freeze und manuelles Siegel (🔒) in die Matrix integriert. Notfall-Alert bei verspäteten Absagen eingebaut.
-// [2026-09-28] - UX-FEATURE: 'isReadOnly' Prop hinzugefügt. Erlaubt einfachen Team-Mitgliedern die Ansicht der Matrix, ohne Schreibrechte zu gewähren.
-// [2026-09-28] - UX-FEATURE: 'focusedEventId' Prop hinzugefügt. Zieht ein bestimmtes Spiel an die Spitze der Matrix und hebt es farblich hervor.
 // src/features/Users/components/MatchLineupMatrixModal.tsx
-import React, { useMemo, useState } from 'react';
-import { useClubStore } from '../../../store/useClubStore';
-import { X, Calendar as CalendarIcon, Lock, Unlock, CheckSquare, Square, UserPlus, Search, Users, Clock, Map } from 'lucide-react';
-import type { Team, MatchLineup, Helper } from '../../../core/types/models';
+import React from 'react';
+import { X, Calendar as CalendarIcon, UserPlus, Search } from 'lucide-react';
+import type { Team } from '../../../core/types/models';
+import { useMatchLineupMatrix } from '../hooks/useMatchLineupMatrix';
+import { MatchLineupMatrixTable } from './MatchLineupMatrixTable';
 
 interface MatchLineupMatrixModalProps {
   team: Team;
@@ -29,510 +22,15 @@ interface MatchLineupMatrixModalProps {
   onClose: () => void;
 }
 
-type PlayerCategory = 'STAMM' | 'KADER' | 'EXTERN';
-
-const sanitizeId = (id: string) => id.replace(/[\/\\.#$\[\]]/g, '_');
-
 export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ team, focusedEventId, isReadOnly, onClose }) => {
-  const { user, helpers, calendarSubscriptions, matchLineups, saveMatchLineup } = useClubStore();
-  
-  const [tempJokers, setTempJokers] = useState<string[]>([]);
-  const [isJokerMenuOpen, setIsJokerMenuOpen] = useState(false);
-  const [jokerSearchTerm, setJokerSearchTerm] = useState('');
-  
-  // Optimistische UI-States für verzögerungsfreies Klicken
-  const [localOverrides, setLocalOverrides] = useState<Record<string, string[]>>({});
-  const [localAvailOverrides, setLocalAvailOverrides] = useState<Record<string, Record<string, 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN'>>>({});
-  const [localLockOverrides, setLocalLockOverrides] = useState<Record<string, boolean>>({});
-  const [localSetByMFOverrides, setLocalSetByMFOverrides] = useState<Record<string, Record<string, boolean>>>({});
-  
-  // Lokaler State für die blitzschnelle Logistik-Anzeige
-  const [localLogisticsOverrides, setLocalLogisticsOverrides] = useState<Record<string, { fahrerHelperIds?: string[], betreuerHelperIds?: string[], departureTime?: string }>>({});
-
-  // States für den Logistik Such-Picker
-  const [openLogisticsPicker, setOpenLogisticsPicker] = useState<string | null>(null);
-  const [logisticsSearchTerm, setLogisticsSearchTerm] = useState('');
-
-  // Finde heraus, wer gerade eingeloggt ist (um eigene Spalte zu identifizieren)
-  const myHelperId = useMemo(() => {
-    if (!user || !user.email) return null;
-    return helpers.find(h => h.email?.toLowerCase() === user.email?.toLowerCase())?.id;
-  }, [user, helpers]);
-
-  const displayMembers = useMemo(() => {
-    const defaultIds = new Set(team.defaultLineupHelperIds || []);
-    const teamMemberIds = new Set(helpers.filter(h => h.teamIds?.includes(team.id)).map(h => h.id));
-    
-    const usedExternalJokerIds = new Set<string>();
-    matchLineups.filter(m => m.teamId === team.id).forEach(lineup => {
-      lineup.lineupHelperIds.forEach(id => {
-        if (!teamMemberIds.has(id)) usedExternalJokerIds.add(id);
-      });
-    });
-    tempJokers.forEach(id => {
-      if (!teamMemberIds.has(id)) usedExternalJokerIds.add(id);
-    });
-
-    const sortFn = (a: Helper, b: Helper) => (a.name || '').localeCompare(b.name || '');
-
-    const stamm = helpers.filter(h => defaultIds.has(h.id)).sort(sortFn);
-    const kader = helpers.filter(h => teamMemberIds.has(h.id) && !defaultIds.has(h.id)).sort(sortFn);
-    const extern = helpers.filter(h => usedExternalJokerIds.has(h.id)).sort(sortFn);
-
-    const combined: { helper: Helper; category: PlayerCategory }[] = [];
-    stamm.forEach(h => combined.push({ helper: h, category: 'STAMM' }));
-    kader.forEach(h => combined.push({ helper: h, category: 'KADER' }));
-    extern.forEach(h => combined.push({ helper: h, category: 'EXTERN' }));
-
-    return combined;
-  }, [helpers, team, matchLineups, tempJokers]);
-
-  const availableJokers = useMemo(() => {
-    const currentDisplayIds = new Set(displayMembers.map(item => item.helper.id));
-    const term = jokerSearchTerm.toLowerCase().trim();
-    
-    return helpers
-      .filter(h => !currentDisplayIds.has(h.id))
-      .filter(h => !term || (h.name || '').toLowerCase().includes(term) || (h.alias || '').toLowerCase().includes(term))
-      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  }, [helpers, displayMembers, jokerSearchTerm]);
-
-  const sortedAllHelpers = useMemo(() => {
-    return [...helpers].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  }, [helpers]);
-
-  const filteredLogisticsHelpers = useMemo(() => {
-    const term = logisticsSearchTerm.toLowerCase().trim();
-    if (!term) return sortedAllHelpers;
-    return sortedAllHelpers.filter(h => 
-      (h.name || '').toLowerCase().includes(term) || 
-      (h.alias || '').toLowerCase().includes(term)
-    );
-  }, [sortedAllHelpers, logisticsSearchTerm]);
-
-  const linkedSubscription = useMemo(() => {
-    return calendarSubscriptions.find(sub => sub.reminderRecipientTeamIds?.includes(team.id));
-  }, [calendarSubscriptions, team.id]);
-
-  const events = useMemo(() => {
-    if (!linkedSubscription || !linkedSubscription.cachedEvents) return [];
-    const sorted = [...linkedSubscription.cachedEvents].sort((a, b) => a.startTime - b.startTime);
-    
-    if (focusedEventId) {
-      const focusIndex = sorted.findIndex(e => sanitizeId(e.uid) === focusedEventId);
-      if (focusIndex > -1) {
-        const [focusedEvent] = sorted.splice(focusIndex, 1);
-        sorted.unshift(focusedEvent);
-      }
-    }
-    
-    return sorted;
-  }, [linkedSubscription, focusedEventId]);
-
-  // --- SPIELE-ZÄHLER ENGINE ---
-  const playerGameCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    
-    // Initialisiere mit 0
-    displayMembers.forEach(m => { counts[m.helper.id] = 0; });
-    
-    events.forEach(event => {
-      const safeEventId = sanitizeId(event.uid);
-      const storeLineup = matchLineups.find(m => m.id === safeEventId);
-      const hasLocalOverride = localOverrides[safeEventId] !== undefined;
-      
-      let activeIds: string[] = [];
-      if (hasLocalOverride) activeIds = localOverrides[safeEventId];
-      else if (storeLineup) activeIds = storeLineup.lineupHelperIds;
-      else activeIds = team.defaultLineupHelperIds || [];
-      
-      activeIds.forEach(id => {
-        if (counts[id] !== undefined) counts[id]++;
-      });
-    });
-    return counts;
-  }, [events, matchLineups, localOverrides, team.defaultLineupHelperIds, displayMembers]);
-
-  // --- KADER NOMINIERUNG (Nur Captain) ---
-  const handleTogglePlayer = async (rawEventId: string, helperId: string, currentActiveIds: string[]) => {
-    if (isReadOnly) return;
-
-    const safeEventId = sanitizeId(rawEventId);
-    const storeLineup = matchLineups.find(m => m.id === safeEventId);
-    
-    const newActiveIds = currentActiveIds.includes(helperId)
-      ? currentActiveIds.filter(id => id !== helperId)
-      : [...currentActiveIds, helperId];
-
-    setLocalOverrides(prev => ({ ...prev, [safeEventId]: newActiveIds }));
-
-    const newLineup: MatchLineup = {
-      id: safeEventId,
-      schemaVersion: '1.0',
-      teamId: team.id,
-      lineupHelperIds: newActiveIds,
-      availabilities: storeLineup?.availabilities || {},
-      isSetByMF: storeLineup?.isSetByMF || {},
-      isLocked: storeLineup?.isLocked,
-      betreuerHelperIds: storeLineup?.betreuerHelperIds || [],
-      fahrerHelperIds: storeLineup?.fahrerHelperIds || [],
-      departureTime: storeLineup?.departureTime,
-      updatedAt: Date.now()
-    };
-
-    const result = await saveMatchLineup(newLineup);
-    if (!result.success) {
-      alert(`SPEICHERN FEHLGESCHLAGEN!\n\nFirebase meldet: ${result.error?.message || 'Unbekannter Fehler'}`);
-      setLocalOverrides(prev => { const next = { ...prev }; delete next[safeEventId]; return next; });
-    }
-  };
-
-  // --- VERFÜGBARKEIT ÄNDERN (Da / Weg / ?) ---
-  const handleToggleAvailability = async (rawEventId: string, helperId: string, isPlaying: boolean, isFrozenLocal: boolean) => {
-    const isMyColumn = helperId === myHelperId;
-    const isCaptainAction = !isReadOnly;
-
-    if (!isMyColumn && !isCaptainAction) return;
-
-    const safeEventId = sanitizeId(rawEventId);
-    const storeLineup = matchLineups.find(m => m.id === safeEventId);
-    
-    const currentAvail = localAvailOverrides[safeEventId]?.[helperId] || storeLineup?.availabilities?.[helperId] || 'UNKNOWN';
-    
-    let nextAvail: 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN' = 'UNKNOWN';
-    if (currentAvail === 'UNKNOWN') nextAvail = 'AVAILABLE';
-    else if (currentAvail === 'AVAILABLE') nextAvail = 'UNAVAILABLE';
-    else nextAvail = 'UNKNOWN';
-
-    if (isFrozenLocal && isPlaying && nextAvail === 'UNAVAILABLE') {
-       const defaultMsg = "🔒 Du bist für dieses Spiel fest aufgestellt und die Planung ist bereits versiegelt! Bei kurzfristigen Ausfällen kontaktiere bitte sofort deinen Mannschaftsführer.";
-       alert(team.lineupLockMessage || defaultMsg);
-       return;
-    }
-
-    const newIsSetByMF = !isMyColumn;
-
-    setLocalAvailOverrides(prev => ({
-       ...prev,
-       [safeEventId]: {
-          ...(prev[safeEventId] || {}),
-          [helperId]: nextAvail
-       }
-    }));
-    
-    setLocalSetByMFOverrides(prev => ({
-      ...prev,
-      [safeEventId]: {
-        ...(prev[safeEventId] || {}),
-        [helperId]: newIsSetByMF
-      }
-    }));
-
-    const newLineup: MatchLineup = {
-      id: safeEventId,
-      schemaVersion: '1.0',
-      teamId: team.id,
-      lineupHelperIds: storeLineup?.lineupHelperIds || team.defaultLineupHelperIds || [],
-      availabilities: {
-        ...(storeLineup?.availabilities || {}),
-        [helperId]: nextAvail
-      },
-      isSetByMF: {
-        ...(storeLineup?.isSetByMF || {}),
-        [helperId]: newIsSetByMF
-      },
-      isLocked: storeLineup?.isLocked,
-      betreuerHelperIds: storeLineup?.betreuerHelperIds || [],
-      fahrerHelperIds: storeLineup?.fahrerHelperIds || [],
-      departureTime: storeLineup?.departureTime,
-      updatedAt: Date.now()
-    };
-    
-    await saveMatchLineup(newLineup);
-  };
-
-  // --- MANUELLE VERSIEGELUNG (Nur Captain) ---
-  const handleToggleLock = async (rawEventId: string, newState: boolean) => {
-    const safeEventId = sanitizeId(rawEventId);
-    const storeLineup = matchLineups.find(m => m.id === safeEventId);
-    setLocalLockOverrides(prev => ({ ...prev, [safeEventId]: newState }));
-    
-    const newLineup: MatchLineup = {
-      id: safeEventId,
-      schemaVersion: '1.0',
-      teamId: team.id,
-      lineupHelperIds: storeLineup?.lineupHelperIds || team.defaultLineupHelperIds || [],
-      availabilities: storeLineup?.availabilities || {},
-      isSetByMF: storeLineup?.isSetByMF || {},
-      isLocked: newState,
-      betreuerHelperIds: storeLineup?.betreuerHelperIds || [],
-      fahrerHelperIds: storeLineup?.fahrerHelperIds || [],
-      departureTime: storeLineup?.departureTime,
-      updatedAt: Date.now()
-    };
-    await saveMatchLineup(newLineup);
-  };
-
-  // --- LOGISTIK ENGINE (Fahrer & Betreuer) ---
-  const handleLogisticsAction = async (
-    rawEventId: string,
-    type: 'fahrerHelperIds' | 'betreuerHelperIds',
-    action: 'add' | 'remove' | 'takeover',
-    targetHelperId: string,
-    oldHelperId?: string
-  ) => {
-    const safeEventId = sanitizeId(rawEventId);
-    const storeLineup = matchLineups.find(m => m.id === safeEventId);
-    
-    const currentIds = localLogisticsOverrides[safeEventId]?.[type] !== undefined 
-      ? localLogisticsOverrides[safeEventId][type]! 
-      : (storeLineup?.[type] || []);
-
-    let newIds = [...currentIds];
-
-    if (action === 'add') {
-      if (!newIds.includes(targetHelperId)) newIds.push(targetHelperId);
-    } else if (action === 'remove') {
-      newIds = newIds.filter(id => id !== targetHelperId);
-    } else if (action === 'takeover' && oldHelperId) {
-      newIds = newIds.filter(id => id !== oldHelperId);
-      if (!newIds.includes(targetHelperId)) newIds.push(targetHelperId);
-    }
-
-    setLocalLogisticsOverrides(prev => ({
-      ...prev,
-      [safeEventId]: {
-        ...(prev[safeEventId] || {}),
-        [type]: newIds
-      }
-    }));
-
-    const newLineup: MatchLineup = {
-      id: safeEventId,
-      schemaVersion: '1.0',
-      teamId: team.id,
-      lineupHelperIds: storeLineup?.lineupHelperIds || team.defaultLineupHelperIds || [],
-      availabilities: storeLineup?.availabilities || {},
-      isSetByMF: storeLineup?.isSetByMF || {},
-      isLocked: storeLineup?.isLocked,
-      betreuerHelperIds: type === 'betreuerHelperIds' ? newIds : (storeLineup?.betreuerHelperIds || []),
-      fahrerHelperIds: type === 'fahrerHelperIds' ? newIds : (storeLineup?.fahrerHelperIds || []),
-      departureTime: storeLineup?.departureTime,
-      updatedAt: Date.now()
-    };
-    
-    await saveMatchLineup(newLineup);
-  };
-
-  // --- NEU: ABFAHRTSZEIT ENGINE ---
-  const handleDepartureTimeChange = async (rawEventId: string, newTime: string) => {
-    const safeEventId = sanitizeId(rawEventId);
-    const storeLineup = matchLineups.find(m => m.id === safeEventId);
-
-    setLocalLogisticsOverrides(prev => ({
-      ...prev,
-      [safeEventId]: {
-        ...(prev[safeEventId] || {}),
-        departureTime: newTime
-      }
-    }));
-
-    const newLineup: MatchLineup = {
-      id: safeEventId,
-      schemaVersion: '1.0',
-      teamId: team.id,
-      lineupHelperIds: storeLineup?.lineupHelperIds || team.defaultLineupHelperIds || [],
-      availabilities: storeLineup?.availabilities || {},
-      isSetByMF: storeLineup?.isSetByMF || {},
-      isLocked: storeLineup?.isLocked,
-      betreuerHelperIds: storeLineup?.betreuerHelperIds || [],
-      fahrerHelperIds: storeLineup?.fahrerHelperIds || [],
-      departureTime: newTime,
-      updatedAt: Date.now()
-    };
-
-    await saveMatchLineup(newLineup);
-  };
-
-  const handleAddJoker = (helperId: string) => {
-    setTempJokers(prev => [...prev, helperId]);
-    setIsJokerMenuOpen(false);
-    setJokerSearchTerm('');
-  };
-
-  // --- RENDER HILFSFUNKTION FÜR LOGISTIK-REIHEN ---
-  const renderLogistics = (type: 'fahrerHelperIds' | 'betreuerHelperIds', label: string, event: any) => {
-    const safeEventId = sanitizeId(event.uid);
-    const pickerKey = `${safeEventId}-${type}`;
-    const isPickerOpen = openLogisticsPicker === pickerKey;
-    const storeLineup = matchLineups.find(m => m.id === safeEventId);
-    const isPast = event.startTime < Date.now();
-    
-    const ids = localLogisticsOverrides[safeEventId]?.[type] !== undefined 
-      ? localLogisticsOverrides[safeEventId][type]! 
-      : (storeLineup?.[type] || []);
-
-    const currentDepartureTime = localLogisticsOverrides[safeEventId]?.departureTime !== undefined
-      ? localLogisticsOverrides[safeEventId].departureTime!
-      : (storeLineup?.departureTime || '');
-
-    const [emoji, ...textParts] = label.split(' ');
-    const roleName = textParts.join(' ');
-    
-    // Maps-Routing Logik (Nur für Auswärtsspiele interessant)
-    const isHomeGame = event.location?.toLowerCase().includes('maisach') || false;
-
-    return (
-      <div className="flex flex-row items-center gap-1.5">
-        <span className="text-base cursor-help shrink-0 w-6 text-center" title={roleName}>{emoji}</span>
-        <div className="flex flex-wrap items-center gap-1.5 flex-1 relative">
-          {ids.map(id => {
-            const h = sortedAllHelpers.find(x => x.id === id);
-            if (!h) return null;
-            const isMe = id === myHelperId;
-            
-            return (
-              <button
-                key={id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (isPast) return;
-                  if (!isReadOnly) {
-                    if (window.confirm(`Möchtest du ${h.name} als ${roleName} entfernen?`)) {
-                       handleLogisticsAction(event.uid, type, 'remove', id);
-                    }
-                  } else if (!isMe) {
-                    if (window.confirm(`Möchtest du den Dienst von ${h.name} wirklich übernehmen?`)) {
-                       if (myHelperId) handleLogisticsAction(event.uid, type, 'takeover', myHelperId, id);
-                    }
-                  }
-                }}
-                disabled={isPast || (isReadOnly && isMe)}
-                className={`text-[11px] font-bold px-2 py-0.5 rounded border transition-colors shadow-sm ${isMe ? 'bg-purple-100 text-purple-800 border-purple-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                title={!isReadOnly ? "Klicken zum Entfernen" : (!isMe ? "Klicken zum Übernehmen (Tauschen)" : "Du bist fest eingeteilt")}
-              >
-                {h.alias || h.name.split(' ')[0]}
-              </button>
-            );
-          })}
-          
-          {!isPast && (
-            !isReadOnly ? (
-              <div className="relative">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setOpenLogisticsPicker(isPickerOpen ? null : pickerKey);
-                    setLogisticsSearchTerm('');
-                  }}
-                  className="text-[14px] leading-none font-bold bg-white border border-dashed border-gray-300 text-gray-500 rounded w-6 h-6 flex items-center justify-center hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
-                  title={`${roleName} zuweisen`}
-                >
-                  +
-                </button>
-
-                {isPickerOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpenLogisticsPicker(null); }}></div>
-                    <div className="absolute left-0 top-full mt-1.5 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden flex flex-col">
-                      <div className="p-2 border-b border-gray-100 bg-gray-50 flex items-center relative">
-                        <Search className="w-3.5 h-3.5 text-gray-400 absolute left-4" />
-                        <input
-                          autoFocus
-                          type="text"
-                          placeholder="Name suchen..."
-                          value={logisticsSearchTerm}
-                          onChange={(e) => setLogisticsSearchTerm(e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          autoComplete="new-password"
-                          autoCapitalize="none"
-                          autoCorrect="off"
-                          spellCheck={false}
-                          className="w-full pl-7 pr-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
-                      <div className="max-h-48 overflow-y-auto p-1 custom-scrollbar">
-                        {filteredLogisticsHelpers.length === 0 ? (
-                          <div className="p-3 text-center text-xs text-gray-500">Keine Spieler gefunden.</div>
-                        ) : (
-                          filteredLogisticsHelpers.map(h => (
-                            <button
-                              key={h.id}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleLogisticsAction(event.uid, type, 'add', h.id);
-                                setOpenLogisticsPicker(null);
-                              }}
-                              className="w-full text-left px-2 py-1.5 text-xs text-gray-800 hover:bg-blue-50 hover:text-blue-700 rounded transition-colors flex items-center justify-between"
-                            >
-                              <span className="font-medium truncate">{h.name}</span>
-                              {h.alias && <span className="text-[10px] text-gray-400 ml-2 shrink-0">{h.alias}</span>}
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            ) : (
-              myHelperId && !ids.includes(myHelperId) && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (window.confirm(`Möchtest du dich verbindlich als ${roleName} eintragen?`)) {
-                      handleLogisticsAction(event.uid, type, 'add', myHelperId);
-                    }
-                  }}
-                  className="text-[14px] leading-none font-bold bg-white border border-dashed border-gray-300 text-gray-500 rounded w-6 h-6 flex items-center justify-center hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
-                  title="Dienst verbindlich übernehmen (Ich)"
-                >
-                  +
-                </button>
-              )
-            )
-          )}
-          
-          {ids.length === 0 && isReadOnly && (!myHelperId || ids.includes(myHelperId)) && (
-             <span className="text-[10px] text-gray-400 italic py-0.5">Noch offen</span>
-          )}
-
-          {/* Abfahrtszeit Input & Google Maps Link */}
-          {type === 'fahrerHelperIds' && (ids.length > 0 || !isReadOnly) && (
-            <div className="flex items-center ml-1 border-l border-gray-200/60 pl-1 shrink-0 gap-1">
-               <Clock className="w-3 h-3 text-gray-400" />
-               <input
-                 type="time"
-                 lang="de-DE"
-                 value={currentDepartureTime}
-                 onChange={(e) => handleDepartureTimeChange(event.uid, e.target.value)}
-                 disabled={isReadOnly || isPast}
-                 className={`text-[11px] font-bold p-0.5 rounded border shadow-sm outline-none transition-colors ${isReadOnly || isPast ? 'bg-transparent border-transparent text-gray-600' : 'bg-white border-gray-300 text-gray-900 hover:border-gray-400 focus:border-blue-500 cursor-pointer'}`}
-                 title="Abfahrtszeit"
-               />
-               {!isHomeGame && event.location && (
-                 <a 
-                   href={`https://www.google.com/maps/dir/?api=1${team.homeArenaAddress ? `&origin=${encodeURIComponent(team.homeArenaAddress)}` : ''}&destination=${encodeURIComponent(event.location)}`}
-                   target="_blank"
-                   rel="noopener noreferrer"
-                   title="Fahrzeit in Google Maps berechnen (Start: Heimhalle / Treffpunkt)"
-                   className="p-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 transition-colors"
-                 >
-                   <Map className="w-3 h-3" />
-                 </a>
-               )}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
+  // --- GEHIRN (DATEN & STATE) ---
+  const matrixData = useMatchLineupMatrix(team, focusedEventId, isReadOnly);
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-0 md:p-4">
       <div className="bg-white rounded-none md:rounded-xl shadow-2xl w-full max-w-7xl overflow-hidden flex flex-col h-full md:max-h-[90vh]">
         
-        {/* Header - CHIRURGISCHER EINGRIFF: hidden md:block entfernt, X ist immer sichtbar */}
+        {/* HEADER */}
         <div className="p-4 border-b border-gray-200 flex flex-row items-start justify-between bg-gray-50 shrink-0 gap-4">
           <div className="flex-1">
             <h2 className="text-lg font-bold text-gray-900 flex items-center flex-wrap gap-2">
@@ -541,25 +39,25 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                 ? (isReadOnly ? 'Kader-Übersicht' : 'Aufstellung ändern') 
                 : (isReadOnly ? `Saison-Übersicht: ${team.name}` : `Saison-Planung: ${team.name}`)}
             </h2>
-            {linkedSubscription && (
-              <p className="text-xs text-gray-500 mt-1 line-clamp-1">Team: {team.name} | Abo: {linkedSubscription.name}</p>
+            {matrixData.linkedSubscription && (
+              <p className="text-xs text-gray-500 mt-1 line-clamp-1">Team: {team.name} | Abo: {matrixData.linkedSubscription.name}</p>
             )}
           </div>
           
           <div className="flex items-center gap-3 shrink-0">
-            {!isReadOnly && linkedSubscription && (
+            {!isReadOnly && matrixData.linkedSubscription && (
               <div className="relative hidden sm:block">
                 <button 
-                  onClick={() => setIsJokerMenuOpen(!isJokerMenuOpen)}
+                  onClick={() => matrixData.setIsJokerMenuOpen(!matrixData.isJokerMenuOpen)}
                   className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-bold text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
                 >
                   <UserPlus className="w-4 h-4 text-blue-600" />
                   + Weiterer Spieler
                 </button>
                 
-                {isJokerMenuOpen && (
+                {matrixData.isJokerMenuOpen && (
                   <>
-                    <div className="fixed inset-0 z-40" onClick={() => setIsJokerMenuOpen(false)}></div>
+                    <div className="fixed inset-0 z-40" onClick={() => matrixData.setIsJokerMenuOpen(false)}></div>
                     <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden flex flex-col">
                       <div className="p-3 border-b border-gray-100 bg-gray-50 flex items-center relative">
                         <Search className="w-4 h-4 text-gray-400 absolute left-5" />
@@ -567,8 +65,8 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                           autoFocus
                           type="text"
                           placeholder="Name suchen..."
-                          value={jokerSearchTerm}
-                          onChange={(e) => setJokerSearchTerm(e.target.value)}
+                          value={matrixData.jokerSearchTerm}
+                          onChange={(e) => matrixData.setJokerSearchTerm(e.target.value)}
                           autoComplete="new-password"
                           autoCapitalize="none"
                           autoCorrect="off"
@@ -577,13 +75,13 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                         />
                       </div>
                       <div className="max-h-60 overflow-y-auto p-1">
-                        {availableJokers.length === 0 ? (
+                        {matrixData.availableJokers.length === 0 ? (
                           <div className="p-4 text-center text-sm text-gray-500">Keine Spieler gefunden.</div>
                         ) : (
-                          availableJokers.map(j => (
+                          matrixData.availableJokers.map(j => (
                             <button
                               key={j.id}
-                              onClick={() => handleAddJoker(j.id)}
+                              onClick={() => matrixData.handleAddJoker(j.id)}
                               className="w-full text-left px-3 py-2 text-sm text-gray-800 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors flex items-center justify-between"
                             >
                               <span className="font-medium">{j.name}</span>
@@ -597,27 +95,26 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                 )}
               </div>
             )}
-            {/* Der Schließen-Button ist jetzt auch auf Mobile da */}
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 bg-white p-1.5 rounded-full shadow-sm border border-gray-200 shrink-0">
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* Mobile Action Bar (Joker Button für kleine Bildschirme) */}
-        {!isReadOnly && linkedSubscription && (
+        {/* MOBILE ACTION BAR (Joker) */}
+        {!isReadOnly && matrixData.linkedSubscription && (
           <div className="sm:hidden p-3 bg-white border-b border-gray-200 flex justify-end relative z-40">
              <button 
-                onClick={() => setIsJokerMenuOpen(!isJokerMenuOpen)}
+                onClick={() => matrixData.setIsJokerMenuOpen(!matrixData.isJokerMenuOpen)}
                 className="flex w-full justify-center items-center gap-2 px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm font-bold text-gray-700 shadow-sm transition-colors"
               >
                 <UserPlus className="w-4 h-4 text-blue-600" />
-                + Weiteren Spieler zur Tabelle hinzufügen
+                + Weiteren Spieler hinzufügen
               </button>
               
-              {isJokerMenuOpen && (
+              {matrixData.isJokerMenuOpen && (
                 <>
-                  <div className="fixed inset-0 z-40" onClick={() => setIsJokerMenuOpen(false)}></div>
+                  <div className="fixed inset-0 z-40" onClick={() => matrixData.setIsJokerMenuOpen(false)}></div>
                   <div className="absolute left-3 right-3 top-full mt-2 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden flex flex-col">
                     <div className="p-3 border-b border-gray-100 bg-gray-50 flex items-center relative">
                       <Search className="w-4 h-4 text-gray-400 absolute left-5" />
@@ -625,14 +122,14 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                         autoFocus
                         type="text"
                         placeholder="Name suchen..."
-                        value={jokerSearchTerm}
-                        onChange={(e) => setJokerSearchTerm(e.target.value)}
+                        value={matrixData.jokerSearchTerm}
+                        onChange={(e) => matrixData.setJokerSearchTerm(e.target.value)}
                         className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg outline-none"
                       />
                     </div>
                     <div className="max-h-60 overflow-y-auto p-1">
-                      {availableJokers.map(j => (
-                        <button key={j.id} onClick={() => handleAddJoker(j.id)} className="w-full text-left px-3 py-3 text-sm text-gray-800 hover:bg-blue-50 border-b border-gray-100 last:border-0 font-medium">
+                      {matrixData.availableJokers.map(j => (
+                        <button key={j.id} onClick={() => matrixData.handleAddJoker(j.id)} className="w-full text-left px-3 py-3 text-sm text-gray-800 hover:bg-blue-50 border-b border-gray-100 last:border-0 font-medium">
                           {j.name}
                         </button>
                       ))}
@@ -643,9 +140,9 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
           </div>
         )}
 
-        {/* Body Container */}
+        {/* BODY CONTAINER */}
         <div className="flex-1 overflow-auto bg-gray-50 relative">
-          {!linkedSubscription ? (
+          {!matrixData.linkedSubscription ? (
             <div className="p-10 text-center text-gray-500 flex flex-col items-center justify-center h-full">
               <CalendarIcon className="w-12 h-12 text-gray-300 mb-3" />
               <h3 className="text-lg font-bold text-gray-900 mb-2">Kein Kalender-Abo gefunden</h3>
@@ -654,209 +151,41 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                 das Team "{team.name}" als Erinnerungs-Empfänger hinterlegt sein.
               </p>
             </div>
-          ) : events.length === 0 ? (
+          ) : matrixData.events.length === 0 ? (
             <div className="p-10 text-center text-gray-500 flex flex-col items-center justify-center h-full">
               Keine Termine im verknüpften Kalender gefunden.
             </div>
           ) : (
-            <table className="w-full border-separate border-spacing-0 bg-white">
-              <thead>
-                <tr>
-                  <th className="sticky top-0 left-0 z-30 bg-gray-100 border-b-2 border-r-2 border-gray-200 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider w-[240px] sm:w-[280px] shadow-[1px_1px_0px_0px_#e5e7eb]">
-                    Termin / Spiel
-                  </th>
-                  {displayMembers.map(({ helper: m, category }) => {
-                    const gameCount = playerGameCounts[m.id] || 0;
-                    return (
-                    <th key={m.id} className={`sticky top-0 z-20 bg-gray-100 border-b-2 border-b-gray-200 border-r border-gray-100 px-2 py-3 text-center text-[10px] font-bold uppercase tracking-wider min-w-[75px] shadow-[0px_1px_0px_0px_#e5e7eb] ${m.id === myHelperId ? 'text-blue-700 bg-blue-50/50' : 'text-gray-600'}`}>
-                      <div className="truncate px-1" title={m.name}>{m.alias || m.name.split(' ')[0]}</div>
-                      {/* CHIRURGISCHER EINGRIFF: Spiele Zähler integriert */}
-                      <div className="mt-1 flex flex-col items-center gap-0.5">
-                        <span className="text-[9px] bg-gray-200/80 text-gray-600 px-1.5 py-0.5 rounded-full lowercase font-medium tracking-normal" title={`${gameCount} Nominierungen`}>
-                          {gameCount} sp.
-                        </span>
-                        {category === 'STAMM' && <div className="text-[8px] text-green-600 font-extrabold mt-0.5">Stamm</div>}
-                        {category === 'KADER' && <div className="text-[8px] text-blue-600 font-extrabold mt-0.5">Bank</div>}
-                        {category === 'EXTERN' && <div className="text-[8px] text-orange-500 font-extrabold mt-0.5">Extern</div>}
-                      </div>
-                    </th>
-                  )})}
-                </tr>
-              </thead>
-              <tbody>
-                {events.map((event) => {
-                  const eventDate = new Date(event.startTime);
-                  const isPast = event.startTime < Date.now();
-                  
-                  const safeEventId = sanitizeId(event.uid);
-                  const isFocusedRow = focusedEventId === safeEventId;
-                  const isPickerOpenInThisRow = openLogisticsPicker?.startsWith(safeEventId);
-                  
-                  const storeLineup = matchLineups.find(m => m.id === safeEventId);
-                  const hasLocalOverride = localOverrides[safeEventId] !== undefined;
-                  
-                  let activePlayers: string[] = [];
-                  let isOverride = false;
-
-                  if (hasLocalOverride) {
-                    activePlayers = localOverrides[safeEventId];
-                    isOverride = true; 
-                  } else if (storeLineup) {
-                    activePlayers = storeLineup.lineupHelperIds;
-                    isOverride = true; 
-                  } else {
-                    activePlayers = team.defaultLineupHelperIds || [];
-                  }
-
-                  const leadDays = team.lineupFreezeLeadDays !== undefined ? team.lineupFreezeLeadDays : 7;
-                  const msPerDay = 1000 * 60 * 60 * 24;
-                  const daysUntil = (event.startTime - Date.now()) / msPerDay;
-                  const isAutoFrozen = leadDays > 0 && daysUntil <= leadDays && daysUntil >= -1;
-                  
-                  const isManuallyLocked = localLockOverrides[safeEventId] !== undefined ? localLockOverrides[safeEventId] : (storeLineup?.isLocked === true);
-                  const isFrozen = isManuallyLocked || isAutoFrozen;
-                  
-                  const rowBg = isFocusedRow ? 'bg-blue-50/80' : (isPast ? 'bg-gray-100' : 'bg-white');
-                  const borderClasses = isFocusedRow ? 'border-b-4 border-t-4 border-blue-500 z-10 relative' : 'border-b border-gray-200';
-                  
-                  // CHIRURGISCHER EINGRIFF: Wochentag (short weekday) zum Datum hinzugefügt
-                  const shortDate = eventDate.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
-                  const shortTime = eventDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', hour12: false });
-
-                  return (
-                    <tr key={event.uid} className={`group ${isFocusedRow ? 'bg-blue-50' : (isPast ? 'hover:bg-gray-200' : 'hover:bg-blue-50/40')} transition-colors`}>
-                      
-                      <td className={`sticky left-0 ${isPickerOpenInThisRow ? 'z-50' : 'z-10'} ${rowBg} group-hover:bg-inherit ${borderClasses} border-r-2 px-4 py-3 w-[240px] sm:w-[280px] align-middle shadow-[1px_0px_0px_0px_#e5e7eb]`}>
-                        <div className="flex flex-col whitespace-normal h-full">
-                          {isFocusedRow && (
-                            <span className="text-[9px] font-bold text-blue-700 bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded uppercase tracking-wider mb-1.5 w-max">
-                              Ausgewähltes Spiel
-                            </span>
-                          )}
-                          <span className={`font-bold text-sm line-clamp-2 leading-snug ${isPast ? 'text-gray-500' : 'text-gray-900'}`} title={event.title}>
-                            {isPast && !isFocusedRow && <Lock className="w-3 h-3 text-gray-400 inline-block shrink-0 mr-1.5 -mt-0.5" />}
-                            {event.title}
-                          </span>
-                          <div className="flex flex-wrap items-center gap-2 mt-2">
-                            <span className="text-[11px] font-medium text-gray-500">
-                              {shortDate} • {shortTime} Uhr
-                            </span>
-                            <span className={`flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded border ${isOverride ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`} title={`${activePlayers.length} Spieler eingeteilt`}>
-                              <Users className="w-3 h-3" /> {activePlayers.length}
-                            </span>
-                            
-                            {!isReadOnly && (!isPast || isFocusedRow) ? (
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); handleToggleLock(event.uid, !isManuallyLocked); }}
-                                className={`flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
-                                  isManuallyLocked ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' :
-                                  isAutoFrozen ? 'bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200' :
-                                  'bg-white text-gray-400 border-gray-200 hover:bg-gray-50 hover:text-gray-600'
-                                }`}
-                                title={isAutoFrozen ? `Auto-Freeze aktiv (${leadDays} Tage). Klick für manuelles Siegel.` : 'Kader manuell versiegeln (Sperre)'}
-                              >
-                                {isFrozen ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                                {isFrozen ? 'Versiegelt' : 'Offen'}
-                              </button>
-                            ) : (
-                              isFrozen && (
-                                <span className="flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded border bg-gray-100 text-gray-600 border-gray-300">
-                                  <Lock className="w-3 h-3" /> Versiegelt
-                                </span>
-                              )
-                            )}
-                          </div>
-
-                          {/* LOGISTIK-BLOCK */}
-                          {(team.requiresFahrer || team.requiresBetreuer) && (
-                            <div className="mt-3 pt-2.5 border-t border-gray-200/60 flex flex-col gap-2">
-                              {team.requiresBetreuer && renderLogistics('betreuerHelperIds', '🧑‍🏫 Betreuer', event)}
-                              {team.requiresFahrer && renderLogistics('fahrerHelperIds', '🚗 Fahrer', event)}
-                            </div>
-                          )}
-
-                        </div>
-                      </td>
-                      
-                      {displayMembers.map(({ helper: m, category }) => {
-                        const isPlaying = activePlayers.includes(m.id);
-                        const isMyColumn = m.id === myHelperId;
-                        
-                        let checkColor = 'text-blue-600';
-                        if (isOverride) checkColor = 'text-orange-500';
-                        else if (category === 'STAMM') checkColor = 'text-green-600';
-
-                        const avail = localAvailOverrides[safeEventId]?.[m.id] || storeLineup?.availabilities?.[m.id] || 'UNKNOWN';
-                        const isSetByMF = localSetByMFOverrides[safeEventId]?.[m.id] !== undefined 
-                            ? localSetByMFOverrides[safeEventId]?.[m.id] 
-                            : (storeLineup?.isSetByMF?.[m.id] || false);
-
-                        let availBgClass = isFocusedRow ? 'bg-blue-50/50' : (isPast ? 'bg-gray-100' : 'bg-white');
-                        if (avail === 'AVAILABLE') availBgClass = 'bg-green-100/60';
-                        if (avail === 'UNAVAILABLE') availBgClass = 'bg-red-100/60';
-
-                        const stripedStyle = (isSetByMF && avail !== 'UNKNOWN') ? {
-                            backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.6), rgba(255,255,255,0.6) 6px, transparent 6px, transparent 12px)'
-                        } : undefined;
-
-                        const canEditAvail = (isMyColumn || !isReadOnly) && (!isPast || isFocusedRow);
-                        
-                        let tooltipText = "";
-                        if (canEditAvail) tooltipText = isMyColumn ? "Klicken, um deine eigene Verfügbarkeit zu ändern (Da / Weg / ?)" : "Klicken, um die Verfügbarkeit als Mannschaftsführer zu überschreiben";
-                        else if (isSetByMF) tooltipText = "Status wurde manuell vom Mannschaftsführer gesetzt";
-
-                        return (
-                          <td 
-                            key={m.id} 
-                            className={`relative p-0 align-middle ${borderClasses} border-r border-gray-100 transition-colors ${availBgClass} ${
-                              canEditAvail ? 'cursor-pointer hover:brightness-95 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.1)]' : ''
-                            }`}
-                            style={stripedStyle}
-                            onClick={() => {
-                              if (canEditAvail) {
-                                handleToggleAvailability(event.uid, m.id, isPlaying, isFrozen);
-                              }
-                            }}
-                            title={tooltipText}
-                          >
-                            <div className="w-full h-full min-h-[60px] flex flex-col items-center justify-center relative pt-2 pb-4">
-                              <button
-                                type="button"
-                                disabled={isReadOnly || (isPast && !isFocusedRow)}
-                                onClick={(e) => {
-                                  e.stopPropagation(); 
-                                  if (!isReadOnly && (!isPast || isFocusedRow)) {
-                                    handleTogglePlayer(event.uid, m.id, activePlayers);
-                                  }
-                                }}
-                                className={`p-1.5 rounded-md z-10 ${!isReadOnly && (!isPast || isFocusedRow) ? 'cursor-pointer hover:bg-black/5' : 'cursor-default'}`}
-                                title={!isReadOnly ? "Kader-Nominierung setzen/entfernen" : ""}
-                              >
-                                {isPlaying ? (
-                                  <CheckSquare className={`w-5 h-5 pointer-events-none ${checkColor}`} />
-                                ) : (
-                                  <Square className={`w-5 h-5 pointer-events-none ${isReadOnly ? 'text-gray-200' : 'text-gray-300 group-hover:text-gray-400'}`} />
-                                )}
-                              </button>
-
-                              <div className="absolute bottom-1 w-full text-center pointer-events-none">
-                                {avail === 'AVAILABLE' && <span className="text-[9px] font-extrabold text-green-800">DA</span>}
-                                {avail === 'UNAVAILABLE' && <span className="text-[9px] font-extrabold text-red-800">WEG</span>}
-                                {avail === 'UNKNOWN' && isMyColumn && <span className="text-[9px] font-bold text-gray-400">?</span>}
-                              </div>
-                            </div>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <MatchLineupMatrixTable 
+              team={team}
+              focusedEventId={focusedEventId}
+              isReadOnly={isReadOnly}
+              events={matrixData.events}
+              displayMembers={matrixData.displayMembers}
+              playerGameCounts={matrixData.playerGameCounts}
+              myHelperId={matrixData.myHelperId}
+              matchLineups={matrixData.matchLineups}
+              localOverrides={matrixData.localOverrides}
+              localAvailOverrides={matrixData.localAvailOverrides}
+              localLockOverrides={matrixData.localLockOverrides}
+              localSetByMFOverrides={matrixData.localSetByMFOverrides}
+              localLogisticsOverrides={matrixData.localLogisticsOverrides}
+              openLogisticsPicker={matrixData.openLogisticsPicker}
+              setOpenLogisticsPicker={matrixData.setOpenLogisticsPicker}
+              logisticsSearchTerm={matrixData.logisticsSearchTerm}
+              setLogisticsSearchTerm={matrixData.setLogisticsSearchTerm}
+              sortedAllHelpers={matrixData.sortedAllHelpers}
+              filteredLogisticsHelpers={matrixData.filteredLogisticsHelpers}
+              onTogglePlayer={matrixData.handleTogglePlayer}
+              onToggleAvailability={matrixData.handleToggleAvailability}
+              onToggleLock={matrixData.handleToggleLock}
+              onLogisticsAction={matrixData.handleLogisticsAction}
+              onDepartureTimeChange={matrixData.handleDepartureTimeChange}
+            />
           )}
         </div>
         
-        {/* Footer */}
+        {/* FOOTER */}
         <div className="p-4 border-t border-gray-200 bg-white flex justify-end shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] relative z-40">
           <button 
             onClick={onClose} 
