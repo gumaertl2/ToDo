@@ -1,3 +1,4 @@
+// [2026-10-12] - BUGFIX: Vergangenheits-Filter (todayStart <= eventDateStart) in pendingWhatsAppReminders nachgerüstet, um Diskrepanzen zur RemindersView/Navigation zu verhindern.
 // [2026-10-12] - REFACTOR: Dashboard Daten-Logik (Events, ToDos, Dienste, Sitzungen) aus WelcomeDashboard in Custom Hook ausgelagert.
 // src/features/Dashboard/hooks/useDashboardData.ts
 import { useMemo, useCallback } from 'react';
@@ -332,7 +333,7 @@ export const useDashboardData = (
           const eventStart = new Date(ce.startTime);
           const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
           const stichtag = eventDateStart - (ce.reminderLeadDays * MS_PER_DAY);
-          if (todayStart >= stichtag) count++;
+          if (todayStart >= stichtag && todayStart <= eventDateStart) count++;
         }
       });
     }
@@ -357,7 +358,7 @@ export const useDashboardData = (
           const taskDue = new Date(t.dueDate);
           const taskDateStart = new Date(taskDue.getFullYear(), taskDue.getMonth(), taskDue.getDate()).getTime();
           const stichtag = taskDateStart - (t.reminderLeadDays * MS_PER_DAY);
-          if (todayStart >= stichtag) count++;
+          if (todayStart >= stichtag && todayStart <= taskDateStart) count++;
         }
       });
     }
@@ -371,7 +372,7 @@ export const useDashboardData = (
           const eventStart = new Date(ev.plannedStartTime);
           const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
           const stichtag = eventDateStart - (ev.reminderLeadDays * MS_PER_DAY);
-          if (todayStart >= stichtag) count++;
+          if (todayStart >= stichtag && todayStart <= eventDateStart) count++;
         }
       });
     }
@@ -384,7 +385,7 @@ export const useDashboardData = (
               const eventStart = new Date(cachedEv.startTime);
               const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
               const stichtag = eventDateStart - (sub.reminderLeadDays! * MS_PER_DAY);
-              if (todayStart >= stichtag) count++;
+              if (todayStart >= stichtag && todayStart <= eventDateStart) count++;
             }
           });
         }
