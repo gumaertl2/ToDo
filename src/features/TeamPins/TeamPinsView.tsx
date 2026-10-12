@@ -1,3 +1,5 @@
+// [2026-10-12] - FEATURE: Zentralen Ranglisten-Link (global_ranking) als separaten, leicht zugänglichen Bereich für alle Nutzer ganz oben eingebaut.
+// [2026-10-12] - REFACTOR: Individuelles 'rankingUrl' Feld aus der Mannschafts-Maske entfernt, um doppelte Pflege zu vermeiden (SSOT).
 // [2026-08-12] - UX-FIX: URL-Felder (Portal-Links) für click-tt / nuLiga komplett aus dem Formular und der Ansicht entfernt, um tote Links und UX-Frust zu vermeiden.
 // [2026-07-24] - ARCHITECTURE-FIX: Build-Error (TS2339) behoben. Sichtbarkeitsprüfung für `assignedTeamIds` umgedreht, da die Team-Zugehörigkeit im Helper-Modell (`teamIds`) und nicht im Team-Modell gespeichert wird.
 // [2026-07-24] - ARCHITECTURE-FIX: Team-PINs nutzen nun dynamische `assignedTeamIds` anstelle von statisch aufgelösten Helfern (SSOT), sodass Team-Änderungen sofort live greifen.
@@ -12,7 +14,7 @@
 // src/features/TeamPins/TeamPinsView.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import { Key, Plus, Minus, Edit2, Trash2, Copy, Check, X, Save, Users, ShieldAlert } from 'lucide-react';
+import { Key, Plus, Minus, Edit2, Trash2, Copy, Check, X, Save, Users, ShieldAlert, Link as LinkIcon, Trophy } from 'lucide-react';
 import type { TeamPin } from '../../core/types/models';
 import { SmartEntityPicker } from '../Shared/components/SmartEntityPicker';
 
@@ -29,6 +31,10 @@ export const TeamPinsView: React.FC = () => {
   
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
 
+  // States für den globalen Ranking-Link
+  const [isEditingGlobal, setIsEditingGlobal] = useState(false);
+  const [editGlobalUrl, setEditGlobalUrl] = useState('');
+
   useEffect(() => {
     fetchTeamPins();
   }, [fetchTeamPins]);
@@ -40,9 +46,17 @@ export const TeamPinsView: React.FC = () => {
 
   const canManage = !!currentProfile.permissions?.manageTeamPins || !!user?.permissions?.manageTeamPins;
 
+  // Der spezielle Eintrag für den globalen Link
+  const globalRankingPin = useMemo(() => {
+    return teamPins.find(p => p.id === 'global_ranking');
+  }, [teamPins]);
+
   // Filter-Logik: Eigene vs. Alle (User & Helfer & Dynamische Teams)
   const visiblePins = useMemo(() => {
-    if (showAll && canManage) return teamPins;
+    // Globale Rangliste aus dem normalen Akkordeon herausfiltern
+    const regularPins = teamPins.filter(p => p.id !== 'global_ranking');
+
+    if (showAll && canManage) return regularPins;
     
     // Wir suchen das Helper-Profil des aktuell eingeloggten Users
     const currentUserHelper = helpers.find(h => h.email?.toLowerCase() === user?.email?.toLowerCase());
@@ -51,7 +65,7 @@ export const TeamPinsView: React.FC = () => {
     // Die Teams, in denen der aktuelle User Mitglied ist (aus seinem Helper-Profil gelesen)
     const currentUserTeamIds = currentUserHelper?.teamIds || [];
 
-    return teamPins.filter(pin => 
+    return regularPins.filter(pin => 
       (pin.assignedUserIds && pin.assignedUserIds.includes(user?.id || '')) || 
       (currentUserHelperId && pin.assignedHelperIds?.includes(currentUserHelperId)) ||
       (pin.assignedTeamIds && pin.assignedTeamIds.some(teamId => currentUserTeamIds.includes(teamId)))
@@ -94,13 +108,29 @@ export const TeamPinsView: React.FC = () => {
     }
   };
 
+  const handleSaveGlobalRanking = async () => {
+    const pin: TeamPin = globalRankingPin || {
+      id: 'global_ranking',
+      schemaVersion: '1.0',
+      teamName: 'Zentrale Vereins-Rangliste',
+      signaturePinsText: '',
+      gameEntryPinsText: '',
+      assignedUserIds: [],
+      assignedGroupIds: [],
+      assignedHelperIds: [],
+      assignedTeamIds: []
+    };
+    pin.rankingUrl = editGlobalUrl;
+    await saveTeamPin(pin);
+    setIsEditingGlobal(false);
+  };
+
   const toggleExpand = (id: string) => {
     setExpandedIds(prev => 
       prev.includes(id) ? prev.filter(pinId => pinId !== id) : [...prev, id]
     );
   };
 
-  // CHIRURGISCHER EINGRIFF: URL-Logik komplett entfernt
   const renderCodeBox = (title: string, text: string, boxId: string) => {
     if (!text) return null;
     
@@ -161,6 +191,58 @@ export const TeamPinsView: React.FC = () => {
         )}
       </div>
 
+      {/* GLOBALE RANGLISTE */}
+      <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-orange-100 p-2.5 rounded-xl">
+              <Trophy className="w-6 h-6 text-orange-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Vereins-Spielplan & Tabelle</h2>
+              <p className="text-xs text-gray-500">Zentrale Rangliste für alle Mannschaften</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {globalRankingPin?.rankingUrl && !isEditingGlobal && (
+              <a 
+                href={globalRankingPin.rankingUrl} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="flex items-center justify-center text-sm font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 px-5 py-2.5 rounded-xl transition-colors border border-blue-200"
+              >
+                Tabelle öffnen <LinkIcon className="w-4 h-4 ml-2" />
+              </a>
+            )}
+            {canManage && !isEditingGlobal && (
+              <button onClick={() => { setEditGlobalUrl(globalRankingPin?.rankingUrl || ''); setIsEditingGlobal(true); }} className="p-2.5 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 rounded-xl transition-colors border border-gray-200" title="Link bearbeiten">
+                <Edit2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {isEditingGlobal && canManage && (
+          <div className="flex flex-col sm:flex-row gap-2 mt-2 pt-4 border-t border-gray-100">
+            <input 
+              type="url" 
+              value={editGlobalUrl}
+              onChange={e => setEditGlobalUrl(e.target.value)}
+              placeholder="Link zu click-tt oder nuLiga einfügen..."
+              className="flex-1 border border-gray-300 rounded-xl p-2.5 text-sm focus:border-blue-500 outline-none bg-gray-50"
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setIsEditingGlobal(false)} className="px-4 py-2.5 text-gray-600 hover:bg-gray-100 rounded-xl font-bold transition-colors text-sm">
+                Abbrechen
+              </button>
+              <button onClick={handleSaveGlobalRanking} className="px-4 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-sm text-sm">
+                Speichern
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* LISTE (Akkordeon) */}
       {visiblePins.length === 0 ? (
         <div className="bg-white p-12 rounded-2xl shadow-sm border border-gray-100 text-center flex flex-col items-center">
@@ -189,22 +271,23 @@ export const TeamPinsView: React.FC = () => {
                       {pin.teamName}
                     </h2>
                   </div>
-                  {canManage && (
-                    <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                      <button onClick={() => openForm(pin)} className="p-2 bg-gray-600 hover:bg-gray-500 rounded-lg transition-colors" title="Bearbeiten">
-                        <Edit2 className="w-4 h-4 text-gray-200" />
-                      </button>
-                      <button onClick={() => handleDelete(pin.id, pin.teamName)} className="p-2 bg-red-900/50 hover:bg-red-800/80 rounded-lg transition-colors" title="Löschen">
-                        <Trash2 className="w-4 h-4 text-red-400" />
-                      </button>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-3">
+                    {canManage && (
+                      <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => openForm(pin)} className="p-2 bg-gray-600 hover:bg-gray-500 rounded-lg transition-colors" title="Bearbeiten">
+                          <Edit2 className="w-4 h-4 text-gray-200" />
+                        </button>
+                        <button onClick={() => handleDelete(pin.id, pin.teamName)} className="p-2 bg-red-900/50 hover:bg-red-800/80 rounded-lg transition-colors" title="Löschen">
+                          <Trash2 className="w-4 h-4 text-red-400" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Card Body */}
                 {isExpanded && (
                   <div className="p-5 flex-1 flex flex-col border-t border-gray-700">
-                    {/* CHIRURGISCHER EINGRIFF: URL-Übergabe entfernt */}
                     {renderCodeBox("Spiel-Codes (nuScore)", pin.gameEntryPinsText, `${pin.id}-game`)}
                     {renderCodeBox("Unterschriften-PINs", pin.signaturePinsText, `${pin.id}-sig`)}
                     

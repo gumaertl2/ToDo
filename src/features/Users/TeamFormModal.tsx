@@ -1,3 +1,4 @@
+// [2026-10-12] - FEATURE: Feld 'homeArenaAddress' (Heimhalle / Startort) in der Logistik-Sektion hinzugefügt.
 // [2026-10-09] - FEATURE: Logistik-Konfiguration (requiresBetreuer, requiresFahrer) für Teams hinzugefügt.
 // [2026-10-08] - SEC-FIX: Rechteprüfung für 'Name ändern' robuster gemacht. Nutzt nun auch roleProfiles aus dem Store und erlaubt Umbenennung bei Neuanlage.
 // [2026-10-08] - SEC-FEATURE: Feld "Name" im TeamFormModal für Mannschaftsführer gesperrt (Role-Based Access). Nur Admins dürfen umbenennen.
@@ -6,7 +7,7 @@
 // [2026-05-15] - FEATURE: Option B - TeamFormModal (Eingabefenster für die Team-Verwaltung)
 // src/features/Users/TeamFormModal.tsx
 import React, { useState, useEffect } from 'react';
-import { X, Save, Lock, MessageCircle, Truck } from 'lucide-react';
+import { X, Save, Lock, MessageCircle, Truck, MapPin } from 'lucide-react';
 import { useClubStore } from '../../store/useClubStore';
 import type { Team } from '../../core/types/models';
 
@@ -36,9 +37,10 @@ export const TeamFormModal: React.FC<TeamFormModalProps> = ({ onClose, existingT
   const [freezeDays, setFreezeDays] = useState<number>(7);
   const [lockMessage, setLockMessage] = useState("🔒 Du bist für dieses Spiel fest aufgestellt und die Planung ist bereits versiegelt! Bei kurzfristigen Ausfällen kontaktiere bitte sofort deinen Mannschaftsführer und sag ihm wer für Dich spielt. Tipp: Schau hier in der Matrix nach, wer an dem Tag 'grün' (verfügbar) ist und kläre es ab!");
 
-  // NEU: Logistik-Konfiguration
+  // Logistik-Konfiguration
   const [requiresBetreuer, setRequiresBetreuer] = useState(false);
   const [requiresFahrer, setRequiresFahrer] = useState(false);
+  const [homeArenaAddress, setHomeArenaAddress] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +55,7 @@ export const TeamFormModal: React.FC<TeamFormModalProps> = ({ onClose, existingT
       // Logistik übernehmen
       setRequiresBetreuer(existingTeam.requiresBetreuer || false);
       setRequiresFahrer(existingTeam.requiresFahrer || false);
+      setHomeArenaAddress(existingTeam.homeArenaAddress || '');
     }
   }, [existingTeam]);
 
@@ -75,7 +78,8 @@ export const TeamFormModal: React.FC<TeamFormModalProps> = ({ onClose, existingT
         lineupFreezeLeadDays: freezeDays,
         lineupLockMessage: lockMessage.trim(),
         requiresBetreuer,
-        requiresFahrer
+        requiresFahrer,
+        homeArenaAddress: homeArenaAddress.trim()
       });
     } else {
       // Neu anlegen
@@ -84,7 +88,8 @@ export const TeamFormModal: React.FC<TeamFormModalProps> = ({ onClose, existingT
         lineupFreezeLeadDays: freezeDays,
         lineupLockMessage: lockMessage.trim(),
         requiresBetreuer,
-        requiresFahrer
+        requiresFahrer,
+        homeArenaAddress: homeArenaAddress.trim()
       });
     }
 
@@ -161,7 +166,7 @@ export const TeamFormModal: React.FC<TeamFormModalProps> = ({ onClose, existingT
                 </div>
                 <div className="ml-3 text-sm">
                   <span className="font-bold text-gray-900 group-hover:text-amber-700 transition-colors">Betreuer-Dienste aktivieren</span>
-                  <p className="text-xs text-gray-500 leading-snug mt-0.5">Blendet im Saisonplaner und in den Kalender-Details eine Funktion ein, um Betreuer für die Spiele dieses Teams einzuteilen.</p>
+                  <p className="text-xs text-gray-500 leading-snug mt-0.5">Blendet im Saisonplaner eine Funktion ein, um Betreuer einzuteilen.</p>
                 </div>
               </label>
 
@@ -176,9 +181,28 @@ export const TeamFormModal: React.FC<TeamFormModalProps> = ({ onClose, existingT
                 </div>
                 <div className="ml-3 text-sm">
                   <span className="font-bold text-gray-900 group-hover:text-amber-700 transition-colors">Fahrer-Dienste aktivieren</span>
-                  <p className="text-xs text-gray-500 leading-snug mt-0.5">Erlaubt das Zuweisen von Fahrern für Auswärtsspiele dieses Teams.</p>
+                  <p className="text-xs text-gray-500 leading-snug mt-0.5">Erlaubt das Zuweisen von Fahrern für Auswärtsspiele.</p>
                 </div>
               </label>
+
+              {/* NEU: Heimhalle / Startort für Google Maps */}
+              {requiresFahrer && (
+                <div className="mt-4 pt-3 border-t border-amber-200/50">
+                  <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center">
+                    <MapPin className="w-3.5 h-3.5 mr-1" /> Heimhalle / Startort (für Abfahrts-Routen)
+                  </label>
+                  <input
+                    type="text"
+                    value={homeArenaAddress}
+                    onChange={(e) => setHomeArenaAddress(e.target.value)}
+                    placeholder="z.B. Martin-Buber-Straße 3, Maisach"
+                    className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm"
+                  />
+                  <p className="mt-1 text-[10px] text-gray-500 leading-tight">
+                    Diese Adresse wird als fester Startpunkt (Treffpunkt) für Google Maps Links im Saisonplaner genutzt, wenn man bei einem Auswärtsspiel die Route öffnet.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Aufstellungs-Regeln */}

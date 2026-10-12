@@ -1,3 +1,5 @@
+// [2026-10-12] - FEATURE: Zentralen Ranglisten-Link (global_ranking) als Pokal-Icon (Trophy) in der Detailansicht integriert (SSOT für den gesamten Verein).
+// [2026-10-12] - FEATURE: Heimspiel-Logik für Fahrer-Anzeige implementiert. Fahrer werden bei Heimspielen (Ort enthält 'maisach') in der Detailansicht ausgeblendet, solange niemand eingetragen ist.
 // [2026-10-11] - BUGFIX: Guard-Clause in sanitizeId eingebaut, um TypeError (undefined is not an object) bei Events ohne UID abzufangen.
 // [2026-10-11] - UX-FIX: Abfahrtszeit im Detail-Modal für normale Nutzer als reinen Text gerendert. Verhindert iOS-Ghost-Zeiten (12:30 PM) bei deaktivierten Zeitfeldern.
 // [2026-10-11] - BUGFIX: 24h-Format (hour12: false und lang="de-DE") für Zeitangaben und Input-Felder erzwungen, um AM/PM-Anzeigen bei abweichenden OS-Locales zu verhindern.
@@ -14,7 +16,7 @@
 // src/features/Events/CalendarIcsDetailModal.tsx
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import { X, MapPin, AlignLeft, Calendar as CalIcon, Clock, Info, Edit3, UserPlus, Users, MessageCircle, Key, Copy, Check, Truck } from 'lucide-react';
+import { X, MapPin, AlignLeft, Calendar as CalIcon, Clock, Info, Edit3, UserPlus, Users, MessageCircle, Key, Copy, Check, Truck, Trophy } from 'lucide-react';
 import { MatchLineupMatrixModal } from '../Users/components/MatchLineupMatrixModal';
 import { EventPollWidget } from './components/EventPollWidget';
 import type { MatchLineup } from '../../core/types/models';
@@ -56,9 +58,6 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
   const isCaptain = teamContext?.captainHelperIds?.includes(myHelperId || '');
   const canManageLineup = isAdmin || isCaptain;
   const isTeamMember = myHelperId && teamContext ? myHelper?.teamIds?.includes(teamContext.id) : false;
-  
-  const hasLogistics = !!(teamContext?.requiresBetreuer || teamContext?.requiresFahrer);
-  const showMatrixButton = canManageLineup || isTeamMember || hasLogistics;
 
   const cachedEvent = sub?.cachedEvents?.find(ce => 
     ce.startTime === event.start.getTime() && 
@@ -73,6 +72,17 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
   const activePlayers = helpers
     .filter(h => activePlayerIds.includes(h.id))
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  // ---------------------
+
+  // --- HEIMSPIEL & LOGISTIK SICHTBARKEIT ---
+  const isHomeGame = event.location?.toLowerCase().includes('maisach') || false;
+  const hasAssignedDrivers = (storeLineup?.fahrerHelperIds?.length || 0) > 0;
+  
+  const showBetreuer = teamContext?.requiresBetreuer;
+  // Fahrer nur anzeigen, wenn es kein Heimspiel ist ODER wenn es ein Heimspiel ist, aber bereits jemand eingetragen wurde.
+  const showFahrer = teamContext?.requiresFahrer && (!isHomeGame || hasAssignedDrivers);
+  const showLogisticsBlock = showBetreuer || showFahrer;
+  const showMatrixButton = canManageLineup || isTeamMember || showLogisticsBlock;
   // ---------------------
 
   // --- LOGISTIK ENGINE (INTERAKTIV) ---
@@ -226,6 +236,7 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
   const searchTime = !event.allDay ? `${pad(event.start.getHours())}:${pad(event.start.getMinutes())}` : undefined;
 
   const teamPin = teamContext ? teamPins.find(p => p.teamName === teamContext.name) : null;
+  const globalRankingUrl = teamPins.find(p => p.id === 'global_ranking')?.rankingUrl;
 
   const extractCode = (text: string | undefined, dateStr: string, timeStr?: string) => {
     if (!text) return null;
@@ -373,36 +384,52 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
             {/* Die integrierte Spielerliste (Nur intern sichtbar, wenn Team verknüpft) */}
             {teamContext && (
               <>
-                {/* CHIRURGISCHER EINGRIFF: nuScore Wettkampf-Codes Scanner */}
-                {(gameCode || signaturePin) && (
+                {/* CHIRURGISCHER EINGRIFF: nuScore Wettkampf-Codes & Globale Rangliste */}
+                {(gameCode || signaturePin || globalRankingUrl) && (
                   <div className="flex items-start text-gray-700 pt-6 border-t border-gray-200">
                     <Key className="w-5 h-5 mr-3 mt-0.5 text-gray-400 shrink-0" />
                     <div className="flex-1">
-                      <p className="font-medium text-sm mb-2">Wettkampf-Codes (nuScore)</p>
-                      <div className="flex flex-wrap gap-2">
-                        {gameCode && (
-                          <button 
-                            onClick={() => handleCopy(gameCode, 'game')}
-                            className="flex items-center bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg text-sm font-mono font-bold transition-colors border border-gray-300"
-                            title="Spiel-Code kopieren"
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="font-medium text-sm">Wettkampf & Tabelle</p>
+                        {globalRankingUrl && (
+                          <a 
+                            href={globalRankingUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 p-1.5 rounded-lg transition-colors flex items-center shadow-sm" 
+                            title="Tabelle / Rangliste öffnen"
                           >
-                            <span className="text-gray-500 mr-2 font-sans text-xs uppercase tracking-wider">Spiel:</span>
-                            {gameCode}
-                            {copiedId === 'game' ? <Check className="w-3.5 h-3.5 ml-2 text-green-600" /> : <Copy className="w-3.5 h-3.5 ml-2 text-gray-400" />}
-                          </button>
-                        )}
-                        {signaturePin && (
-                          <button 
-                            onClick={() => handleCopy(signaturePin, 'sig')}
-                            className="flex items-center bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg text-sm font-mono font-bold transition-colors border border-gray-300"
-                            title="Unterschriften-PIN kopieren"
-                          >
-                            <span className="text-gray-500 mr-2 font-sans text-xs uppercase tracking-wider">PIN:</span>
-                            {signaturePin}
-                            {copiedId === 'sig' ? <Check className="w-3.5 h-3.5 ml-2 text-green-600" /> : <Copy className="w-3.5 h-3.5 ml-2 text-gray-400" />}
-                          </button>
+                            <Trophy className="w-4 h-4" />
+                          </a>
                         )}
                       </div>
+                      
+                      {(gameCode || signaturePin) && (
+                        <div className="flex flex-wrap gap-2">
+                          {gameCode && (
+                            <button 
+                              onClick={() => handleCopy(gameCode, 'game')}
+                              className="flex items-center bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg text-sm font-mono font-bold transition-colors border border-gray-300"
+                              title="Spiel-Code kopieren"
+                            >
+                              <span className="text-gray-500 mr-2 font-sans text-xs uppercase tracking-wider">Spiel:</span>
+                              {gameCode}
+                              {copiedId === 'game' ? <Check className="w-3.5 h-3.5 ml-2 text-green-600" /> : <Copy className="w-3.5 h-3.5 ml-2 text-gray-400" />}
+                            </button>
+                          )}
+                          {signaturePin && (
+                            <button 
+                              onClick={() => handleCopy(signaturePin, 'sig')}
+                              className="flex items-center bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1.5 rounded-lg text-sm font-mono font-bold transition-colors border border-gray-300"
+                              title="Unterschriften-PIN kopieren"
+                            >
+                              <span className="text-gray-500 mr-2 font-sans text-xs uppercase tracking-wider">PIN:</span>
+                              {signaturePin}
+                              {copiedId === 'sig' ? <Check className="w-3.5 h-3.5 ml-2 text-green-600" /> : <Copy className="w-3.5 h-3.5 ml-2 text-gray-400" />}
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -444,7 +471,7 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
                 </div>
 
                 {/* LOGISTIK & BETREUUNG (INTERAKTIV) */}
-                {hasLogistics && (
+                {showLogisticsBlock && (
                   <div className="flex items-start text-gray-700 pt-6 border-t border-gray-200">
                     <Truck className="w-5 h-5 mr-3 mt-0.5 text-gray-400 shrink-0" />
                     <div className="flex-1">
@@ -453,8 +480,8 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
                       </div>
                       
                       <div className="flex flex-col gap-3">
-                        {teamContext.requiresBetreuer && renderLogistics('betreuerHelperIds', '🧑‍🏫 Betreuer')}
-                        {teamContext.requiresFahrer && renderLogistics('fahrerHelperIds', '🚗 Fahrer')}
+                        {showBetreuer && renderLogistics('betreuerHelperIds', '🧑‍🏫 Betreuer')}
+                        {showFahrer && renderLogistics('fahrerHelperIds', '🚗 Fahrer')}
                       </div>
                       
                       <button 

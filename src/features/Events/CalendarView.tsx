@@ -1,3 +1,7 @@
+// [2026-10-12] - BUGFIX: Auto-Scroll in Listenansichten (Termine/Dienste) angepasst. Nutzt nun offsetTop - 45px anstelle von scrollIntoView, damit zukünftige Termine nicht unter dem Sticky-Header verschwinden.
+// [2026-10-12] - FEATURE: Auto-Scroll (Contextual Nav) in den Listenansichten (Termine/Dienste) integriert. Scrollt beim Laden automatisch zum ersten zukünftigen Event, sodass die Historie oben "aus dem Weg" ist.
+// [2026-10-12] - FEATURE: Heimspiel-Logik in "Dienste" implementiert. Blendet "🚗 Offen" bei Heimspielen aus.
+// [2026-10-12] - FEATURE: Abfahrtszeit (departureTime) aus dem MatchLineup direkt in die Dienste-Liste als Vorschau (Abfahrt: ...) integriert.
 // [2026-10-11] - BUGFIX: Deep-Link Logik (openEventSubId, openEventUid) repariert und Race Condition (setTimeout) beim Modal-Öffnen entfernt.
 // [2026-10-09] - BUGFIX: TypeScript TS2339 / TS18049 in getCategory behoben (e.title sicher als String gecastet).
 // [2026-10-09] - UX-FIX: Namen der eingeteilten Fahrer/Betreuer direkt in den Titel der Logistik-Termine in der "Dienste"-Ansicht aufgenommen (inkl. "Offen" Status).
@@ -10,7 +14,7 @@
 // [2026-05-30] - BUGFIX: Visuelles Feedback bei "Dienst übernehmen" hinzugefügt. Der Titel des Termins wird nun automatisch mit dem Alias des neuen Helfers aktualisiert.
 // [2026-05-30] - UX-OPTIMIERUNG: Einheitlicher Workflow für alle Nutzer. Jeder Klick auf einen Termin öffnet nun zuerst das detailreiche CalendarIcsDetailModal.
 // src/features/Events/CalendarView.tsx
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import type { Event as RBCEvent } from 'react-big-calendar';
 import { format } from 'date-fns/format';
@@ -71,6 +75,9 @@ export const CalendarView: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Ref für den Auto-Scroll im Listen-Modus
+  const listContainerRef = useRef<HTMLDivElement>(null);
+
   const currentProfile = useMemo(() => {
     return roleProfiles.find(p => p.id === user?.roleProfileId) || 
            roleProfiles.find(p => p.name === 'Mitglied') || 
@@ -129,6 +136,31 @@ export const CalendarView: React.FC = () => {
       setActiveFilters(allIds);
     }
   }, [calendarSubscriptions]);
+
+  // --- AUTO-SCROLL LOGIK FÜR LISTENANSICHT (CHIRURGISCHER EINGRIFF: Sticky-Header fix) ---
+  useLayoutEffect(() => {
+    if (['termine', 'dienste'].includes(currentView) && listContainerRef.current) {
+      // Kurze Verzögerung, damit der DOM sicher fertig gezeichnet ist
+      const timeoutId = setTimeout(() => {
+        const wrapper = listContainerRef.current;
+        if (!wrapper) return;
+        
+        // Der eigentliche scrollbare Container ist das erste Kind mit overflow-y-auto
+        const scrollContainer = wrapper.querySelector('.overflow-y-auto') || wrapper;
+        
+        // Finde das erste Element, das als "Zukunft" markiert ist
+        const firstFutureEl = scrollContainer.querySelector('[data-is-future-row="true"]') as HTMLElement;
+        if (firstFutureEl) {
+          // Wir ziehen ~45px für den sticky Tabellenkopf ab, anstatt blind auf Element-Start zu scrollen
+          scrollContainer.scrollTo({
+             top: Math.max(0, firstFutureEl.offsetTop - 45),
+             behavior: 'smooth'
+          });
+        }
+      }, 100);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [currentView, currentDate, showPastEvents, dienstFilter, activeFilters, isCalendarLoading]);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(`${window.location.origin}/api/calendar`);
@@ -255,16 +287,25 @@ export const CalendarView: React.FC = () => {
 
             const badges: string[] = [];
             
+            // Heimspiel-Logik für Fahrer
             if (team.requiresFahrer) {
                 const fahrerIds = lineup?.fahrerHelperIds || [];
-                if (fahrerIds.length === 0) {
-                    badges.push('🚗 Offen');
-                } else {
-                    const names = fahrerIds.map(id => {
-                        const h = helpers.find(x => x.id === id);
-                        return h ? (h.alias || h.name.split(' ')[0]) : '?';
-                    });
-                    badges.push(`🚗 ${names.join(', ')}`);
+                // Fahrer nur anzeigen, wenn es kein Heimspiel ist, ODER wenn bei einem Heimspiel explizit ein Fahrer eingetragen wurde.
+                if (!isHeim || fahrerIds.length > 0) {
+                    if (fahrerIds.length === 0) {
+                        badges.push('🚗 Offen');
+                    } else {
+                        const names = fahrerIds.map(id => {
+                            const h = helpers.find(x => x.id === id);
+                            return h ? (h.alias || h.name.split(' ')[0]) : '?';
+                        });
+                        // Abfahrtszeit an Namen anhängen
+                        let fahrerStr = `🚗 ${names.join(', ')}`;
+                        if (lineup?.departureTime) {
+                             fahrerStr += ` (Abfahrt: ${lineup.departureTime} Uhr)`;
+                        }
+                        badges.push(fahrerStr);
+                    }
                 }
             }
 
@@ -280,6 +321,9 @@ export const CalendarView: React.FC = () => {
                     badges.push(`🧑‍🏫 ${names.join(', ')}`);
                 }
             }
+
+            // Wenn bei einem Heimspiel kein Betreuer konfiguriert ist und der Fahrer versteckt wurde, gibt es gar keinen Dienst für dieses Spiel.
+            if (badges.length === 0) return;
 
             const badgesString = badges.length > 0 ? ` (${badges.join(' | ')})` : '';
 
@@ -402,6 +446,7 @@ export const CalendarView: React.FC = () => {
 
   const renderYearlyList = () => {
     const isDienste = currentView === 'dienste';
+    const today = startOfDay(new Date());
     
     // Kategorie extrahieren (Thekendienst, Dienste J1, etc.)
     const getCategory = (e: AdaptedEvent) => {
@@ -445,9 +490,9 @@ export const CalendarView: React.FC = () => {
     }
 
     return (
-      <div className="flex flex-col w-full h-full">
-        <div className="overflow-y-auto overflow-x-auto w-full flex-1 custom-scrollbar pb-4">
-          <table className="w-full text-left border-collapse min-w-[600px]">
+      <div className="flex flex-col w-full h-full relative" ref={listContainerRef}>
+        <div className="overflow-y-auto overflow-x-auto w-full flex-1 custom-scrollbar pb-4 relative">
+          <table className="w-full text-left border-collapse min-w-[600px] relative">
             <thead className="sticky top-0 bg-white shadow-sm z-10">
               <tr className="border-b-2 border-gray-800 text-sm">
                 {isDienste ? (
@@ -478,13 +523,18 @@ export const CalendarView: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredYearEvents.map(e => {
+              {filteredYearEvents.map((e, idx) => {
                 const startD = e.start!;
+                
+                // Data-Attribut für Auto-Scroll
+                const isFutureRow = startOfDay(startD).getTime() >= today.getTime();
+                const dataIsFutureRow = isFutureRow ? "true" : "false";
+
                 if (isDienste) {
                   const actualEnd = e.end || (e.sourceEvent?.endTime ? new Date(e.sourceEvent.endTime) : startD);
                   const kw = getISOWeek(startD);
                   return (
-                    <tr key={e.id} className="border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors group" onClick={() => handleSelectEvent(e)}>
+                    <tr key={e.id} data-is-future-row={dataIsFutureRow} className={`border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors group ${!isFutureRow ? 'opacity-60 bg-gray-50/50' : ''}`} onClick={() => handleSelectEvent(e)}>
                       <td className="py-3 px-4 text-gray-900 font-medium whitespace-nowrap">{kw}</td>
                       <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{format(startD, 'dd.MM.yyyy', { locale: de })}</td>
                       <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{format(actualEnd, 'dd.MM.yyyy', { locale: de })}</td>
@@ -511,7 +561,7 @@ export const CalendarView: React.FC = () => {
                   }
                   
                   return (
-                    <tr key={e.id} className="border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors group" onClick={() => handleSelectEvent(e)}>
+                    <tr key={e.id} data-is-future-row={dataIsFutureRow} className={`border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors group ${!isFutureRow ? 'opacity-60 bg-gray-50/50' : ''}`} onClick={() => handleSelectEvent(e)}>
                       <td className="py-3 px-4 text-gray-900 font-medium whitespace-nowrap">{dateStr}</td>
                       <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{timeStr}</td>
                       <td className="py-3 px-4">

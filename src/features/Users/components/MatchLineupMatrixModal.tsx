@@ -1,3 +1,7 @@
+// [2026-10-12] - UX-FIX: Schließen-Button "X" oben rechts auf Handys sichtbar gemacht (hidden md:block entfernt).
+// [2026-10-12] - UX-FEATURE: Wochentage (Mo, Di, Mi...) in der Datumsanzeige der Spiele ergänzt.
+// [2026-10-12] - UX-FEATURE: Automatischer Spiele-Zähler (Anzahl Nominierungen) pro Spieler im Tabellenkopf ergänzt.
+// [2026-10-12] - FEATURE: Google Maps Routing-Button (🗺️) neben der Abfahrtszeit für Auswärtsspiele eingebaut (nutzt homeArenaAddress als festen Startpunkt).
 // [2026-10-11] - UX-FIX: "+ Einfügen" und "+ Ich" Buttons zu "+" verkleinert und Abstände reduziert, um Platz in der Logistik-Zeile zu schaffen (verhindert Umbruch bei Zeitfeld).
 // [2026-10-11] - UX-FIX: Logistik-Labels in der Matrix auf platzsparende Emojis mit Tooltips reduziert, um Layout-Umbrüche zu verhindern.
 // [2026-10-11] - BUGFIX: 24h-Format (hour12: false und lang="de-DE") für Zeitangaben und Input-Felder erzwungen, um AM/PM-Anzeigen bei abweichenden OS-Locales zu verhindern.
@@ -15,7 +19,7 @@
 // src/features/Users/components/MatchLineupMatrixModal.tsx
 import React, { useMemo, useState } from 'react';
 import { useClubStore } from '../../../store/useClubStore';
-import { X, Calendar as CalendarIcon, Lock, Unlock, CheckSquare, Square, UserPlus, Search, Users, Clock } from 'lucide-react';
+import { X, Calendar as CalendarIcon, Lock, Unlock, CheckSquare, Square, UserPlus, Search, Users, Clock, Map } from 'lucide-react';
 import type { Team, MatchLineup, Helper } from '../../../core/types/models';
 
 interface MatchLineupMatrixModalProps {
@@ -124,6 +128,30 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
     
     return sorted;
   }, [linkedSubscription, focusedEventId]);
+
+  // --- SPIELE-ZÄHLER ENGINE ---
+  const playerGameCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    
+    // Initialisiere mit 0
+    displayMembers.forEach(m => { counts[m.helper.id] = 0; });
+    
+    events.forEach(event => {
+      const safeEventId = sanitizeId(event.uid);
+      const storeLineup = matchLineups.find(m => m.id === safeEventId);
+      const hasLocalOverride = localOverrides[safeEventId] !== undefined;
+      
+      let activeIds: string[] = [];
+      if (hasLocalOverride) activeIds = localOverrides[safeEventId];
+      else if (storeLineup) activeIds = storeLineup.lineupHelperIds;
+      else activeIds = team.defaultLineupHelperIds || [];
+      
+      activeIds.forEach(id => {
+        if (counts[id] !== undefined) counts[id]++;
+      });
+    });
+    return counts;
+  }, [events, matchLineups, localOverrides, team.defaultLineupHelperIds, displayMembers]);
 
   // --- KADER NOMINIERUNG (Nur Captain) ---
   const handleTogglePlayer = async (rawEventId: string, helperId: string, currentActiveIds: string[]) => {
@@ -350,6 +378,9 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
 
     const [emoji, ...textParts] = label.split(' ');
     const roleName = textParts.join(' ');
+    
+    // Maps-Routing Logik (Nur für Auswärtsspiele interessant)
+    const isHomeGame = event.location?.toLowerCase().includes('maisach') || false;
 
     return (
       <div className="flex flex-row items-center gap-1.5">
@@ -466,10 +497,10 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
              <span className="text-[10px] text-gray-400 italic py-0.5">Noch offen</span>
           )}
 
-          {/* CHIRURGISCHER EINGRIFF: Abfahrtszeit Input kompakter */}
+          {/* Abfahrtszeit Input & Google Maps Link */}
           {type === 'fahrerHelperIds' && (ids.length > 0 || !isReadOnly) && (
-            <div className="flex items-center ml-1 border-l border-gray-200/60 pl-1 shrink-0">
-               <Clock className="w-3 h-3 text-gray-400 mr-1" />
+            <div className="flex items-center ml-1 border-l border-gray-200/60 pl-1 shrink-0 gap-1">
+               <Clock className="w-3 h-3 text-gray-400" />
                <input
                  type="time"
                  lang="de-DE"
@@ -479,6 +510,17 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                  className={`text-[11px] font-bold p-0.5 rounded border shadow-sm outline-none transition-colors ${isReadOnly || isPast ? 'bg-transparent border-transparent text-gray-600' : 'bg-white border-gray-300 text-gray-900 hover:border-gray-400 focus:border-blue-500 cursor-pointer'}`}
                  title="Abfahrtszeit"
                />
+               {!isHomeGame && event.location && (
+                 <a 
+                   href={`https://www.google.com/maps/dir/?api=1${team.homeArenaAddress ? `&origin=${encodeURIComponent(team.homeArenaAddress)}` : ''}&destination=${encodeURIComponent(event.location)}`}
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   title="Fahrzeit in Google Maps berechnen (Start: Heimhalle / Treffpunkt)"
+                   className="p-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 transition-colors"
+                 >
+                   <Map className="w-3 h-3" />
+                 </a>
+               )}
             </div>
           )}
         </div>
@@ -490,23 +532,23 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
     <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-0 md:p-4">
       <div className="bg-white rounded-none md:rounded-xl shadow-2xl w-full max-w-7xl overflow-hidden flex flex-col h-full md:max-h-[90vh]">
         
-        {/* Header */}
-        <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between bg-gray-50 shrink-0 gap-4">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900 flex items-center">
-              <CalendarIcon className="w-5 h-5 mr-2 text-blue-600" />
+        {/* Header - CHIRURGISCHER EINGRIFF: hidden md:block entfernt, X ist immer sichtbar */}
+        <div className="p-4 border-b border-gray-200 flex flex-row items-start justify-between bg-gray-50 shrink-0 gap-4">
+          <div className="flex-1">
+            <h2 className="text-lg font-bold text-gray-900 flex items-center flex-wrap gap-2">
+              <CalendarIcon className="w-5 h-5 text-blue-600 shrink-0" />
               {focusedEventId 
                 ? (isReadOnly ? 'Kader-Übersicht' : 'Aufstellung ändern') 
                 : (isReadOnly ? `Saison-Übersicht: ${team.name}` : `Saison-Planung: ${team.name}`)}
             </h2>
             {linkedSubscription && (
-              <p className="text-xs text-gray-500 mt-1">Team: {team.name} | Abo: {linkedSubscription.name}</p>
+              <p className="text-xs text-gray-500 mt-1 line-clamp-1">Team: {team.name} | Abo: {linkedSubscription.name}</p>
             )}
           </div>
           
-          <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex items-center gap-3 shrink-0">
             {!isReadOnly && linkedSubscription && (
-              <div className="relative">
+              <div className="relative hidden sm:block">
                 <button 
                   onClick={() => setIsJokerMenuOpen(!isJokerMenuOpen)}
                   className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-bold text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
@@ -555,11 +597,51 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                 )}
               </div>
             )}
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 bg-white p-1.5 rounded-full shadow-sm border border-gray-200 shrink-0 hidden md:block">
+            {/* Der Schließen-Button ist jetzt auch auf Mobile da */}
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 bg-white p-1.5 rounded-full shadow-sm border border-gray-200 shrink-0">
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
+
+        {/* Mobile Action Bar (Joker Button für kleine Bildschirme) */}
+        {!isReadOnly && linkedSubscription && (
+          <div className="sm:hidden p-3 bg-white border-b border-gray-200 flex justify-end relative z-40">
+             <button 
+                onClick={() => setIsJokerMenuOpen(!isJokerMenuOpen)}
+                className="flex w-full justify-center items-center gap-2 px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm font-bold text-gray-700 shadow-sm transition-colors"
+              >
+                <UserPlus className="w-4 h-4 text-blue-600" />
+                + Weiteren Spieler zur Tabelle hinzufügen
+              </button>
+              
+              {isJokerMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setIsJokerMenuOpen(false)}></div>
+                  <div className="absolute left-3 right-3 top-full mt-2 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden flex flex-col">
+                    <div className="p-3 border-b border-gray-100 bg-gray-50 flex items-center relative">
+                      <Search className="w-4 h-4 text-gray-400 absolute left-5" />
+                      <input 
+                        autoFocus
+                        type="text"
+                        placeholder="Name suchen..."
+                        value={jokerSearchTerm}
+                        onChange={(e) => setJokerSearchTerm(e.target.value)}
+                        className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg outline-none"
+                      />
+                    </div>
+                    <div className="max-h-60 overflow-y-auto p-1">
+                      {availableJokers.map(j => (
+                        <button key={j.id} onClick={() => handleAddJoker(j.id)} className="w-full text-left px-3 py-3 text-sm text-gray-800 hover:bg-blue-50 border-b border-gray-100 last:border-0 font-medium">
+                          {j.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+          </div>
+        )}
 
         {/* Body Container */}
         <div className="flex-1 overflow-auto bg-gray-50 relative">
@@ -583,14 +665,22 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                   <th className="sticky top-0 left-0 z-30 bg-gray-100 border-b-2 border-r-2 border-gray-200 px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider w-[240px] sm:w-[280px] shadow-[1px_1px_0px_0px_#e5e7eb]">
                     Termin / Spiel
                   </th>
-                  {displayMembers.map(({ helper: m, category }) => (
+                  {displayMembers.map(({ helper: m, category }) => {
+                    const gameCount = playerGameCounts[m.id] || 0;
+                    return (
                     <th key={m.id} className={`sticky top-0 z-20 bg-gray-100 border-b-2 border-b-gray-200 border-r border-gray-100 px-2 py-3 text-center text-[10px] font-bold uppercase tracking-wider min-w-[75px] shadow-[0px_1px_0px_0px_#e5e7eb] ${m.id === myHelperId ? 'text-blue-700 bg-blue-50/50' : 'text-gray-600'}`}>
                       <div className="truncate px-1" title={m.name}>{m.alias || m.name.split(' ')[0]}</div>
-                      {category === 'STAMM' && <div className="text-[8px] text-green-600 font-extrabold mt-0.5">Stamm</div>}
-                      {category === 'KADER' && <div className="text-[8px] text-blue-600 font-extrabold mt-0.5">Bank</div>}
-                      {category === 'EXTERN' && <div className="text-[8px] text-orange-500 font-extrabold mt-0.5">Extern</div>}
+                      {/* CHIRURGISCHER EINGRIFF: Spiele Zähler integriert */}
+                      <div className="mt-1 flex flex-col items-center gap-0.5">
+                        <span className="text-[9px] bg-gray-200/80 text-gray-600 px-1.5 py-0.5 rounded-full lowercase font-medium tracking-normal" title={`${gameCount} Nominierungen`}>
+                          {gameCount} sp.
+                        </span>
+                        {category === 'STAMM' && <div className="text-[8px] text-green-600 font-extrabold mt-0.5">Stamm</div>}
+                        {category === 'KADER' && <div className="text-[8px] text-blue-600 font-extrabold mt-0.5">Bank</div>}
+                        {category === 'EXTERN' && <div className="text-[8px] text-orange-500 font-extrabold mt-0.5">Extern</div>}
+                      </div>
                     </th>
-                  ))}
+                  )})}
                 </tr>
               </thead>
               <tbody>
@@ -629,7 +719,8 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                   const rowBg = isFocusedRow ? 'bg-blue-50/80' : (isPast ? 'bg-gray-100' : 'bg-white');
                   const borderClasses = isFocusedRow ? 'border-b-4 border-t-4 border-blue-500 z-10 relative' : 'border-b border-gray-200';
                   
-                  const shortDate = eventDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+                  // CHIRURGISCHER EINGRIFF: Wochentag (short weekday) zum Datum hinzugefügt
+                  const shortDate = eventDate.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
                   const shortTime = eventDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', hour12: false });
 
                   return (

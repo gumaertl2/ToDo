@@ -1,3 +1,5 @@
+// [2026-10-12] - FEATURE: Feld 'homeArenaAddress' (Heimhalle / Treffpunkt) im Team-Modell hinzugefügt (für Google Maps Routing).
+// [2026-10-12] - FEATURE: Feld 'rankingUrl' zum TeamPin-Modell hinzugefügt (für Ranglisten/Tabellen-Links in der Detailansicht).
 // [2026-10-11] - FEATURE: Feld 'departureTime' zum MatchLineup-Modell hinzugefügt (Grundlage für spätere Google Maps Integration).
 // [2026-10-09] - FEATURE: Logistik- und Betreuerplanung (requiresBetreuer, requiresFahrer, betreuerHelperIds, fahrerHelperIds) in Team und MatchLineup ergänzt.
 // [2026-10-08] - FEATURE: Optionale Adressfelder (strasse, plz, ort) zum Helper-Modell hinzugefügt.
@@ -116,7 +118,8 @@ export interface Team extends BaseDocument {
   lineupFreezeLeadDays?: number;     
   lineupLockMessage?: string;        
   requiresBetreuer?: boolean; 
-  requiresFahrer?: boolean;   
+  requiresFahrer?: boolean;
+  homeArenaAddress?: string; // <--- NEU
 }
 
 export interface Group extends BaseDocument {
@@ -332,6 +335,7 @@ export interface TeamPin extends BaseDocument {
   signatureUrl?: string;            
   gameEntryPinsText: string;        
   gameEntryUrl?: string;            
+  rankingUrl?: string;
   assignedUserIds: string[];        
   assignedGroupIds: string[];       
   assignedHelperIds?: string[];
@@ -349,7 +353,7 @@ export interface MatchLineup {
   
   betreuerHelperIds?: string[]; 
   fahrerHelperIds?: string[];   
-  departureTime?: string; // <--- NEU (z.B. "17:45")
+  departureTime?: string; 
   
   updatedAt?: number;
 }
