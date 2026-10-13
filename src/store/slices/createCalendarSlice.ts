@@ -1,12 +1,12 @@
-// [2026-10-04] - LOGIK-FIX: 'lastSyncAttemptAt' eingeführt. Fehlerhafte Syncs überschreiben nun nicht mehr das Datum des letzten ERFOLGREICHEN Syncs (lastSyncedAt). Cronjob-Lock auf Attempt-Datum umgestellt.
-// [2026-10-04] - FEATURE: 'lastSyncBy' und 'lastSyncError' beim Sync-Vorgang erfasst, um Fehlschläge und Verursacher transparent zu machen (Hover-Tooltip).
-// [2026-10-01] - BUGFIX: 'snap.metadata.fromCache' Filter im Snapshot hinzugefügt. Verhindert, dass veraltete lokale Handy-Caches ununterbrochen den Auto-Sync triggern (Distributed-Sync Überhitzung).
-// [2026-10-01] - BUGFIX: 'batch.update' statt 'batch.set' in updateCalendarSubscriptionOrder genutzt. Verhindert die unfreiwillige Wiederbelebung gelöschter Abos (Zombies) durch alte Handys.
-// [2026-10-01] - BUGFIX: Zeitzonen-Fehler (UK/Ausland) im ICS-Parser behoben. Nutzt nun 'toUnixTime()' anstelle des lokalen 'new Date()' um die exakte, zeitzonenunabhängige ICS-Zeit zu erzwingen.
-// [2026-08-06] - BUGFIX: Dynamischer Cache-Buster (_t=timestamp) in syncSubscription eingebaut, um aggressive Proxy-Caches zu umgehen.
-// [2026-07-23] - BUGFIX: Auto-Sync (Lazy Cronjob) wird nun NUR für eingeloggte User ausgeführt. Verhindert eine tödliche "Optimistic Update Rollback"-Endlosschleife für ungeloggte Gäste.
-// [2026-07-23] - BUGFIX: Cache-Buster (nocache) von der Original-URL entfernt und stattdessen Server/Proxy-Caching via Fetch API { cache: 'no-store' } blockiert.
-// [2026-07-23] - FEATURE: 7-Tage Auto-Sync (Lazy Cronjob) in den Kalender-Snapshot eingebaut.
+// [2026-10-13] - ARCHITECTURE-FIX: Clean Rollback auf stabile Proxy-Basis (AllOrigins, CorsProxyIO, Direkt). Experimentelle Proxies und Header entfernt, da diese zu oft Browser-Sicherheitswarnungen (Load failed) auslösten.
+// [2026-10-13] - BUGFIX: Smarter Cache-Buster (_t=...) wird nun exklusiv nur noch für 'mytischtennis.de' verwendet. Starre Kalender (Feiertage) blockieren sonst.
+// [2026-10-13] - UX-FIX: Detaillierte Fehlererfassung (X-Ray Scanner) beim Sync beibehalten, um Fehler pro Proxy transparent zu machen.
+// [2026-10-04] - LOGIK-FIX: 'lastSyncAttemptAt' eingeführt. Fehlerhafte Syncs überschreiben nun nicht mehr das Datum des letzten ERFOLGREICHEN Syncs.
+// [2026-10-04] - FEATURE: 'lastSyncBy' und 'lastSyncError' beim Sync-Vorgang erfasst.
+// [2026-10-01] - BUGFIX: 'snap.metadata.fromCache' Filter im Snapshot hinzugefügt. Verhindert Distributed-Sync Überhitzung.
+// [2026-10-01] - BUGFIX: 'batch.update' statt 'batch.set' in updateCalendarSubscriptionOrder genutzt.
+// [2026-10-01] - BUGFIX: Zeitzonen-Fehler (UK/Ausland) im ICS-Parser behoben. Nutzt nun 'toUnixTime()'.
+// [2026-07-23] - BUGFIX: Auto-Sync (Lazy Cronjob) wird nun NUR für eingeloggte User ausgeführt.
 // src/store/slices/createCalendarSlice.ts
 import type { StateCreator } from 'zustand';
 import type { CalendarEvent, CalendarSubscription, CachedIcsEvent } from '../../core/types/models';
@@ -63,12 +63,8 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
       const sortedSubs = subs.sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
       set({ calendarSubscriptions: sortedSubs, isCalendarLoading: false });
 
-      // ---> CHIRURGISCHER EINGRIFF 1: CACHE-FILTER <---
-      // Wir blockieren den automatischen Sync, wenn die Liste nur aus dem veralteten
-      // lokalen Offline-Cache des Handys geladen wurde. Wir warten auf die echten Server-Daten!
       if (snap.metadata.fromCache) return;
 
-      // ---> CHIRURGISCHER EINGRIFF: GAST-SCHUTZ (Endlosschleifen-Blocker) <---
       const currentUser = (get() as any).user;
       
       if (currentUser) {
@@ -77,7 +73,6 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
         
         sortedSubs.forEach(sub => {
           if (sub.isActive && sub.url !== 'FILE_IMPORT') {
-            // Nutze das Attempt-Datum als Lock, damit Fehler-URLs nicht endlos triggern
             const lastAttempt = sub.lastSyncAttemptAt || sub.lastSyncedAt || 0;
             if (now - lastAttempt > SEVEN_DAYS) {
               updateDoc(doc(db, 'calendar_subscriptions', sub.id), { lastSyncAttemptAt: now }).then(() => {
@@ -134,14 +129,10 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
   updateCalendarSubscriptionOrder: async (subs) => {
     try {
       const batch = writeBatch(db);
-      // ---> CHIRURGISCHER EINGRIFF 2: ZOMBIE-KILLER <---
-      // batch.update statt batch.set. So können alte Handys keine 
-      // bereits gelöschten Abos mehr aus Versehen neu erschaffen.
       subs.forEach((sub, index) => batch.update(doc(db, 'calendar_subscriptions', sub.id), { sortOrder: index }));
       await batch.commit();
       return { success: true, data: undefined };
     } catch (e) { 
-      // Fehler (z.B. Dokument existiert nicht mehr) werden still geschluckt, das ist exakt das Ziel!
       return { success: false, error: e as Error }; 
     }
   },
@@ -170,31 +161,67 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
 
       if (feedUrl.toLowerCase().startsWith('webcal://')) feedUrl = 'https://' + feedUrl.substring(9);
       
-      const cacheBuster = `_t=${Date.now()}`;
-      const cacheBustedUrl = feedUrl.includes('?') 
-        ? `${feedUrl}&${cacheBuster}` 
-        : `${feedUrl}?${cacheBuster}`;
-      
-      const proxyUrls = [
-        `https://api.allorigins.win/raw?url=${encodeURIComponent(cacheBustedUrl)}&disableCache=true`, 
-        `https://corsproxy.io/?${encodeURIComponent(cacheBustedUrl)}` 
+      // Die saubere Basis-Kaskade ohne überkomplizierte JSON-Hacks oder exotische Proxies
+      const proxyGenerators = [
+        { name: 'AllOrigins', build: (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}&disableCache=true` },
+        { name: 'CorsProxyIO', build: (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}` },
+        { name: 'Direkt', build: (u: string) => u }
       ];
       
       let textData = null;
-      for (const proxyUrl of proxyUrls) {
-        try {
-          const response = await fetch(proxyUrl, { cache: 'no-store' });
-          if (response.ok) {
-            const data = await response.text();
-            if (data.includes('BEGIN:VCALENDAR')) { textData = data; break; }
+      let attemptCount = 0;
+      let finalErrorMessage = ''; 
+      const MAX_RETRIES = 3;
+
+      for (let retry = 0; retry < MAX_RETRIES && !textData; retry++) {
+        attemptCount++;
+        const currentRoundErrors: string[] = [];
+        
+        // Cache-Buster NUR für myTischtennis.de (Feiertagskalender hassen unbekannte Parameter)
+        let targetUrl = feedUrl;
+        if (feedUrl.includes('mytischtennis.de')) {
+          targetUrl = feedUrl.includes('?') ? `${feedUrl}&_t=${Date.now()}` : `${feedUrl}?_t=${Date.now()}`;
+        }
+        
+        for (const proxy of proxyGenerators) {
+          try {
+            const fetchUrl = proxy.build(targetUrl);
+            
+            // Simpler GET Fetch. Keine Custom-Headers, um Safari's CORS-Preflight Blockade zu verhindern.
+            // Kein { cache: 'no-store' }, da dies bei manchen mobilen Browsern sofort zum "Load failed" führt.
+            const response = await fetch(fetchUrl);
+
+            if (response.ok) {
+              const rawData = await response.text();
+              const sanitizedData = rawData.trim();
+
+              if (sanitizedData.includes('BEGIN:VCALENDAR')) { 
+                textData = sanitizedData; 
+                break; // Erfolg! Sofortiger Ausstieg.
+              } else {
+                currentRoundErrors.push(`[${proxy.name}]: Kein ICS`);
+              }
+            } else {
+              currentRoundErrors.push(`[${proxy.name}]: HTTP ${response.status}`);
+            }
+          } catch (e: any) { 
+            currentRoundErrors.push(`[${proxy.name}]: Blockiert`);
           }
-        } catch (e) { console.warn(`Proxy fail für ${proxyUrl}`); }
+        }
+
+        if (textData) break; 
+
+        finalErrorMessage = currentRoundErrors.join(' | ');
+
+        if (retry < MAX_RETRIES - 1) {
+           await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       }
       
       if (!textData) {
-        const errMsg = 'Download fehlgeschlagen. Bitte Link prüfen.';
+        const errMsg = `Fehler (Versuch ${attemptCount}): ${finalErrorMessage}`;
         await updateDoc(docRef, { 
-          lastSyncAttemptAt: Date.now(), // Nur den Versuch protokollieren, nicht den Erfolg!
+          lastSyncAttemptAt: Date.now(), 
           lastSyncBy: syncUserName, 
           lastSyncError: errMsg 
         });
@@ -211,10 +238,6 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
         if (!event.startDate) return; 
         
         const s = event.startDate;
-        
-        // ---> CHIRURGISCHER EINGRIFF 3: ZEITZONEN-ANKER <---
-        // 's.toUnixTime()' berechnet den korrekten UTC-Wert basierend auf der ICS-Datei.
-        // Das lokale 'new Date(s.year...)' wurde entfernt, da es die UK-Zeitzone des Handys aufgezwungen hat.
         const startDate = s.toUnixTime() * 1000;
         
         let endDate = startDate;
@@ -237,17 +260,17 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
       return await DataProcessor.saveDocument<CalendarSubscription>('calendar_subscriptions', sub.id, { 
         ...sub, 
         cachedEvents, 
-        lastSyncedAt: Date.now(),         // ERFOLG!
-        lastSyncAttemptAt: Date.now(),    // VERSUCH (hier identisch mit Erfolg)
+        lastSyncedAt: Date.now(),
+        lastSyncAttemptAt: Date.now(),
         lastSyncBy: syncUserName,
         lastSyncError: null
       });
-    } catch (error) { 
+    } catch (error: any) { 
       try {
         await updateDoc(doc(db, 'calendar_subscriptions', id), {
-          lastSyncAttemptAt: Date.now(), // Nur den Versuch protokollieren, nicht den Erfolg!
+          lastSyncAttemptAt: Date.now(),
           lastSyncBy: syncUserName,
-          lastSyncError: (error as Error).message || 'Unbekannter Fehler'
+          lastSyncError: `Interner Parse-Fehler: ${error.message || 'Unbekannt'}`
         });
       } catch (e) { /* ignore fallback errors */ }
       return { success: false, error: error as Error }; 

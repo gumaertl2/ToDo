@@ -1,3 +1,4 @@
+// [2026-10-13] - BUGFIX: Mobile Scroll-Bug (Einfrieren) im Spielplan (Agenda View) behoben. Flexbox 'min-h-0' und 'WebkitOverflowScrolling' erzwingen das native Scrollen auf iOS/Android innerhalb des react-big-calendar.
 // [2026-10-12] - BUGFIX: TS6133 'React' is declared but its value is never read behoben.
 // [2026-10-12] - REFACTOR: Spielplan-Ansicht (CustomAgendaView) aus CalendarView in eigene Komponente ausgelagert.
 // src/features/Events/components/CalendarAgendaView.tsx
@@ -41,7 +42,12 @@ export const useCalendarAgendaView = (
       }, [date, events, showEmptyDays]); 
 
       return (
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-4 bg-gray-50/30 h-full relative print:bg-white print:overflow-visible">
+        // HIER IST DER FIX: min-h-0, w-full, custom-scrollbar und WebkitOverflowScrolling
+        <div 
+          ref={scrollRef} 
+          className="flex-1 min-h-0 w-full h-full overflow-y-auto custom-scrollbar p-2 sm:p-4 space-y-4 bg-gray-50/30 relative print:bg-white print:overflow-visible print:h-auto"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
           {daysInInterval.map(day => {
             const dayEvents = events.filter(e => {
               const eStart = startOfDay(e.start!);
