@@ -1,3 +1,4 @@
+// [2026-10-13] - UX-FEATURE: Drag & Drop Sortierung für Umfrage-Optionen (GripVertical) und Quick-Select Emojis für neue Zeilen hinzugefügt.
 // [2026-10-08] - FEATURE: Umfragen/RSVP (PollConfig) Konfiguration im Termin-Formular hinzugefügt.
 // [2026-05-16] - UX-FIX: Badge-Anzeige für den ausgewählten WhatsApp-Absender hinzugefügt, damit die Auswahl nach dem Zuklappen sichtbar bleibt.
 // [2026-05-16] - FEATURE: SmartEntityPicker für Omni-Channel In-App Erinnerungen & WhatsApp Absender integriert.
@@ -6,7 +7,7 @@
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
 import type { CalendarEvent, PollOption } from '../../core/types/models';
-import { X, Save, AlertCircle, Globe, Trash2, Layers, Info, Plus, MessageCircle, List as ListIcon, User, Users, BarChart3 } from 'lucide-react';
+import { X, Save, AlertCircle, Globe, Trash2, Layers, Info, Plus, MessageCircle, List as ListIcon, User, Users, BarChart3, GripVertical } from 'lucide-react';
 import { SmartEntityPicker } from '../Shared/components/SmartEntityPicker';
 
 interface Props {
@@ -55,6 +56,7 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
     { id: '2', text: '🚫 Passt leider nicht' }
   ]);
   
+  const [draggedOptionIndex, setDraggedOptionIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -73,9 +75,9 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
     }
   };
 
-  // Hilfsfunktionen für die dynamischen Umfrage-Optionen
-  const handleAddOption = () => {
-    setPollOptions([...pollOptions, { id: Date.now().toString(), text: '' }]);
+  // --- DRAG & DROP & OPTIONEN-LOGIK ---
+  const handleAddOption = (presetText: string = '') => {
+    setPollOptions([...pollOptions, { id: Date.now().toString(), text: presetText }]);
   };
 
   const handleUpdateOption = (id: string, text: string) => {
@@ -85,6 +87,29 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
   const handleRemoveOption = (id: string) => {
     setPollOptions(pollOptions.filter(o => o.id !== id));
   };
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedOptionIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString()); // Nötig für Firefox
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault(); 
+    if (draggedOptionIndex === null || draggedOptionIndex === index) return;
+    
+    const newOptions = [...pollOptions];
+    const [draggedItem] = newOptions.splice(draggedOptionIndex, 1);
+    newOptions.splice(index, 0, draggedItem);
+    
+    setDraggedOptionIndex(index);
+    setPollOptions(newOptions);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedOptionIndex(null);
+  };
+  // ------------------------------------
 
   const handleSave = async (keepOpen: boolean = false) => {
     if (!title.trim()) {
@@ -262,28 +287,66 @@ export const CalendarEventFormModal: React.FC<Props> = ({ onClose, existingEvent
                    <label htmlFor="multiChoice" className="text-sm font-medium text-indigo-900 cursor-pointer">Mehrfachauswahl erlauben (z.B. für Mitbringsel)</label>
                 </div>
                 
-                <div className="space-y-2">
+                <div className="space-y-2 mt-2">
                   <label className="block text-xs font-bold text-indigo-700">Antwort-Optionen</label>
-                  {pollOptions.map((opt) => (
-                    <div key={opt.id} className="flex items-center gap-2">
-                      <input 
-                        type="text" 
-                        value={opt.text} 
-                        onChange={(e) => handleUpdateOption(opt.id, e.target.value)} 
-                        disabled={isSaving}
-                        placeholder="z.B. Ich bringe Kuchen mit"
-                        className="flex-1 p-2 text-sm border border-indigo-200 rounded focus:ring-indigo-500 focus:border-indigo-500"
-                      />
-                      <button type="button" onClick={() => handleRemoveOption(opt.id)} disabled={isSaving || pollOptions.length <= 1} className="p-2 text-indigo-400 hover:text-red-500 transition disabled:opacity-50">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                  <div className="space-y-1">
+                    {pollOptions.map((opt, index) => (
+                      <div 
+                        key={opt.id} 
+                        className={`flex items-center gap-2 bg-white px-2 py-1 rounded-lg border transition-all ${draggedOptionIndex === index ? 'opacity-50 border-indigo-400 shadow-md' : 'border-indigo-100'}`}
+                        draggable={!isSaving}
+                        onDragStart={(e) => handleDragStart(e, index)}
+                        onDragOver={(e) => handleDragOver(e, index)}
+                        onDragEnd={handleDragEnd}
+                      >
+                        <div className="cursor-grab active:cursor-grabbing p-1 text-gray-300 hover:text-indigo-500 transition-colors" title="Ziehen zum Sortieren">
+                          <GripVertical className="w-4 h-4" />
+                        </div>
+                        <input 
+                          type="text" 
+                          value={opt.text} 
+                          onChange={(e) => handleUpdateOption(opt.id, e.target.value)} 
+                          disabled={isSaving}
+                          placeholder="z.B. Ich bringe Kuchen mit"
+                          className="flex-1 p-2 text-sm border-0 focus:ring-1 focus:ring-indigo-500 rounded bg-transparent"
+                        />
+                        <button type="button" onClick={() => handleRemoveOption(opt.id)} disabled={isSaving || pollOptions.length <= 1} className="p-2 text-indigo-300 hover:text-red-500 transition disabled:opacity-50">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* SCHNELL-AUSWAHL EMOJIS & NEU BUTTON */}
+                  <div className="flex flex-wrap items-center gap-3 mt-3 pt-1">
+                    <button type="button" onClick={() => handleAddOption('')} disabled={isSaving} className="flex items-center text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-white border border-indigo-200 px-3 py-1.5 rounded shadow-sm transition-colors">
+                      <Plus className="w-3 h-3 mr-1.5" /> Leerzeile
+                    </button>
+                    
+                    <div className="flex items-center gap-1 bg-white border border-indigo-100 pl-2 pr-1 py-1 rounded shadow-sm">
+                       <span className="text-[10px] text-indigo-400 uppercase tracking-wider font-bold mr-1">Vorschläge:</span>
+                       {[
+                         { e: '👍', t: '👍 Bin dabei' }, 
+                         { e: '👎', t: '👎 Kann nicht' }, 
+                         { e: '🤷', t: '🤷 Weiß noch nicht' }, 
+                         { e: '🍕', t: '🍕 Hunger' }, 
+                         { e: '🚗', t: '🚗 Fahrer' }
+                       ].map(preset => (
+                         <button 
+                           key={preset.e} 
+                           type="button"
+                           onClick={() => handleAddOption(preset.t)} 
+                           disabled={isSaving}
+                           className="w-7 h-7 flex items-center justify-center text-sm hover:bg-indigo-50 rounded transition-colors"
+                           title={preset.t}
+                         >
+                           {preset.e}
+                         </button>
+                       ))}
                     </div>
-                  ))}
-                  <button type="button" onClick={handleAddOption} disabled={isSaving} className="flex items-center text-xs font-bold text-indigo-600 hover:text-indigo-800 mt-2">
-                    <Plus className="w-3 h-3 mr-1" /> Weitere Option hinzufügen
-                  </button>
+                  </div>
                 </div>
-                <p className="text-[10px] text-indigo-500 leading-tight">
+                <p className="text-[10px] text-indigo-500 leading-tight pt-2">
                   Tipp: Ein freies Textfeld für Kommentare wird den Mitgliedern automatisch bei der Abstimmung angezeigt.
                 </p>
               </div>

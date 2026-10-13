@@ -1,10 +1,12 @@
+// [2026-10-13] - BUGFIX: pickerKey nutzt jetzt wieder event.uid statt safeEventId, um Z-Index Bug bei namensgleichen Terminen zu beheben.
+// [2026-10-13] - REFACTOR: sanitizeId durch generateStableEventId ersetzt, event.uid in Callbacks durch safeEventId ausgetauscht.
 // [2026-10-12] - BUGFIX: e.stopPropagation() beim Google Maps Link ergänzt, um unbeabsichtigtes Schließen/Zurückspringen des Modals zu verhindern.
 // [2026-10-12] - REFACTOR: Logistik-Reihe (Fahrer/Betreuer) aus MatchLineupMatrixModal in eigene Komponente ausgelagert.
 // src/features/Users/components/MatchLineupLogisticsRow.tsx
 import React from 'react';
 import { Search, Clock, Map } from 'lucide-react';
 import type { Team, MatchLineup, Helper } from '../../../core/types/models';
-import { sanitizeId } from '../hooks/useMatchLineupMatrix';
+import { generateStableEventId } from '../hooks/useMatchLineupMatrix';
 
 interface MatchLineupLogisticsRowProps {
   type: 'fahrerHelperIds' | 'betreuerHelperIds';
@@ -43,9 +45,13 @@ export const MatchLineupLogisticsRow: React.FC<MatchLineupLogisticsRowProps> = (
   onLogisticsAction,
   onDepartureTimeChange
 }) => {
-  const safeEventId = sanitizeId(event.uid);
-  const pickerKey = `${safeEventId}-${type}`;
+  const safeEventId = generateStableEventId(team.id, event);
+  const uiKey = event.uid; // Die flüchtige UID für die lokale UI
+  
+  // Der Picker reagiert auf die UI-UID, damit er streng auf diese eine HTML-Zeile isoliert bleibt
+  const pickerKey = `${uiKey}-${type}`;
   const isPickerOpen = openLogisticsPicker === pickerKey;
+  
   const storeLineup = matchLineups.find(m => m.id === safeEventId);
   const isPast = event.startTime < Date.now();
   
@@ -60,7 +66,6 @@ export const MatchLineupLogisticsRow: React.FC<MatchLineupLogisticsRowProps> = (
   const [emoji, ...textParts] = label.split(' ');
   const roleName = textParts.join(' ');
   
-  // Maps-Routing Logik (Nur für Auswärtsspiele interessant)
   const isHomeGame = event.location?.toLowerCase().includes('maisach') || false;
 
   return (
@@ -80,11 +85,12 @@ export const MatchLineupLogisticsRow: React.FC<MatchLineupLogisticsRowProps> = (
                 if (isPast) return;
                 if (!isReadOnly) {
                   if (window.confirm(`Möchtest du ${h.name} als ${roleName} entfernen?`)) {
-                     onLogisticsAction(event.uid, type, 'remove', id);
+                     // Speichern läuft weiter sicher über den Datenbank-Key!
+                     onLogisticsAction(safeEventId, type, 'remove', id);
                   }
                 } else if (!isMe) {
                   if (window.confirm(`Möchtest du den Dienst von ${h.name} wirklich übernehmen?`)) {
-                     if (myHelperId) onLogisticsAction(event.uid, type, 'takeover', myHelperId, id);
+                     if (myHelperId) onLogisticsAction(safeEventId, type, 'takeover', myHelperId, id);
                   }
                 }
               }}
@@ -141,7 +147,8 @@ export const MatchLineupLogisticsRow: React.FC<MatchLineupLogisticsRowProps> = (
                             key={h.id}
                             onClick={(e) => {
                               e.stopPropagation();
-                              onLogisticsAction(event.uid, type, 'add', h.id);
+                              // Speichern läuft weiter sicher über den Datenbank-Key!
+                              onLogisticsAction(safeEventId, type, 'add', h.id);
                               setOpenLogisticsPicker(null);
                             }}
                             className="w-full text-left px-2 py-1.5 text-xs text-gray-800 hover:bg-blue-50 hover:text-blue-700 rounded transition-colors flex items-center justify-between"
@@ -162,7 +169,7 @@ export const MatchLineupLogisticsRow: React.FC<MatchLineupLogisticsRowProps> = (
                 onClick={(e) => {
                   e.stopPropagation();
                   if (window.confirm(`Möchtest du dich verbindlich als ${roleName} eintragen?`)) {
-                    onLogisticsAction(event.uid, type, 'add', myHelperId);
+                    onLogisticsAction(safeEventId, type, 'add', myHelperId);
                   }
                 }}
                 className="text-[14px] leading-none font-bold bg-white border border-dashed border-gray-300 text-gray-500 rounded w-6 h-6 flex items-center justify-center hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
@@ -186,7 +193,7 @@ export const MatchLineupLogisticsRow: React.FC<MatchLineupLogisticsRowProps> = (
                type="time"
                lang="de-DE"
                value={currentDepartureTime}
-               onChange={(e) => onDepartureTimeChange(event.uid, e.target.value)}
+               onChange={(e) => onDepartureTimeChange(safeEventId, e.target.value)}
                disabled={isReadOnly || isPast}
                className={`text-[11px] font-bold p-0.5 rounded border shadow-sm outline-none transition-colors ${isReadOnly || isPast ? 'bg-transparent border-transparent text-gray-600' : 'bg-white border-gray-300 text-gray-900 hover:border-gray-400 focus:border-blue-500 cursor-pointer'}`}
                title="Abfahrtszeit"

@@ -1,9 +1,12 @@
+// [2026-10-13] - BUGFIX: Ungültigen JSX-Kommentar beim return Statement entfernt (Vite/OXC Build Fehler).
+// [2026-10-13] - BUGFIX: UI-Key (event.uid) von DB-Key (safeEventId) entkoppelt, um Z-Index Überlappungen bei Namensgleichheiten zu verhindern.
+// [2026-10-13] - REFACTOR: sanitizeId durch generateStableEventId (Stable-ID) ersetzt. Alle Handler übergeben nun safeEventId statt event.uid.
 // [2026-10-12] - REFACTOR: Tabellen-Struktur aus MatchLineupMatrixModal in eigene Komponente ausgelagert.
 // src/features/Users/components/MatchLineupMatrixTable.tsx
 import React from 'react';
 import { Lock, Unlock, CheckSquare, Square, Users } from 'lucide-react';
 import type { Team, MatchLineup, Helper } from '../../../core/types/models';
-import { sanitizeId, type PlayerCategory } from '../hooks/useMatchLineupMatrix';
+import { generateStableEventId, type PlayerCategory } from '../hooks/useMatchLineupMatrix';
 import { MatchLineupLogisticsRow } from './MatchLineupLogisticsRow';
 
 interface MatchLineupMatrixTableProps {
@@ -75,9 +78,11 @@ export const MatchLineupMatrixTable: React.FC<MatchLineupMatrixTableProps> = ({
           const eventDate = new Date(event.startTime);
           const isPast = event.startTime < Date.now();
           
-          const safeEventId = sanitizeId(event.uid);
+          const safeEventId = generateStableEventId(team.id, event);
+          const uiKey = event.uid; // Die flüchtige UID für die lokale React-Steuerung
+          
           const isFocusedRow = focusedEventId === safeEventId;
-          const isPickerOpenInThisRow = openLogisticsPicker?.startsWith(safeEventId);
+          const isPickerOpenInThisRow = openLogisticsPicker?.startsWith(uiKey);
           
           const storeLineup = matchLineups.find(m => m.id === safeEventId);
           const hasLocalOverride = localOverrides[safeEventId] !== undefined;
@@ -110,7 +115,7 @@ export const MatchLineupMatrixTable: React.FC<MatchLineupMatrixTableProps> = ({
           const shortTime = eventDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', hour12: false });
 
           return (
-            <tr key={event.uid} className={`group ${isFocusedRow ? 'bg-blue-50' : (isPast ? 'hover:bg-gray-200' : 'hover:bg-blue-50/40')} transition-colors`}>
+            <tr key={uiKey} className={`group ${isFocusedRow ? 'bg-blue-50' : (isPast ? 'hover:bg-gray-200' : 'hover:bg-blue-50/40')} ${isPickerOpenInThisRow ? 'relative z-50' : ''} transition-colors`}>
               
               <td className={`sticky left-0 ${isPickerOpenInThisRow ? 'z-50' : 'z-10'} ${rowBg} group-hover:bg-inherit ${borderClasses} border-r-2 px-4 py-3 w-[240px] sm:w-[280px] align-middle shadow-[1px_0px_0px_0px_#e5e7eb]`}>
                 <div className="flex flex-col whitespace-normal h-full">
@@ -133,7 +138,7 @@ export const MatchLineupMatrixTable: React.FC<MatchLineupMatrixTableProps> = ({
                     
                     {!isReadOnly && (!isPast || isFocusedRow) ? (
                       <button 
-                        onClick={(e) => { e.stopPropagation(); onToggleLock(event.uid, !isManuallyLocked); }}
+                        onClick={(e) => { e.stopPropagation(); onToggleLock(safeEventId, !isManuallyLocked); }}
                         className={`flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
                           isManuallyLocked ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' :
                           isAutoFrozen ? 'bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200' :
@@ -218,7 +223,7 @@ export const MatchLineupMatrixTable: React.FC<MatchLineupMatrixTableProps> = ({
                     style={stripedStyle}
                     onClick={() => {
                       if (canEditAvail) {
-                        onToggleAvailability(event.uid, m.id, isPlaying, isFrozen);
+                        onToggleAvailability(safeEventId, m.id, isPlaying, isFrozen);
                       }
                     }}
                     title={tooltipText}
@@ -230,7 +235,7 @@ export const MatchLineupMatrixTable: React.FC<MatchLineupMatrixTableProps> = ({
                         onClick={(e) => {
                           e.stopPropagation(); 
                           if (!isReadOnly && (!isPast || isFocusedRow)) {
-                            onTogglePlayer(event.uid, m.id, activePlayers);
+                            onTogglePlayer(safeEventId, m.id, activePlayers);
                           }
                         }}
                         className={`p-1.5 rounded-md z-10 ${!isReadOnly && (!isPast || isFocusedRow) ? 'cursor-pointer hover:bg-black/5' : 'cursor-default'}`}

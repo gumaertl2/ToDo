@@ -1,3 +1,4 @@
+// [2026-10-13] - REFACTOR: Umstellung auf Stable Event ID (Natural Key: TeamID + Saison + Titel + Description), um Datenverlust durch wechselnde Verbands-UIDs zu verhindern.
 // [2026-10-12] - REFACTOR: Komplette Daten- und State-Logik aus MatchLineupMatrixModal in diesen Hook ausgelagert.
 // src/features/Users/hooks/useMatchLineupMatrix.ts
 import { useState, useMemo } from 'react';
@@ -6,7 +7,29 @@ import type { Team, MatchLineup, Helper } from '../../../core/types/models';
 
 export type PlayerCategory = 'STAMM' | 'KADER' | 'EXTERN';
 
-export const sanitizeId = (id: string) => id.replace(/[\/\\.#$\[\]]/g, '_');
+// NEU: Deterministische ID-Generierung, immun gegen Kalender-UID-Wechsel
+export const generateStableEventId = (teamId: string, event: any) => {
+  const date = new Date(event.startTime);
+  const month = date.getMonth(); // 0 = Jan, 6 = Jul
+  const year = date.getFullYear();
+  
+  // Tischtennis Saisonwechsel ist im Juli (Monat 6)
+  const season = month >= 6 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+
+  const normalize = (str: string) => {
+     return (str || '').toLowerCase()
+       .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+       .replace(/[^a-z0-9]/g, '_')
+       .replace(/_+/g, '_')
+       .replace(/^_|_$/g, '');
+  };
+
+  const title = normalize(event.title);
+  const desc = normalize(event.description);
+
+  const rawId = `${teamId}_${season}_${title}_${desc}`;
+  return rawId.replace(/_+/g, '_').replace(/^_|_$/g, '');
+};
 
 export const useMatchLineupMatrix = (team: Team, focusedEventId?: string, isReadOnly?: boolean) => {
   const { user, helpers, calendarSubscriptions, matchLineups, saveMatchLineup } = useClubStore();
@@ -94,7 +117,7 @@ export const useMatchLineupMatrix = (team: Team, focusedEventId?: string, isRead
     const sorted = [...linkedSubscription.cachedEvents].sort((a, b) => a.startTime - b.startTime);
     
     if (focusedEventId) {
-      const focusIndex = sorted.findIndex(e => sanitizeId(e.uid) === focusedEventId);
+      const focusIndex = sorted.findIndex(e => generateStableEventId(team.id, e) === focusedEventId);
       if (focusIndex > -1) {
         const [focusedEvent] = sorted.splice(focusIndex, 1);
         sorted.unshift(focusedEvent);
@@ -102,7 +125,7 @@ export const useMatchLineupMatrix = (team: Team, focusedEventId?: string, isRead
     }
     
     return sorted;
-  }, [linkedSubscription, focusedEventId]);
+  }, [linkedSubscription, focusedEventId, team.id]);
 
   // --- SPIELE-ZÄHLER ENGINE ---
   const playerGameCounts = useMemo(() => {
@@ -112,12 +135,12 @@ export const useMatchLineupMatrix = (team: Team, focusedEventId?: string, isRead
     displayMembers.forEach(m => { counts[m.helper.id] = 0; });
     
     events.forEach(event => {
-      const safeEventId = sanitizeId(event.uid);
-      const storeLineup = matchLineups.find(m => m.id === safeEventId);
-      const hasLocalOverride = localOverrides[safeEventId] !== undefined;
+      const stableEventId = generateStableEventId(team.id, event);
+      const storeLineup = matchLineups.find(m => m.id === stableEventId);
+      const hasLocalOverride = localOverrides[stableEventId] !== undefined;
       
       let activeIds: string[] = [];
-      if (hasLocalOverride) activeIds = localOverrides[safeEventId];
+      if (hasLocalOverride) activeIds = localOverrides[stableEventId];
       else if (storeLineup) activeIds = storeLineup.lineupHelperIds;
       else activeIds = team.defaultLineupHelperIds || [];
       
@@ -126,23 +149,22 @@ export const useMatchLineupMatrix = (team: Team, focusedEventId?: string, isRead
       });
     });
     return counts;
-  }, [events, matchLineups, localOverrides, team.defaultLineupHelperIds, displayMembers]);
+  }, [events, matchLineups, localOverrides, team, displayMembers]);
 
   // --- KADER NOMINIERUNG (Nur Captain) ---
-  const handleTogglePlayer = async (rawEventId: string, helperId: string, currentActiveIds: string[]) => {
+  const handleTogglePlayer = async (stableEventId: string, helperId: string, currentActiveIds: string[]) => {
     if (isReadOnly) return;
 
-    const safeEventId = sanitizeId(rawEventId);
-    const storeLineup = matchLineups.find(m => m.id === safeEventId);
+    const storeLineup = matchLineups.find(m => m.id === stableEventId);
     
     const newActiveIds = currentActiveIds.includes(helperId)
       ? currentActiveIds.filter(id => id !== helperId)
       : [...currentActiveIds, helperId];
 
-    setLocalOverrides(prev => ({ ...prev, [safeEventId]: newActiveIds }));
+    setLocalOverrides(prev => ({ ...prev, [stableEventId]: newActiveIds }));
 
     const newLineup: MatchLineup = {
-      id: safeEventId,
+      id: stableEventId,
       schemaVersion: '1.0',
       teamId: team.id,
       lineupHelperIds: newActiveIds,
@@ -158,21 +180,20 @@ export const useMatchLineupMatrix = (team: Team, focusedEventId?: string, isRead
     const result = await saveMatchLineup(newLineup);
     if (!result.success) {
       alert(`SPEICHERN FEHLGESCHLAGEN!\n\nFirebase meldet: ${result.error?.message || 'Unbekannter Fehler'}`);
-      setLocalOverrides(prev => { const next = { ...prev }; delete next[safeEventId]; return next; });
+      setLocalOverrides(prev => { const next = { ...prev }; delete next[stableEventId]; return next; });
     }
   };
 
   // --- VERFÜGBARKEIT ÄNDERN (Da / Weg / ?) ---
-  const handleToggleAvailability = async (rawEventId: string, helperId: string, isPlaying: boolean, isFrozenLocal: boolean) => {
+  const handleToggleAvailability = async (stableEventId: string, helperId: string, isPlaying: boolean, isFrozenLocal: boolean) => {
     const isMyColumn = helperId === myHelperId;
     const isCaptainAction = !isReadOnly;
 
     if (!isMyColumn && !isCaptainAction) return;
 
-    const safeEventId = sanitizeId(rawEventId);
-    const storeLineup = matchLineups.find(m => m.id === safeEventId);
+    const storeLineup = matchLineups.find(m => m.id === stableEventId);
     
-    const currentAvail = localAvailOverrides[safeEventId]?.[helperId] || storeLineup?.availabilities?.[helperId] || 'UNKNOWN';
+    const currentAvail = localAvailOverrides[stableEventId]?.[helperId] || storeLineup?.availabilities?.[helperId] || 'UNKNOWN';
     
     let nextAvail: 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN' = 'UNKNOWN';
     if (currentAvail === 'UNKNOWN') nextAvail = 'AVAILABLE';
@@ -189,22 +210,22 @@ export const useMatchLineupMatrix = (team: Team, focusedEventId?: string, isRead
 
     setLocalAvailOverrides(prev => ({
        ...prev,
-       [safeEventId]: {
-          ...(prev[safeEventId] || {}),
+       [stableEventId]: {
+          ...(prev[stableEventId] || {}),
           [helperId]: nextAvail
        }
     }));
     
     setLocalSetByMFOverrides(prev => ({
       ...prev,
-      [safeEventId]: {
-        ...(prev[safeEventId] || {}),
+      [stableEventId]: {
+        ...(prev[stableEventId] || {}),
         [helperId]: newIsSetByMF
       }
     }));
 
     const newLineup: MatchLineup = {
-      id: safeEventId,
+      id: stableEventId,
       schemaVersion: '1.0',
       teamId: team.id,
       lineupHelperIds: storeLineup?.lineupHelperIds || team.defaultLineupHelperIds || [],
@@ -227,13 +248,12 @@ export const useMatchLineupMatrix = (team: Team, focusedEventId?: string, isRead
   };
 
   // --- MANUELLE VERSIEGELUNG (Nur Captain) ---
-  const handleToggleLock = async (rawEventId: string, newState: boolean) => {
-    const safeEventId = sanitizeId(rawEventId);
-    const storeLineup = matchLineups.find(m => m.id === safeEventId);
-    setLocalLockOverrides(prev => ({ ...prev, [safeEventId]: newState }));
+  const handleToggleLock = async (stableEventId: string, newState: boolean) => {
+    const storeLineup = matchLineups.find(m => m.id === stableEventId);
+    setLocalLockOverrides(prev => ({ ...prev, [stableEventId]: newState }));
     
     const newLineup: MatchLineup = {
-      id: safeEventId,
+      id: stableEventId,
       schemaVersion: '1.0',
       teamId: team.id,
       lineupHelperIds: storeLineup?.lineupHelperIds || team.defaultLineupHelperIds || [],
@@ -250,17 +270,16 @@ export const useMatchLineupMatrix = (team: Team, focusedEventId?: string, isRead
 
   // --- LOGISTIK ENGINE (Fahrer & Betreuer) ---
   const handleLogisticsAction = async (
-    rawEventId: string,
+    stableEventId: string,
     type: 'fahrerHelperIds' | 'betreuerHelperIds',
     action: 'add' | 'remove' | 'takeover',
     targetHelperId: string,
     oldHelperId?: string
   ) => {
-    const safeEventId = sanitizeId(rawEventId);
-    const storeLineup = matchLineups.find(m => m.id === safeEventId);
+    const storeLineup = matchLineups.find(m => m.id === stableEventId);
     
-    const currentIds = localLogisticsOverrides[safeEventId]?.[type] !== undefined 
-      ? localLogisticsOverrides[safeEventId][type]! 
+    const currentIds = localLogisticsOverrides[stableEventId]?.[type] !== undefined 
+      ? localLogisticsOverrides[stableEventId][type]! 
       : (storeLineup?.[type] || []);
 
     let newIds = [...currentIds];
@@ -276,14 +295,14 @@ export const useMatchLineupMatrix = (team: Team, focusedEventId?: string, isRead
 
     setLocalLogisticsOverrides(prev => ({
       ...prev,
-      [safeEventId]: {
-        ...(prev[safeEventId] || {}),
+      [stableEventId]: {
+        ...(prev[stableEventId] || {}),
         [type]: newIds
       }
     }));
 
     const newLineup: MatchLineup = {
-      id: safeEventId,
+      id: stableEventId,
       schemaVersion: '1.0',
       teamId: team.id,
       lineupHelperIds: storeLineup?.lineupHelperIds || team.defaultLineupHelperIds || [],
@@ -300,20 +319,19 @@ export const useMatchLineupMatrix = (team: Team, focusedEventId?: string, isRead
   };
 
   // --- ABFAHRTSZEIT ENGINE ---
-  const handleDepartureTimeChange = async (rawEventId: string, newTime: string) => {
-    const safeEventId = sanitizeId(rawEventId);
-    const storeLineup = matchLineups.find(m => m.id === safeEventId);
+  const handleDepartureTimeChange = async (stableEventId: string, newTime: string) => {
+    const storeLineup = matchLineups.find(m => m.id === stableEventId);
 
     setLocalLogisticsOverrides(prev => ({
       ...prev,
-      [safeEventId]: {
-        ...(prev[safeEventId] || {}),
+      [stableEventId]: {
+        ...(prev[stableEventId] || {}),
         departureTime: newTime
       }
     }));
 
     const newLineup: MatchLineup = {
-      id: safeEventId,
+      id: stableEventId,
       schemaVersion: '1.0',
       teamId: team.id,
       lineupHelperIds: storeLineup?.lineupHelperIds || team.defaultLineupHelperIds || [],

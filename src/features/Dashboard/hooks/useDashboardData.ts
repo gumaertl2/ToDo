@@ -1,8 +1,10 @@
+// [2026-10-13] - BUGFIX: Dashboard an Stable-ID Architektur (generateStableEventId) angebunden, damit Fahrer/Betreuer Dienste wieder korrekt gefunden werden.
 // [2026-10-12] - BUGFIX: Vergangenheits-Filter (todayStart <= eventDateStart) in pendingWhatsAppReminders nachgerüstet, um Diskrepanzen zur RemindersView/Navigation zu verhindern.
 // [2026-10-12] - REFACTOR: Dashboard Daten-Logik (Events, ToDos, Dienste, Sitzungen) aus WelcomeDashboard in Custom Hook ausgelagert.
 // src/features/Dashboard/hooks/useDashboardData.ts
 import { useMemo, useCallback } from 'react';
 import { useClubStore } from '../../../store/useClubStore';
+import { generateStableEventId } from '../../Users/hooks/useMatchLineupMatrix';
 
 export const useDashboardData = (
   eventsLookahead: number,
@@ -228,15 +230,26 @@ export const useDashboardData = (
               if (!isDuplicate) {
                 processedEventKeys.add(`${dateStr}|${normalizedTitle}`);
                 
-                // Logistik Info aus der Matrix laden
-                const safeEventId = cachedEv.uid.replace(/[\/\\.#$\[\]]/g, '_');
-                const lineup = matchLineups?.find(m => m.id === safeEventId);
+                // Logistik Info aus der Matrix laden (STABLE ID)
                 let driverNames = '';
-                if (lineup?.fahrerHelperIds?.length && helpers) {
-                    driverNames = lineup.fahrerHelperIds.map(id => {
-                        const h = helpers.find(x => x.id === id);
-                        return h ? (h.alias || h.name.split(' ')[0]) : '';
-                    }).filter(Boolean).join(', ');
+                let departureTime = '';
+                
+                if (sub.reminderRecipientTeamIds?.length) {
+                    for (const teamId of sub.reminderRecipientTeamIds) {
+                        const safeEventId = generateStableEventId(teamId, cachedEv);
+                        const lineup = matchLineups?.find(m => m.id === safeEventId);
+                        
+                        if (lineup) {
+                            if (lineup.fahrerHelperIds?.length && helpers) {
+                                driverNames = lineup.fahrerHelperIds.map(id => {
+                                    const h = helpers.find(x => x.id === id);
+                                    return h ? (h.alias || h.name.split(' ')[0]) : '';
+                                }).filter(Boolean).join(', ');
+                            }
+                            departureTime = lineup.departureTime || '';
+                            break; 
+                        }
+                    }
                 }
 
                 combinedEvents.push({
@@ -248,7 +261,7 @@ export const useDashboardData = (
                   type: 'ABO_CALENDAR',
                   source: 'Über externes Abo',
                   driverNames,
-                  departureTime: lineup?.departureTime || ''
+                  departureTime
                 });
               }
             }
@@ -285,33 +298,39 @@ export const useDashboardData = (
          const ceEnd = ce.endTime ? new Date(ce.endTime).getTime() : ceTime;
          
          if (ceEnd >= todayStart && ceTime <= servicesLookaheadDate) {
-            const safeEventId = ce.uid.replace(/[\/\\.#$\[\]]/g, '_');
-            const lineup = matchLineups.find(m => m.id === safeEventId);
             
-            if (lineup) {
-              const isFahrer = lineup.fahrerHelperIds?.includes(myHelper.id);
-              const isBetreuer = lineup.betreuerHelperIds?.includes(myHelper.id);
-              
-              if (isFahrer || isBetreuer) {
-                 let driverNames = '';
-                 if (lineup.fahrerHelperIds?.length && helpers) {
-                     driverNames = lineup.fahrerHelperIds.map(id => {
-                         const h = helpers.find(x => x.id === id);
-                         return h ? (h.alias || h.name.split(' ')[0]) : '';
-                     }).filter(Boolean).join(', ');
-                 }
-
-                 duties.push({
-                   id: `logistics-${ce.uid}`,
-                   subId: sub.id,
-                   uid: ce.uid,
-                   title: `Saison-Dienst: ${ce.title}`,
-                   role: isFahrer && isBetreuer ? 'Fahrer & Betreuer' : (isFahrer ? 'Fahrer' : 'Betreuer'),
-                   time: ceTime,
-                   driverNames,
-                   departureTime: lineup.departureTime || ''
-                 });
-              }
+            if (sub.reminderRecipientTeamIds?.length) {
+                for (const teamId of sub.reminderRecipientTeamIds) {
+                    const safeEventId = generateStableEventId(teamId, ce);
+                    const lineup = matchLineups.find(m => m.id === safeEventId);
+                    
+                    if (lineup) {
+                      const isFahrer = lineup.fahrerHelperIds?.includes(myHelper.id);
+                      const isBetreuer = lineup.betreuerHelperIds?.includes(myHelper.id);
+                      
+                      if (isFahrer || isBetreuer) {
+                         let driverNames = '';
+                         if (lineup.fahrerHelperIds?.length && helpers) {
+                             driverNames = lineup.fahrerHelperIds.map(id => {
+                                 const h = helpers.find(x => x.id === id);
+                                 return h ? (h.alias || h.name.split(' ')[0]) : '';
+                             }).filter(Boolean).join(', ');
+                         }
+        
+                         duties.push({
+                           id: `logistics-${ce.uid}`,
+                           subId: sub.id,
+                           uid: ce.uid,
+                           title: `Saison-Dienst: ${ce.title}`,
+                           role: isFahrer && isBetreuer ? 'Fahrer & Betreuer' : (isFahrer ? 'Fahrer' : 'Betreuer'),
+                           time: ceTime,
+                           driverNames,
+                           departureTime: lineup.departureTime || ''
+                         });
+                      }
+                      break;
+                    }
+                }
             }
          }
       });

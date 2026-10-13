@@ -1,3 +1,5 @@
+// [2026-10-13] - FEATURE: pollSummary zum AdaptedEvent hinzugefügt, um Abstimmungsergebnisse direkt in der Kalender-Listenansicht rendern zu können.
+// [2026-10-13] - BUGFIX: ev.uid durch generateStableEventId (Stable-ID) ersetzt, damit die Dienste-Listenansicht die Logistik-Daten wieder findet.
 // [2026-10-12] - REFACTOR: Daten-Mapping, Filterung und Heimspiel-Logik aus CalendarView in eigenen Hook (useCalendarEvents) ausgelagert.
 // src/features/Events/hooks/useCalendarEvents.ts
 import { useMemo } from 'react';
@@ -5,6 +7,7 @@ import type { Event as RBCEvent } from 'react-big-calendar';
 import { startOfDay } from 'date-fns/startOfDay';
 import { useClubStore } from '../../../store/useClubStore';
 import type { CalendarEvent, Event } from '../../../core/types/models';
+import { generateStableEventId } from '../../Users/hooks/useMatchLineupMatrix';
 
 export interface AdaptedEvent extends RBCEvent {
   id: string; 
@@ -18,6 +21,7 @@ export interface AdaptedEvent extends RBCEvent {
   showInMatchPlan?: boolean;
   isLogisticsDuty?: boolean; 
   teamName?: string;
+  pollSummary?: string; 
 }
 
 interface UseCalendarEventsProps {
@@ -33,7 +37,8 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
     calendarSubscriptions, 
     teams, 
     helpers, 
-    matchLineups 
+    matchLineups,
+    pollResponsesByEvent
   } = useClubStore();
 
   // 1. RAW MAPPING: Aus Datenbank-Modellen die Kalender-Events generieren
@@ -43,6 +48,24 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
       const isAuswaerts = ev.location && !isHeim;
       const matchPrefix = ev.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
       const baseTitle = `${matchPrefix}${ev.title}`;
+
+      // ABSTIMMUNGS-ZÄHLER
+      let pollSummary = undefined;
+      if (ev.pollConfig?.isActive && ev.pollConfig.options?.length > 0) {
+        const responses = pollResponsesByEvent[ev.id] || [];
+        if (responses.length > 0) {
+          const parts = ev.pollConfig.options.map(opt => {
+            const count = responses.filter(r => (r.selectedOptionIds || []).includes(opt.id)).length;
+            // Emoji aus dem Text extrahieren (falls vorhanden), ansonsten leeren String
+            const match = opt.text.match(/^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F)/u);
+            const emoji = match ? match[1] : '';
+            return `${count} ${emoji}`.trim();
+          });
+          pollSummary = parts.join('  |  ');
+        } else {
+          pollSummary = "Noch keine Antworten";
+        }
+      }
 
       return {
         id: ev.id, 
@@ -56,7 +79,8 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
         allDay: ev.isAllDay, 
         sourceEvent: ev, 
         color: ev.color || '#3b82f6',
-        showInMatchPlan: ev.showInMatchPlan
+        showInMatchPlan: ev.showInMatchPlan,
+        pollSummary
       };
     });
     
@@ -110,12 +134,12 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
             const isAuswaerts = ev.location && !isHeim;
             const matchPrefix = sub.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
 
-            const safeEventId = ev.uid.replace(/[\/\\.#$\[\]]/g, '_');
+            // Stable-ID für den Kader
+            const safeEventId = generateStableEventId(team.id, ev);
             const lineup = matchLineups.find(m => m.id === safeEventId);
 
             const badges: string[] = [];
             
-            // Heimspiel-Logik für Fahrer
             if (team.requiresFahrer) {
                 const fahrerIds = lineup?.fahrerHelperIds || [];
                 if (!isHeim || fahrerIds.length > 0) {
@@ -170,7 +194,7 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
     });
 
     return [...internalEvents, ...internalSitzungen, ...cachedExternalEvents, ...logisticsEvents];
-  }, [calendarEvents, events, calendarSubscriptions, teams, helpers, matchLineups]);
+  }, [calendarEvents, events, calendarSubscriptions, teams, helpers, matchLineups, pollResponsesByEvent]);
 
   // 2. FILTERING: Welche Events dürfen in der aktuellen Ansicht überhaupt auftauchen?
   const filteredEvents = useMemo(() => {
@@ -178,7 +202,6 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
     const isListView = ['termine', 'dienste'].includes(currentView);
 
     return rbcEvents.filter(ev => {
-      // Logistik-Dienste gehören exklusiv in die Dienste-Ansicht
       if (ev.isLogisticsDuty) {
           if (currentView !== 'dienste') return false;
           return activeFilters.includes('dienste');

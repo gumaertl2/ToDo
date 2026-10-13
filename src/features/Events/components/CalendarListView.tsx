@@ -1,12 +1,50 @@
+// [2026-10-13] - BUGFIX: Eigene Inline-Komponente (InlinePollSummary) für die Abstimmung in der Liste erstellt. Diese abonniert aktiv die Live-Ergebnisse aus der Datenbank (Lazy Loading Fix), sodass die Übersicht sofort sichtbar ist, ohne das Modal öffnen zu müssen.
+// [2026-10-13] - UX-FEATURE: Responsive Abstimmungs-Ergebnisse (pollSummary) direkt in die Termin-Tabelle integriert (Mobile: drunter, Desktop: daneben).
 // [2026-10-12] - REFACTOR: Listen-Ansichten (Termine/Dienste) aus CalendarView in eigenständige Komponente ausgelagert.
 // src/features/Events/components/CalendarListView.tsx
-import React, { useState, useMemo, useRef, useLayoutEffect } from 'react';
+import React, { useState, useMemo, useRef, useLayoutEffect, useEffect } from 'react';
 import { format } from 'date-fns/format';
 import { getISOWeek } from 'date-fns/getISOWeek';
 import { startOfDay } from 'date-fns/startOfDay';
 import { de } from 'date-fns/locale/de';
 import { CalendarDays } from 'lucide-react';
 import type { AdaptedEvent } from '../hooks/useCalendarEvents';
+import { useClubStore } from '../../../store/useClubStore';
+
+// SMART COMPONENT: Abonniert live die Stimmen für exakt diesen einen Termin in der Liste
+const InlinePollSummary: React.FC<{ eventId: string; pollConfig: any }> = ({ eventId, pollConfig }) => {
+  const { subscribeToEventPoll, unsubscribeFromEventPoll, pollResponsesByEvent } = useClubStore();
+
+  useEffect(() => {
+    subscribeToEventPoll(eventId);
+    return () => unsubscribeFromEventPoll(eventId);
+  }, [eventId, subscribeToEventPoll, unsubscribeFromEventPoll]);
+
+  const responses = pollResponsesByEvent[eventId] || [];
+
+  if (!pollConfig?.isActive || !pollConfig?.options) return null;
+
+  if (responses.length === 0) {
+    return (
+      <span className="inline-flex items-center text-[10px] sm:text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-md shadow-sm whitespace-nowrap w-max shrink-0 mt-0.5 lg:mt-0">
+        📊 Abstimmung
+      </span>
+    );
+  }
+
+  const parts = pollConfig.options.map((opt: any) => {
+    const count = responses.filter((r: any) => (r.selectedOptionIds || []).includes(opt.id)).length;
+    const match = opt.text.match(/^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F)/u);
+    const emoji = match ? match[1] : '';
+    return emoji ? `${count} ${emoji}`.trim() : `${count}`;
+  });
+
+  return (
+    <span className="inline-flex items-center text-[10px] sm:text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-md shadow-sm whitespace-nowrap w-max shrink-0 mt-0.5 lg:mt-0">
+      📊 {parts.join(' | ')}
+    </span>
+  );
+};
 
 interface CalendarListViewProps {
   currentView: 'termine' | 'dienste';
@@ -147,9 +185,14 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
                     <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{format(startD, 'dd.MM.yyyy', { locale: de })}</td>
                     <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{format(actualEnd, 'dd.MM.yyyy', { locale: de })}</td>
                     <td className="py-3 px-4">
-                      <div className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors flex items-center gap-2">
-                        <span className="inline-block w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: e.color || '#3b82f6' }}></span>
-                        <span className="truncate">{e.title}</span>
+                      <div className="flex flex-col lg:flex-row lg:items-center gap-1.5 lg:gap-3">
+                        <div className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors flex items-center">
+                          <span className="inline-block w-3 h-3 rounded-full mr-2 shrink-0" style={{ backgroundColor: e.color || '#3b82f6' }}></span>
+                          <span className="truncate">{e.title}</span>
+                        </div>
+                        {e.sourceEvent?.pollConfig?.isActive && (
+                          <InlinePollSummary eventId={e.sourceEvent.id} pollConfig={e.sourceEvent.pollConfig} />
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -173,9 +216,15 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
                     <td className="py-3 px-4 text-gray-900 font-medium whitespace-nowrap">{dateStr}</td>
                     <td className="py-3 px-4 text-gray-600 whitespace-nowrap">{timeStr}</td>
                     <td className="py-3 px-4">
-                      <div className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">
-                        <span className="inline-block w-3 h-3 rounded-full mr-2" style={{ backgroundColor: e.color || '#3b82f6' }}></span>
-                        {e.title}
+                      {/* HIER IST DIE FLEX-MAGIE: flex-col für Mobile, lg:flex-row für Tablet/PC */}
+                      <div className="flex flex-col lg:flex-row lg:items-center gap-1 lg:gap-3">
+                        <div className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors flex items-center">
+                          <span className="inline-block w-3 h-3 rounded-full mr-2 shrink-0" style={{ backgroundColor: e.color || '#3b82f6' }}></span>
+                          <span className="line-clamp-2 lg:truncate">{e.title}</span>
+                        </div>
+                        {e.sourceEvent?.pollConfig?.isActive && (
+                          <InlinePollSummary eventId={e.sourceEvent.id} pollConfig={e.sourceEvent.pollConfig} />
+                        )}
                       </div>
                     </td>
                     <td className="py-3 px-4 text-gray-600 truncate max-w-[200px]" title={e.location}>{e.location}</td>

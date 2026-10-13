@@ -1,3 +1,5 @@
+// [2026-10-13] - FEATURE: nuScore Scanner sucht nun nach den Vereinsnamen (Heim vs Gast) statt nach dem Datum, wodurch die Codes auch bei Spielverlegungen robust gefunden werden.
+// [2026-10-13] - BUGFIX: sanitizeId durch generateStableEventId ersetzt, um Kader- und Logistik-Daten aus der Schattenakte wieder korrekt zu verknüpfen.
 // [2026-10-12] - FEATURE: Zentralen Ranglisten-Link (global_ranking) als Pokal-Icon (Trophy) in der Detailansicht integriert (SSOT für den gesamten Verein).
 // [2026-10-12] - FEATURE: Heimspiel-Logik für Fahrer-Anzeige implementiert. Fahrer werden bei Heimspielen (Ort enthält 'maisach') in der Detailansicht ausgeblendet, solange niemand eingetragen ist.
 // [2026-10-11] - BUGFIX: Guard-Clause in sanitizeId eingebaut, um TypeError (undefined is not an object) bei Events ohne UID abzufangen.
@@ -20,6 +22,7 @@ import { X, MapPin, AlignLeft, Calendar as CalIcon, Clock, Info, Edit3, UserPlus
 import { MatchLineupMatrixModal } from '../Users/components/MatchLineupMatrixModal';
 import { EventPollWidget } from './components/EventPollWidget';
 import type { MatchLineup } from '../../core/types/models';
+import { generateStableEventId } from '../Users/hooks/useMatchLineupMatrix';
 
 interface Props {
   event: any; // Das AdaptedEvent aus dem Kalender
@@ -29,8 +32,6 @@ interface Props {
   canTakeOver?: boolean;
   onTakeOver?: () => void;
 }
-
-const sanitizeId = (id?: string) => (id ? String(id).replace(/[\/\\.#$\[\]]/g, '_') : '');
 
 export const CalendarIcsDetailModal: React.FC<Props> = ({ 
   event, 
@@ -64,7 +65,10 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
     event.title.includes(ce.title.replace(/[\u{1F300}-\u{1F9FF}]/gu, '').trim()) // Fallback-Sicherheit für Emojis
   );
   
-  const safeEventId = cachedEvent ? sanitizeId(cachedEvent.uid) : (event.sourceEvent ? sanitizeId(event.sourceEvent.uid) : null);
+  // HIER IST DER FIX: Wir nutzen den neuen unzerstörbaren Schlüssel!
+  const safeEventId = teamContext && (cachedEvent || event.sourceEvent) 
+      ? generateStableEventId(teamContext.id, cachedEvent || event.sourceEvent) 
+      : null;
 
   const storeLineup = matchLineups.find(m => m.id === safeEventId);
   const activePlayerIds = storeLineup ? storeLineup.lineupHelperIds : (teamContext?.defaultLineupHelperIds || []);
@@ -79,7 +83,6 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
   const hasAssignedDrivers = (storeLineup?.fahrerHelperIds?.length || 0) > 0;
   
   const showBetreuer = teamContext?.requiresBetreuer;
-  // Fahrer nur anzeigen, wenn es kein Heimspiel ist ODER wenn es ein Heimspiel ist, aber bereits jemand eingetragen wurde.
   const showFahrer = teamContext?.requiresFahrer && (!isHomeGame || hasAssignedDrivers);
   const showLogisticsBlock = showBetreuer || showFahrer;
   const showMatrixButton = canManageLineup || isTeamMember || showLogisticsBlock;
@@ -230,29 +233,55 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
   };
   // ---------------------
 
-  // --- NUSCORE SCANNER LOGIC ---
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const searchDate = `${pad(event.start.getDate())}.${pad(event.start.getMonth() + 1)}.${event.start.getFullYear()}`;
-  const searchTime = !event.allDay ? `${pad(event.start.getHours())}:${pad(event.start.getMinutes())}` : undefined;
-
+  // --- NEUER NUSCORE SCANNER (Namen statt Datum!) ---
   const teamPin = teamContext ? teamPins.find(p => p.teamName === teamContext.name) : null;
   const globalRankingUrl = teamPins.find(p => p.id === 'global_ranking')?.rankingUrl;
 
-  const extractCode = (text: string | undefined, dateStr: string, timeStr?: string) => {
+  const extractCodeByTeams = (text: string | undefined, eventTitle: string) => {
     if (!text) return null;
-    const lines = text.split('\n');
-    let match = timeStr ? lines.find(line => line.includes(dateStr) && line.includes(timeStr)) : undefined;
-    if (!match) match = lines.find(line => line.includes(dateStr));
     
+    // Bereinige Titel von Emojis und Zusätzen in Klammern
+    const cleanTitle = eventTitle.replace(/[\u{1F300}-\u{1F9FF}]/gu, '').replace(/\s\([^)]+\)$/, '').trim();
+    
+    // Splitte in Heim vs Gast
+    const parts = cleanTitle.split(/\s+vs\.?\s+|\s+-\s+/i);
+    if (parts.length < 2) return null; // Kein Spiel, vermutlich Training
+    
+    const homeTeam = parts[0].trim().toLowerCase();
+    const awayTeam = parts[1].trim().toLowerCase();
+    
+    // Filtere unnötige Präfixe heraus, um wirklich nur signifikante Namen zu suchen
+    const getKeywords = (name: string) => name.split(/\s+/).filter(w => w.length > 3 && !['tsv', 'ttc', 'sc', 'fc', 'sv', 'ttv', 'mtv', 'vfl', 'spvgg', 'djk'].includes(w));
+    
+    const homeKw = getKeywords(homeTeam);
+    const awayKw = getKeywords(awayTeam);
+
+    const lines = text.split('\n');
+    
+    const match = lines.find(line => {
+      const l = line.toLowerCase();
+      
+      const hasHome = homeKw.length > 0 ? homeKw.some(w => l.includes(w)) : l.includes(homeTeam);
+      const hasAway = awayKw.length > 0 ? awayKw.some(w => l.includes(w)) : l.includes(awayTeam);
+      
+      if (hasHome && hasAway) {
+         // Prüfe Heimrecht: Das Heimteam muss vor dem Gastteam im String stehen
+         const hIdx = homeKw.length > 0 ? Math.min(...homeKw.map(w => l.indexOf(w)).filter(i => i >= 0)) : l.indexOf(homeTeam);
+         const aIdx = awayKw.length > 0 ? Math.min(...awayKw.map(w => l.indexOf(w)).filter(i => i >= 0)) : l.indexOf(awayTeam);
+         return hIdx < aIdx;
+      }
+      return false;
+    });
+
     if (match) {
       const words = match.trim().split(/\s+/);
-      return words[words.length - 1]; // Letztes Wort schnappen
+      return words[words.length - 1]; // Code oder PIN am Ende der Zeile
     }
     return null;
   };
 
-  const gameCode = teamPin ? extractCode(teamPin.gameEntryPinsText, searchDate, searchTime) : null;
-  const signaturePin = teamPin ? extractCode(teamPin.signaturePinsText, searchDate, searchTime) : null;
+  const gameCode = teamPin ? extractCodeByTeams(teamPin.gameEntryPinsText, event.title) : null;
+  const signaturePin = teamPin ? extractCodeByTeams(teamPin.signaturePinsText, event.title) : null;
   
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);

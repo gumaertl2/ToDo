@@ -1,6 +1,7 @@
+// [2026-10-13] - UX-FIX: Kalender-Dienste und Logistik-Dienste in einer Liste zusammengeführt und strikt chronologisch sortiert.
 // [2026-10-12] - REFACTOR: "Meine Dienste" Kachel aus dem WelcomeDashboard in eine eigene Komponente ausgelagert.
 // src/features/Dashboard/components/DashboardServicesWidget.tsx
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Coffee, ArrowRight, ChevronRight } from 'lucide-react';
 
@@ -24,6 +25,22 @@ export const DashboardServicesWidget: React.FC<DashboardServicesWidgetProps> = (
   formatDate
 }) => {
   const navigate = useNavigate();
+
+  const combinedServices = useMemo(() => {
+    const combined = [
+      ...upcomingServices.map(srv => ({
+        ...srv,
+        _sortTime: new Date(srv.startTime).getTime(),
+        _type: 'CALENDAR_SERVICE'
+      })),
+      ...myLogisticsDuties.map(duty => ({
+        ...duty,
+        _sortTime: duty.time,
+        _type: 'LOGISTICS_DUTY'
+      }))
+    ];
+    return combined.sort((a, b) => a._sortTime - b._sortTime);
+  }, [upcomingServices, myLogisticsDuties]);
 
   return (
     <section className="relative z-10">
@@ -57,46 +74,41 @@ export const DashboardServicesWidget: React.FC<DashboardServicesWidgetProps> = (
         {totalServicesCount === 0 ? (
           <div className="bg-purple-50/50 border border-purple-100 p-6 rounded-xl text-center text-purple-600/70 text-sm">Keine Dienste im gewählten Zeitraum.</div>
         ) : (
-          <>
-            {upcomingServices.map(srv => (
-              <button key={srv.id} onClick={() => navigate('/calendar', { state: { openEventId: srv.id, targetDate: new Date(srv.startTime).getTime() } })} className="w-full text-left bg-purple-50 border border-purple-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-purple-400 transition-all group">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="inline-block px-2 py-1 bg-purple-200 text-purple-900 text-xs font-bold rounded mb-2">{formatDate(new Date(srv.startTime).getTime())}</span>
-                    <h3 className="font-bold text-purple-900 leading-snug">{srv.title}</h3>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-purple-400 group-hover:text-purple-600 mt-2 shrink-0" />
+          combinedServices.map(item => (
+            <button 
+              key={item.id} 
+              onClick={() => {
+                if (item._type === 'CALENDAR_SERVICE') {
+                  navigate('/calendar', { state: { openEventId: item.id, targetDate: item._sortTime } });
+                } else {
+                  navigate('/calendar', { state: { openEventSubId: item.subId, openEventUid: item.uid, targetDate: item._sortTime } });
+                }
+              }} 
+              className="w-full text-left bg-purple-50 border border-purple-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-purple-400 transition-all group"
+            >
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="inline-block px-2 py-1 bg-purple-200 text-purple-900 text-xs font-bold rounded mb-2">
+                    {item._type === 'LOGISTICS_DUTY' ? `${formatDate(item._sortTime)} • ${item.role}` : formatDate(item._sortTime)}
+                  </span>
+                  <h3 className="font-bold text-purple-900 leading-snug">{item.title}</h3>
+                  
+                  {/* FAHRER-INFO (Nur bei Logistik-Diensten) */}
+                  {item._type === 'LOGISTICS_DUTY' && item.driverNames && (
+                    <div className="mt-2 text-xs text-purple-700 flex items-center bg-purple-100/50 border border-purple-200 px-2 py-1 rounded-md w-max shadow-sm">
+                      <span className="mr-1.5">🚗</span>
+                      {item.departureTime ? (
+                        <span>Abfahrt: <strong className="text-purple-900">{item.departureTime} Uhr</strong> ({item.driverNames})</span>
+                      ) : (
+                        <span>Fahrer: <strong className="text-purple-900">{item.driverNames}</strong></span>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </button>
-            ))}
-            {myLogisticsDuties.map(duty => (
-              <button 
-                key={duty.id} 
-                onClick={() => navigate('/calendar', { state: { openEventSubId: duty.subId, openEventUid: duty.uid, targetDate: duty.time } })} 
-                className="w-full text-left bg-purple-50 border border-purple-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-purple-400 transition-all group"
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="inline-block px-2 py-1 bg-purple-200 text-purple-900 text-xs font-bold rounded mb-2">{formatDate(duty.time)} • {duty.role}</span>
-                    <h3 className="font-bold text-purple-900 leading-snug">{duty.title}</h3>
-                    
-                    {/* FAHRER-INFO (Logistik-Dienste) */}
-                    {duty.driverNames && (
-                      <div className="mt-2 text-xs text-purple-700 flex items-center bg-purple-100/50 border border-purple-200 px-2 py-1 rounded-md w-max shadow-sm">
-                        <span className="mr-1.5">🚗</span>
-                        {duty.departureTime ? (
-                          <span>Abfahrt: <strong className="text-purple-900">{duty.departureTime} Uhr</strong> ({duty.driverNames})</span>
-                        ) : (
-                          <span>Fahrer: <strong className="text-purple-900">{duty.driverNames}</strong></span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-purple-400 group-hover:text-purple-600 mt-2 shrink-0" />
-                </div>
-              </button>
-            ))}
-          </>
+                <ChevronRight className="w-5 h-5 text-purple-400 group-hover:text-purple-600 mt-2 shrink-0" />
+              </div>
+            </button>
+          ))
         )}
       </div>
     </section>
