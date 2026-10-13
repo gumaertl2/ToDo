@@ -1,13 +1,14 @@
+// [2026-10-13] - ARCHITECTURE-FIX: Spielplan (Agenda View) vollständig aus dem react-big-calendar Plugin befreit! Wird nun wie "Termine" und "Dienste" als eigenständige Komponente direkt im DOM verankert, um Mobile-Scroll-Bugs restlos zu beseitigen.
 // [2026-10-12] - REFACTOR: Hauptkomponente drastisch vereinfacht. Daten-Logik (useCalendarEvents) und komplexe Ansichten (CalendarListView, CalendarAgendaView) in eigene Dateien ausgelagert.
 // [2026-10-12] - BUGFIX: TS6133 'idx' is declared but its value is never read behoben.
-// [2026-10-12] - BUGFIX: Auto-Scroll in Listenansichten (Termine/Dienste) angepasst. Nutzt nun offsetTop - 45px anstelle von scrollIntoView, damit zukünftige Termine nicht unter dem Sticky-Header verschwinden.
-// [2026-10-12] - FEATURE: Auto-Scroll (Contextual Nav) in den Listenansichten (Termine/Dienste) integriert. Scrollt beim Laden automatisch zum ersten zukünftigen Event, sodass die Historie oben "aus dem Weg" ist.
-// [2026-10-12] - FEATURE: Heimspiel-Logik in "Dienste" implementiert. Blendet "🚗 Offen" bei Heimspielen aus.
-// [2026-10-12] - FEATURE: Abfahrtszeit (departureTime) aus dem MatchLineup direkt in die Dienste-Liste als Vorschau (Abfahrt: ...) integriert.
-// [2026-10-11] - BUGFIX: Deep-Link Logik (openEventSubId, openEventUid) repariert und Race Condition (setTimeout) beim Modal-Öffnen entfernt.
-// [2026-10-09] - FEATURE: Logistik-Dienste (Fahrer/Betreuer) in die "Dienste"-Ansicht des Kalenders integriert.
-// [2026-07-26] - BUGFIX: Dienstübernahme (Takeover) macht nun einen harten Schnitt und leert alle Platzhalter-Arrays (Admin), um Geister-Teilnehmer zu entfernen.
-// [2026-05-30] - UX-OPTIMIERUNG: Einheitlicher Workflow für alle Nutzer. Jeder Klick auf einen Termin öffnet nun zuerst das detailreiche CalendarIcsDetailModal.
+// [2026-10-12] - BUGFIX: Auto-Scroll in Listenansichten (Termine/Dienste) angepasst.
+// [2026-10-12] - FEATURE: Auto-Scroll (Contextual Nav) in den Listenansichten integriert.
+// [2026-10-12] - FEATURE: Heimspiel-Logik in "Dienste" implementiert.
+// [2026-10-12] - FEATURE: Abfahrtszeit (departureTime) in die Dienste-Liste integriert.
+// [2026-10-11] - BUGFIX: Deep-Link Logik repariert.
+// [2026-10-09] - FEATURE: Logistik-Dienste in die "Dienste"-Ansicht integriert.
+// [2026-07-26] - BUGFIX: Dienstübernahme (Takeover) macht nun einen harten Schnitt.
+// [2026-05-30] - UX-OPTIMIERUNG: Einheitlicher Workflow für alle Nutzer. Jeder Klick öffnet zuerst das CalendarIcsDetailModal.
 // src/features/Events/CalendarView.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
@@ -32,7 +33,7 @@ import { CalendarExportModal } from './CalendarExportModal';
 import { useCalendarEvents } from './hooks/useCalendarEvents';
 import type { AdaptedEvent } from './hooks/useCalendarEvents';
 import { CalendarListView } from './components/CalendarListView';
-import { useCalendarAgendaView } from './components/CalendarAgendaView';
+import { CalendarAgendaView } from './components/CalendarAgendaView'; // HIER: Kein Hook mehr, sondern normale Komponente!
 
 const locales = { 'de': de };
 
@@ -139,8 +140,6 @@ export const CalendarView: React.FC = () => {
       setIsIcsDetailModalOpen(true);
     }
   };
-
-  const CustomAgendaView = useCalendarAgendaView(showEmptyDays, handleSelectEvent);
 
   // --- DEEP LINKING ---
   useEffect(() => {
@@ -417,11 +416,19 @@ export const CalendarView: React.FC = () => {
              currentDate={currentDate} 
              onSelectEvent={handleSelectEvent} 
           />
+        ) : currentView === 'agenda' ? (
+          // HIER IST DER FIX: Die AgendaView ist nun komplett eigenständig und befreit vom RBC Plugin!
+          <CalendarAgendaView 
+            currentDate={currentDate}
+            events={displayEvents}
+            showEmptyDays={showEmptyDays}
+            onSelectEvent={handleSelectEvent}
+          />
         ) : (
           <Calendar
             culture="de" localizer={localizer} events={displayEvents} startAccessor="start" endAccessor="end"
             view={currentView as any} toolbar={false} onView={handleViewChange}
-            views={{ month: true, week: true, day: true, agenda: CustomAgendaView }}
+            views={{ month: true, week: true, day: true }} // agenda entfernt, da es nun extern gerendert wird
             date={currentDate} onNavigate={(date) => setCurrentDate(date)}
             eventPropGetter={(event: AdaptedEvent) => ({ 
               style: { 
