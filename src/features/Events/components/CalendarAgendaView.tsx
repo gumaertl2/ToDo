@@ -1,4 +1,5 @@
-// [2026-10-13] - BUGFIX: Mobile Scroll-Bug (Einfrieren) im Spielplan (Agenda View) behoben. Flexbox 'min-h-0' und 'WebkitOverflowScrolling' erzwingen das native Scrollen auf iOS/Android innerhalb des react-big-calendar.
+// [2026-10-13] - BUGFIX: Safari Click-Blocker entfernt. Das 'stopPropagation' auf onTouchMove hat in iOS die Klicks auf die Events verschluckt. Die 'absolute inset-0' Regel reicht aus, um das Scrollen zu erzwingen.
+// [2026-10-13] - BUGFIX: Auto-Scroll Logik repariert. Der Spielplan scrollt nun korrekt zum übergebenen Datum (Navigationspfeile oder Dashboard Deep-Link) anstatt starr auf dem heutigen Tag festzuhängen.
 // [2026-10-12] - BUGFIX: TS6133 'React' is declared but its value is never read behoben.
 // [2026-10-12] - REFACTOR: Spielplan-Ansicht (CustomAgendaView) aus CalendarView in eigene Komponente ausgelagert.
 // src/features/Events/components/CalendarAgendaView.tsx
@@ -27,74 +28,94 @@ export const useCalendarAgendaView = (
 
       const daysInInterval = eachDayOfInterval({ start: rangeStart, end: rangeEnd });
       
-      // Auto-Scroll zum aktuellen Tag
+      // Auto-Scroll zum gewählten Datum (Deep-Link, Pfeile oder Heute)
       useEffect(() => {
         if (scrollRef.current) {
           setTimeout(() => {
             const container = scrollRef.current;
             if (!container) return;
-            const todayEl = container.querySelector('[data-is-future="true"]') as HTMLElement;
-            if (todayEl) {
-              container.scrollTop = Math.max(0, todayEl.offsetTop - 8);
+            
+            const targetMs = startOfDay(date).getTime();
+            let targetEl: HTMLElement | null = null;
+            
+            // Wir suchen das Element für das genaue Datum oder den nächsten Tag mit Events
+            const dayNodes = Array.from(container.querySelectorAll('[data-date-ms]')) as HTMLElement[];
+            for (const node of dayNodes) {
+               const ms = parseInt(node.dataset.dateMs || '0', 10);
+               if (ms >= targetMs) {
+                  targetEl = node;
+                  break;
+               }
+            }
+            
+            // Fallback (z.B. wenn das Jahr komplett leer ist)
+            if (!targetEl) {
+              targetEl = container.querySelector('[data-is-future="true"]') as HTMLElement;
+            }
+            
+            if (targetEl) {
+              container.scrollTop = Math.max(0, targetEl.offsetTop - 8);
             }
           }, 50);
         }
       }, [date, events, showEmptyDays]); 
 
       return (
-        // HIER IST DER FIX: min-h-0, w-full, custom-scrollbar und WebkitOverflowScrolling
-        <div 
-          ref={scrollRef} 
-          className="flex-1 min-h-0 w-full h-full overflow-y-auto custom-scrollbar p-2 sm:p-4 space-y-4 bg-gray-50/30 relative print:bg-white print:overflow-visible print:h-auto"
-          style={{ WebkitOverflowScrolling: 'touch' }}
-        >
-          {daysInInterval.map(day => {
-            const dayEvents = events.filter(e => {
-              const eStart = startOfDay(e.start!);
-              let exclusiveEnd = e.end || e.start!;
-              if (e.allDay && exclusiveEnd.getTime() > e.start!.getTime()) exclusiveEnd = new Date(exclusiveEnd.getTime() - 1000); 
-              return day >= eStart && day <= startOfDay(exclusiveEnd);
-            });
-            
-            if (!showEmptyDays && dayEvents.length === 0) return null;
-            
-            dayEvents.sort((a, b) => { 
-              if (a.allDay && !b.allDay) return -1; 
-              if (!a.allDay && b.allDay) return 1; 
-              return a.start!.getTime() - b.start!.getTime(); 
-            });
-            
-            const isToday = day.getTime() === today.getTime();
-            const isFutureOrToday = day >= today;
+        <div className="relative w-full h-full flex-1 min-h-0">
+          <div 
+            ref={scrollRef} 
+            className="absolute inset-0 overflow-y-auto custom-scrollbar p-2 sm:p-4 space-y-4 bg-gray-50/30 print:bg-white print:overflow-visible print:relative print:inset-auto print:h-auto"
+            style={{ WebkitOverflowScrolling: 'touch' }}
+          >
+            {daysInInterval.map(day => {
+              const dayEvents = events.filter(e => {
+                const eStart = startOfDay(e.start!);
+                let exclusiveEnd = e.end || e.start!;
+                if (e.allDay && exclusiveEnd.getTime() > e.start!.getTime()) exclusiveEnd = new Date(exclusiveEnd.getTime() - 1000); 
+                return day >= eStart && day <= startOfDay(exclusiveEnd);
+              });
+              
+              if (!showEmptyDays && dayEvents.length === 0) return null;
+              
+              dayEvents.sort((a, b) => { 
+                if (a.allDay && !b.allDay) return -1; 
+                if (!a.allDay && b.allDay) return 1; 
+                return a.start!.getTime() - b.start!.getTime(); 
+              });
+              
+              const isToday = day.getTime() === today.getTime();
+              const isFutureOrToday = day >= today;
 
-            return (
-              <div 
-                key={day.toISOString()} 
-                data-is-future={isFutureOrToday ? "true" : "false"}
-                className={`bg-white rounded-lg shadow-sm border ${isToday ? 'border-blue-300 ring-2 ring-blue-100' : 'border-gray-200'} overflow-hidden print:border-b print:shadow-none print:rounded-none`}
-              >
-                <div className={`px-4 py-2 border-b ${isToday ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'} print:bg-transparent print:border-black`}>
-                  <h3 className={`text-sm font-bold ${isToday ? 'text-blue-800 print:text-black' : 'text-gray-700 print:text-black'}`}>
-                    {format(day, 'EEEE, dd. MMMM yyyy', { locale: de })}
-                    {isToday && <span className="ml-2 text-[10px] uppercase tracking-wider font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full print:hidden">Heute</span>}
-                  </h3>
+              return (
+                <div 
+                  key={day.toISOString()} 
+                  data-date-ms={day.getTime()}
+                  data-is-future={isFutureOrToday ? "true" : "false"}
+                  className={`bg-white rounded-lg shadow-sm border ${isToday ? 'border-blue-300 ring-2 ring-blue-100' : 'border-gray-200'} overflow-hidden print:border-b print:shadow-none print:rounded-none`}
+                >
+                  <div className={`px-4 py-2 border-b ${isToday ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'} print:bg-transparent print:border-black`}>
+                    <h3 className={`text-sm font-bold ${isToday ? 'text-blue-800 print:text-black' : 'text-gray-700 print:text-black'}`}>
+                      {format(day, 'EEEE, dd. MMMM yyyy', { locale: de })}
+                      {isToday && <span className="ml-2 text-[10px] uppercase tracking-wider font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full print:hidden">Heute</span>}
+                    </h3>
+                  </div>
+                  <div className="p-1.5">
+                    {dayEvents.length === 0 ? <p className="p-2 text-xs text-gray-400 italic text-center print:hidden">Keine Termine</p> : (
+                      <div className="space-y-1">
+                        {dayEvents.map(e => (
+                          <div key={`${e.id}-${day.toISOString()}`} onClick={() => onSelectEvent(e)} className="flex flex-col sm:flex-row sm:items-center p-2 rounded hover:bg-gray-50 cursor-pointer transition print:border-l-[4px]" style={{ borderLeftWidth: '4px', borderLeftColor: e.color || '#3b82f6' }}>
+                            <div className="w-20 shrink-0 text-xs font-bold text-gray-500 mb-1 sm:mb-0 print:text-black">{e.allDay ? 'Ganztägig' : `${format(e.start!, 'HH:mm')} Uhr`}</div>
+                            <div className="flex-1"><div className="font-bold text-gray-900 text-sm print:text-black">{e.title}</div>{e.location && <div className="text-xs text-gray-500 mt-0.5 flex items-center print:text-black">📍 {e.location}</div>}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="p-1.5">
-                  {dayEvents.length === 0 ? <p className="p-2 text-xs text-gray-400 italic text-center print:hidden">Keine Termine</p> : (
-                    <div className="space-y-1">
-                      {dayEvents.map(e => (
-                        <div key={`${e.id}-${day.toISOString()}`} onClick={() => onSelectEvent(e)} className="flex flex-col sm:flex-row sm:items-center p-2 rounded hover:bg-gray-50 cursor-pointer transition print:border-l-[4px]" style={{ borderLeftWidth: '4px', borderLeftColor: e.color || '#3b82f6' }}>
-                          <div className="w-20 shrink-0 text-xs font-bold text-gray-500 mb-1 sm:mb-0 print:text-black">{e.allDay ? 'Ganztägig' : `${format(e.start!, 'HH:mm')} Uhr`}</div>
-                          <div className="flex-1"><div className="font-bold text-gray-900 text-sm print:text-black">{e.title}</div>{e.location && <div className="text-xs text-gray-500 mt-0.5 flex items-center print:text-black">📍 {e.location}</div>}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-          <div className="h-[80vh] print:hidden" aria-hidden="true" />
+              );
+            })}
+            <div className="h-[80vh] print:hidden" aria-hidden="true" />
+          </div>
         </div>
       );
     };
