@@ -1,3 +1,5 @@
+// [2026-10-14] - UX-FEATURE: Joker-Props (availableJokers, handleAddJoker, jokerSearchTerm, setJokerSearchTerm) an MatchLineupCardsView durchgereicht.
+// [2026-10-14] - UX-FEATURE: Ansicht-Umschalter (Karten vs. Matrix) mit localStorage-Persistenz ('papatodo_lineup_view_mode') im Header integriert.
 // [2026-10-12] - REFACTOR: Hauptdatei massiv verschlankt. Komplette Logik in useMatchLineupMatrix ausgelagert, Tabellen-Struktur in MatchLineupMatrixTable und MatchLineupLogisticsRow gekapselt.
 // [2026-10-12] - UX-FIX: Schließen-Button "X" oben rechts auf Handys sichtbar gemacht (hidden md:block entfernt).
 // [2026-10-12] - UX-FEATURE: Wochentage (Mo, Di, Mi...) in der Datumsanzeige der Spiele ergänzt.
@@ -9,11 +11,12 @@
 // [2026-09-30] - FEATURE: Base & Override V2 (Bottom-Up). Spieler können ihre eigene Zelle anklicken (Verfügbarkeit: Da/Weg).
 // [2026-09-30] - FEATURE: Auto-Freeze und manuelles Siegel (🔒) in die Matrix integriert. Notfall-Alert bei verspäteten Absagen eingebaut.
 // src/features/Users/components/MatchLineupMatrixModal.tsx
-import React from 'react';
-import { X, Calendar as CalendarIcon, UserPlus, Search } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Calendar as CalendarIcon, UserPlus, Search, LayoutList, Table as TableIcon } from 'lucide-react';
 import type { Team } from '../../../core/types/models';
 import { useMatchLineupMatrix } from '../hooks/useMatchLineupMatrix';
 import { MatchLineupMatrixTable } from './MatchLineupMatrixTable';
+import { MatchLineupCardsView } from './MatchLineupCardsView';
 
 interface MatchLineupMatrixModalProps {
   team: Team;
@@ -26,13 +29,31 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
   // --- GEHIRN (DATEN & STATE) ---
   const matrixData = useMatchLineupMatrix(team, focusedEventId, isReadOnly);
 
+  // --- ANSICHTS-MODUS (Langzeitgedächtnis via localStorage) ---
+  const [viewMode, setViewMode] = useState<'cards' | 'matrix'>(() => {
+    try {
+      const saved = localStorage.getItem('papatodo_lineup_view_mode');
+      return (saved === 'cards' || saved === 'matrix') ? saved : 'cards';
+    } catch {
+      return 'cards';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('papatodo_lineup_view_mode', viewMode);
+    } catch {
+      // Ignorieren, falls localStorage blockiert ist
+    }
+  }, [viewMode]);
+
   return (
     <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-0 md:p-4">
       <div className="bg-white rounded-none md:rounded-xl shadow-2xl w-full max-w-7xl overflow-hidden flex flex-col h-full md:max-h-[90vh]">
         
         {/* HEADER */}
-        <div className="p-4 border-b border-gray-200 flex flex-row items-start justify-between bg-gray-50 shrink-0 gap-4">
-          <div className="flex-1">
+        <div className="p-4 border-b border-gray-200 flex flex-row items-start justify-between bg-gray-50 shrink-0 gap-3 sm:gap-4">
+          <div className="flex-1 min-w-0">
             <h2 className="text-lg font-bold text-gray-900 flex items-center flex-wrap gap-2">
               <CalendarIcon className="w-5 h-5 text-blue-600 shrink-0" />
               {focusedEventId 
@@ -44,7 +65,39 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
             )}
           </div>
           
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            {/* ANSICHT-UMSCHALTER (Karten vs. Matrix) */}
+            {matrixData.linkedSubscription && matrixData.events.length > 0 && (
+              <div className="flex items-center bg-gray-200/80 p-0.5 rounded-lg border border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('cards')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-bold transition-all ${
+                    viewMode === 'cards'
+                      ? 'bg-white text-blue-600 shadow-2xs'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                  title="Karten-Ansicht (Spielplan-Look)"
+                >
+                  <LayoutList className="w-3.5 h-3.5" />
+                  <span>Karten</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('matrix')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-bold transition-all ${
+                    viewMode === 'matrix'
+                      ? 'bg-white text-blue-600 shadow-2xs'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                  title="Klassische Tabellen-Matrix"
+                >
+                  <TableIcon className="w-3.5 h-3.5" />
+                  <span>Matrix</span>
+                </button>
+              </div>
+            )}
+
             {!isReadOnly && matrixData.linkedSubscription && (
               <div className="relative hidden sm:block">
                 <button 
@@ -155,6 +208,38 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
             <div className="p-10 text-center text-gray-500 flex flex-col items-center justify-center h-full">
               Keine Termine im verknüpften Kalender gefunden.
             </div>
+          ) : viewMode === 'cards' ? (
+            <MatchLineupCardsView 
+              team={team}
+              subscriptionColor={matrixData.linkedSubscription.color}
+              focusedEventId={focusedEventId}
+              isReadOnly={isReadOnly}
+              events={matrixData.events}
+              displayMembers={matrixData.displayMembers}
+              playerGameCounts={matrixData.playerGameCounts}
+              myHelperId={matrixData.myHelperId}
+              matchLineups={matrixData.matchLineups}
+              availableJokers={matrixData.availableJokers}
+              jokerSearchTerm={matrixData.jokerSearchTerm}
+              setJokerSearchTerm={matrixData.setJokerSearchTerm}
+              onAddJoker={matrixData.handleAddJoker}
+              localOverrides={matrixData.localOverrides}
+              localAvailOverrides={matrixData.localAvailOverrides}
+              localLockOverrides={matrixData.localLockOverrides}
+              localSetByMFOverrides={matrixData.localSetByMFOverrides}
+              localLogisticsOverrides={matrixData.localLogisticsOverrides}
+              openLogisticsPicker={matrixData.openLogisticsPicker}
+              setOpenLogisticsPicker={matrixData.setOpenLogisticsPicker}
+              logisticsSearchTerm={matrixData.logisticsSearchTerm}
+              setLogisticsSearchTerm={matrixData.setLogisticsSearchTerm}
+              sortedAllHelpers={matrixData.sortedAllHelpers}
+              filteredLogisticsHelpers={matrixData.filteredLogisticsHelpers}
+              onTogglePlayer={matrixData.handleTogglePlayer}
+              onToggleAvailability={matrixData.handleToggleAvailability}
+              onToggleLock={matrixData.handleToggleLock}
+              onLogisticsAction={matrixData.handleLogisticsAction}
+              onDepartureTimeChange={matrixData.handleDepartureTimeChange}
+            />
           ) : (
             <MatchLineupMatrixTable 
               team={team}
