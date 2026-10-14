@@ -1,3 +1,5 @@
+// [2026-10-14] - UX-FIX: Handbuch um "Admin-Cockpit" für schnelle Logistik-Zuweisungen (Teil 2) und die "Sticky Toolbar" für Team-Filter im Spielplan (Teil 8) ergänzt. Persistente Filter dokumentiert.
+// [2026-10-14] - UX-FIX: Modulares Welcome-Dashboard (Reengineering) im Handbuch (Teil 1) redaktionell berücksichtigt.
 // [2026-09-28] - UX-FIX: Handbuch um "Teil 8: Saison- & Aufstellungsplanung" (Base & Override, Matrix, Kader-Erinnerungen) für Mannschaftsführer erweitert.
 // [2026-07-24] - UX-FIX: Handbuch um DSGVO Self-Service, dynamische Team-PINs, persistente Kalender-Filter und den Hard-Reset (Cache leeren) erweitert.
 // [2026-05-31] - UX-FEATURE: Best-Practice Workflow (Self-Service für Dienste) in Kalender-Sektion (Teil 2) integriert.
@@ -118,7 +120,7 @@ export const HelpView: React.FC = () => {
             <p className="mb-4">Jeder Verein lebt vom Engagement seiner Mitglieder. Die Vorstandsarbeit scheitert jedoch oft an Informationsverlusten: Aufgaben werden in Text-Protokollen vergraben und bis zur nächsten Sitzung vergessen. PapaToDo strukturiert diese Prozesse und macht Verantwortlichkeiten transparent.</p>
             
             <h4 className="font-bold text-gray-900 text-lg mb-3 mt-6">Das Welcome-Dashboard der Nutzer</h4>
-            <p className="text-sm mb-4">Das Herzstück der App für einfache Nutzer ist das persönliche Dashboard. Es beantwortet beim Öffnen der App auf einen Blick die zentrale Frage: <strong>"Was steht für mich in den kommenden Wochen an?"</strong></p>
+            <p className="text-sm mb-4">Das Herzstück der App ist das modulare, rollenbasierte Dashboard. Es beantwortet beim Öffnen der App auf einen Blick die zentrale Frage: <strong>"Was steht für mich in den kommenden Wochen an?"</strong></p>
             <ul className="list-disc pl-5 text-sm text-gray-700 space-y-2 mb-6">
               <li><strong>Spieltermine:</strong> Wann spiele ich? Für welche Termine sind Erinnerungen aktiv?</li>
               <li><strong>Vereinstermine:</strong> Welche offiziellen Sitzungen oder Feste stehen an?</li>
@@ -148,12 +150,12 @@ export const HelpView: React.FC = () => {
             <p className="text-sm mb-4">Nutzer finden im Kalender-Modul alle relevanten Vereinsereignisse. Sie können Team-PINs und Telefonnummern der Mannschaftsführer abrufen, um bei Ausfällen direkt reagieren zu können. Zudem sind alle Schichtdienste (z.B. Hallendienst) transparent einsehbar.</p>
 
             <div className="bg-blue-50 border border-blue-100 p-5 rounded-lg mb-6">
-              <h4 className="font-bold text-blue-900 mb-2">Personalisierte Ansicht (Persistente Filter)</h4>
-              <p className="text-sm text-blue-800">Der Kalender speichert die individuellen Filter-Einstellungen (welche Abos, Termine, Historie oder leere Tage angezeigt werden) dauerhaft im Browser des jeweiligen Nutzers. Ein Neuladen der App setzt diese Präferenzen nicht zurück.</p>
+              <h4 className="font-bold text-blue-900 mb-2">Persönliches Langzeitgedächtnis (Persistente Filter)</h4>
+              <p className="text-sm text-blue-800">Der Kalender merkt sich Ihre individuellen Filter-Einstellungen (welche Mannschaften Sie im Spielplan ausgewählt haben, bestimmte Dienst-Kategorien oder die generelle Listen-Ansicht) dauerhaft im Browser Ihres Geräts. Ein Neuladen der App setzt diese Präferenzen nicht zurück.</p>
             </div>
 
-            <h4 className="font-bold text-gray-900 text-lg mb-3 mt-6">Aufgaben der Administratoren</h4>
-            <p className="text-sm mb-4">Admins können externe iCal/ics Links abonnieren und Dienste organisieren. Klicken Sie dazu auf ein importiertes Heimspiel und fügen Sie Interne Dienste (Aufbau, Verkauf) an das Event an. Teilen Sie Personen aus der Vereinsliste zu und aktivieren Sie bei Bedarf automatische Erinnerungen.</p>
+            <h4 className="font-bold text-gray-900 text-lg mb-3 mt-6">Aufgaben der Administratoren (Admin-Cockpit)</h4>
+            <p className="text-sm mb-4">Admins können externe iCal/ics Links abonnieren und Dienste organisieren. In der <strong>Dienste-Listenansicht</strong> steht Vorständen ein leistungsstarkes <em>Admin-Cockpit</em> zur Verfügung: Sie können Betreuer und Fahrer direkt aus der übersichtlichen Agenda-Tabelle heraus zuweisen (inkl. Abfahrtszeiten), ohne jeden Termin einzeln öffnen zu müssen.</p>
 
             <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-lg mb-6">
               <h4 className="font-bold text-indigo-900 mb-2">Wettkampf-Tresor (Dynamische Team-PINs)</h4>
@@ -309,7 +311,6 @@ export const HelpView: React.FC = () => {
             </div>
           </HelpSection>
 
-          {/* NEU: Kapitel 8 für die Aufstellungsplanung */}
           <HelpSection id="lineups" title="Teil 8: Saison- & Aufstellungsplanung (Für Captains)" icon={Users} audience="board">
             <p className="font-bold text-lg mb-4 text-blue-900">Wofür ist das da? Für Mannschaftsführer (Captains), um den Kader für externe Punktspiele dynamisch zu steuern und das Team rechtzeitig zu informieren.</p>
 
@@ -328,6 +329,11 @@ export const HelpView: React.FC = () => {
                 <strong className="text-blue-700 block mb-1">Schritt 3: Last-Minute Änderungen im Kalender</strong>
                 Meldet sich ein Spieler am Vorabend ab, müssen Sie nicht die komplette Matrix öffnen. Klicken Sie einfach im <strong>Vereinskalender</strong> auf das entsprechende Spiel. Dort sehen Sie den berechneten Kader und einen Button "Ändern", der Sie direkt in den Fokus-Modus für dieses eine Spiel führt.
               </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-100 p-5 rounded-lg mb-6">
+              <h4 className="font-bold text-blue-900 mb-2">Tipp: Der Spielplan-Filter (Sticky Toolbar)</h4>
+              <p className="text-sm text-blue-800">Wenn Ihr Verein viele Mannschaften hat, nutzen Sie in der Ansicht <strong>Spielplan</strong> die schwebende Filter-Leiste (Sticky Toolbar) oben rechts. Wählen Sie gezielt nur Ihre Mannschaften (z.B. "J1" und "J2") aus, um das endlose Scrollen zu vermeiden. Die App merkt sich diese Auswahl dauerhaft für Ihren nächsten Besuch.</p>
             </div>
 
             <div className="bg-green-50 border border-green-100 p-5 rounded-lg mb-6">

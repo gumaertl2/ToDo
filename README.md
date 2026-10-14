@@ -1,3 +1,4 @@
+// [2026-10-14] - MASTER SYNC: Datei-Baum (TEIL 8) aktualisiert. Welcome-Dashboard Reengineering (modulare, rollenbasierte Widgets). Neue ausgelagerte Kalender-Ansichten (CalendarListView, CalendarAgendaView) und Logistik-Komponenten (MatchLineupLogisticsRow) dokumentiert. UX-Richtlinien um LocalStorage-Filter-Persistenz erweitert.
 // [2026-09-28] - MASTER SYNC: Datei-Baum (TEIL 8) exakt mit PAPA_MASTER_MANIFEST synchronisiert (Fehlende Modale, Tabs, HelpView und DashboardView ergänzt).
 // [2026-09-28] - MASTER SYNC: Modul 'Aufstellungsplanung' (Base & Override, Lineup Matrix, WhatsApp-Kader) in Architektur & Datei-Baum dokumentiert.
 // [2026-07-23] - MASTER SYNC: DSGVO Clickwrap, Nutzer-Self-Service (Mein Profil) und Auto-Benachrichtigungen für Stammdaten-Updates dokumentiert.
@@ -51,6 +52,7 @@ Eine Serverless Progressive Web App (PWA), entwickelt mit React, TypeScript, Tai
 ## 🎨 UX & UI Design Guidelines (Strictly Follow!)
 
 * **No UI-Clutter:** Keep the interface clean. Avoid unnecessary borders or heavy backgrounds. Use subtle shades (`bg-gray-50`, `bg-blue-50/50`) to group elements visually.
+* **UI-Persistenz (Langzeitgedächtnis):** Filter- und Ansichtseinstellungen (z.B. ausgewählte Teams im Spielplan oder Dienstkategorien) MÜSSEN via `localStorage` gespeichert werden, damit der Nutzer seine Konfiguration nach einem App-Neustart nicht verliert.
 * **Responsive First:** The app is used on mobile phones (during events) and on Desktop (for protocolling). 
   * Hide heavy tables on mobile.
   * Use `lg:flex` and `landscape:` media queries to optimize screen real estate.
@@ -264,8 +266,8 @@ Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der e
 
 * **Admin:** `OrphanCleanupModal.tsx` (Papierkorb-Verwaltung und Soft-Delete Cleanup).
 * **Auth:** `AuthGuard.tsx` (Routenschutz), `LoginView.tsx` (Firebase Auth), `DsgvoClickwrap.tsx` (Privacy-Gate).
-* **Dashboard:** `WelcomeDashboard.tsx` (Die rollenbasierte Kommandozentrale), `DashboardView.tsx`.
-* **Events:** `CalendarView.tsx` (Interner Kalender), `EventDetailView.tsx` (Live-Protokollführung), `ProtocolEditor.tsx`, `EventsView.tsx`.
+* **Dashboard:** `WelcomeDashboard.tsx` (Die komplett überarbeitete, rollenbasierte Kommandozentrale mit dynamischen Widgets), `DashboardView.tsx`.
+* **Events:** `CalendarView.tsx` (Interner Kalender Hub), `CalendarListView.tsx` (Listen- & Agenda-Ansicht für Termine/Dienste inkl. Admin-Cockpit & SmartLogistics), `CalendarAgendaView.tsx` (Eigenständiger Spielplan im Karten-Look mit Sticky-Toolbar-Filter), `EventDetailView.tsx` (Live-Protokollführung), `ProtocolEditor.tsx`, `EventsView.tsx`.
   * *Kalender-Tools:* `CalendarBulkEventModal.tsx`, `CalendarExportModal.tsx`, `CalendarIcsDetailModal.tsx`, `CalendarSubscriptionModal.tsx`.
   * *Event-Tools:* `EventAgendaList.tsx`, `EventDetailHeader.tsx`, `EventFormModal.tsx`, `EventTemplateSidebar.tsx`.
   * *Extern:* `PublicCalendarEmbed.tsx` (Öffentliche Ansicht).
@@ -280,7 +282,7 @@ Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der e
   * *Modale:* `CsvImportModal.tsx`, `GroupFormModal.tsx`, `HelperFormModal.tsx`, `TeamFormModal.tsx`, `UserFormModal.tsx`, `UserSuccessionModal.tsx`.
   * *`tabs/`:* `AppUserTab.tsx`, `EhrungenTab.tsx`, `MitgliederTab.tsx`, `RollenTab.tsx`, `TeamsTab.tsx`, `VorstandTab.tsx`.
     * *WICHTIG:* `TeamsTab.tsx` verwaltet Stammkader, Captains und bietet den Einstieg in die Saison-Planung.
-  * *`components/`:* `EditableCell.tsx`, `QuickAddHelperRow.tsx`.
+  * *`components/`:* `EditableCell.tsx`, `QuickAddHelperRow.tsx`, `MatchLineupLogisticsRow.tsx` (Universelle Logistik-Kommandozentrale für Fahrer & Betreuer).
     * *WICHTIG:* `MatchLineupMatrixModal.tsx` (Base & Override Planungs-Matrix für Captains).
 * **Shared:** `ItemFormModal.tsx` (Universal-Editor), `AgendaItemRow.tsx` (Listenansicht), `ItemCard.tsx` (Kanban-Ansicht), `RichText.tsx`.
   * *`components/AgendaItem/`:* `InlineEditors.tsx`, `ItemMetadata.tsx`, `ItemStatusSection.tsx`, `RowContextMenu.tsx` (Desktop Power-Features).
@@ -298,5 +300,5 @@ Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der e
 4.  `npm run dev` startet den lokalen Vite-Server.
 5.  `npm run build` führt einen strengen TypeScript Check (`tsc -b`) aus und baut das Production-Bundle.
 
-*Stand: 28.09.2026 - Protokoll: WelcomeDashboard, Fate-Binding, DSGVO-Self-Service & Base/Override Aufstellungen*
+*Stand: 14.10.2026 - Protokoll: Dashboard-Reengineering, Admin-Cockpit, Persistente UI-Filter, Agenda-Listenansicht & Sticky-Toolbar*
 // --- END OF FILE ---

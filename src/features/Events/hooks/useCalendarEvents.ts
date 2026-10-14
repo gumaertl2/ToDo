@@ -1,6 +1,7 @@
-// [2026-10-13] - FEATURE: pollSummary zum AdaptedEvent hinzugefügt, um Abstimmungsergebnisse direkt in der Kalender-Listenansicht rendern zu können.
-// [2026-10-13] - BUGFIX: ev.uid durch generateStableEventId (Stable-ID) ersetzt, damit die Dienste-Listenansicht die Logistik-Daten wieder findet.
-// [2026-10-12] - REFACTOR: Daten-Mapping, Filterung und Heimspiel-Logik aus CalendarView in eigenen Hook (useCalendarEvents) ausgelagert.
+// [2026-10-14] - UX-REFACTOR: Statische Logistik-Badges aus dem Event-Titel entfernt. Die App nutzt nun interaktive Inline-Komponenten direkt in der Kalender-Listenansicht.
+// [2026-10-13] - FEATURE: pollSummary zum AdaptedEvent hinzugefügt.
+// [2026-10-13] - BUGFIX: ev.uid durch generateStableEventId (Stable-ID) ersetzt.
+// [2026-10-12] - REFACTOR: Daten-Mapping in eigenen Hook ausgelagert.
 // src/features/Events/hooks/useCalendarEvents.ts
 import { useMemo } from 'react';
 import type { Event as RBCEvent } from 'react-big-calendar';
@@ -41,7 +42,6 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
     pollResponsesByEvent
   } = useClubStore();
 
-  // 1. RAW MAPPING: Aus Datenbank-Modellen die Kalender-Events generieren
   const rbcEvents: AdaptedEvent[] = useMemo(() => {
     const internalEvents = calendarEvents.map(ev => {
       const isHeim = ev.location?.toLowerCase().includes('maisach');
@@ -49,14 +49,12 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
       const matchPrefix = ev.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
       const baseTitle = `${matchPrefix}${ev.title}`;
 
-      // ABSTIMMUNGS-ZÄHLER
       let pollSummary = undefined;
       if (ev.pollConfig?.isActive && ev.pollConfig.options?.length > 0) {
         const responses = pollResponsesByEvent[ev.id] || [];
         if (responses.length > 0) {
           const parts = ev.pollConfig.options.map(opt => {
             const count = responses.filter(r => (r.selectedOptionIds || []).includes(opt.id)).length;
-            // Emoji aus dem Text extrahieren (falls vorhanden), ansonsten leeren String
             const match = opt.text.match(/^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F)/u);
             const emoji = match ? match[1] : '';
             return `${count} ${emoji}`.trim();
@@ -121,7 +119,6 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
         })
       );
       
-    // Logistik-Einträge als Dienste generieren (inklusive Helfer-Namen)
     const logisticsEvents: AdaptedEvent[] = [];
     calendarSubscriptions.forEach(sub => {
         if (!sub.isActive || !sub.cachedEvents) return;
@@ -134,52 +131,11 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
             const isAuswaerts = ev.location && !isHeim;
             const matchPrefix = sub.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
 
-            // Stable-ID für den Kader
-            const safeEventId = generateStableEventId(team.id, ev);
-            const lineup = matchLineups.find(m => m.id === safeEventId);
-
-            const badges: string[] = [];
-            
-            if (team.requiresFahrer) {
-                const fahrerIds = lineup?.fahrerHelperIds || [];
-                if (!isHeim || fahrerIds.length > 0) {
-                    if (fahrerIds.length === 0) {
-                        badges.push('🚗 Offen');
-                    } else {
-                        const names = fahrerIds.map(id => {
-                            const h = helpers.find(x => x.id === id);
-                            return h ? (h.alias || h.name.split(' ')[0]) : '?';
-                        });
-                        let fahrerStr = `🚗 ${names.join(', ')}`;
-                        if (lineup?.departureTime) {
-                             fahrerStr += ` (Abfahrt: ${lineup.departureTime} Uhr)`;
-                        }
-                        badges.push(fahrerStr);
-                    }
-                }
-            }
-
-            if (team.requiresBetreuer) {
-                const betreuerIds = lineup?.betreuerHelperIds || [];
-                if (betreuerIds.length === 0) {
-                    badges.push('🧑‍🏫 Offen');
-                } else {
-                    const names = betreuerIds.map(id => {
-                        const h = helpers.find(x => x.id === id);
-                        return h ? (h.alias || h.name.split(' ')[0]) : '?';
-                    });
-                    badges.push(`🧑‍🏫 ${names.join(', ')}`);
-                }
-            }
-
-            if (badges.length === 0) return;
-
-            const badgesString = badges.length > 0 ? ` (${badges.join(' | ')})` : '';
-
+            // WIR BAUEN DIE LOGISTIK EVENTS (nur die Hüllen, die Details macht das Frontend live!)
             logisticsEvents.push({
                 id: `logistics-${sub.id}-${ev.uid}-${index}`,
                 sourceId: sub.id, 
-                title: `Dienste ${team.name}: ${matchPrefix}${ev.title}${badgesString}`,
+                title: `${matchPrefix}${ev.title}`,
                 description: ev.description || '',
                 location: ev.location || '',
                 start: new Date(ev.startTime),
@@ -196,7 +152,6 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
     return [...internalEvents, ...internalSitzungen, ...cachedExternalEvents, ...logisticsEvents];
   }, [calendarEvents, events, calendarSubscriptions, teams, helpers, matchLineups, pollResponsesByEvent]);
 
-  // 2. FILTERING: Welche Events dürfen in der aktuellen Ansicht überhaupt auftauchen?
   const filteredEvents = useMemo(() => {
     const todayStart = startOfDay(new Date()).getTime();
     const isListView = ['termine', 'dienste'].includes(currentView);
@@ -218,7 +173,6 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
     });
   }, [rbcEvents, activeFilters, showPastEvents, currentView]);
 
-  // 3. DISPLAY SPLIT: Trennung für die Listenansichten
   const displayEvents = useMemo(() => {
     if (currentView === 'termine') return filteredEvents.filter(e => e.sourceId === 'manual' && !e.seriesId && !e.isLogisticsDuty);
     if (currentView === 'dienste') return filteredEvents.filter(e => !!e.seriesId || e.isLogisticsDuty);

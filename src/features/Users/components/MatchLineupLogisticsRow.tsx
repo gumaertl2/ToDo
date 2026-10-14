@@ -1,7 +1,9 @@
-// [2026-10-13] - BUGFIX: pickerKey nutzt jetzt wieder event.uid statt safeEventId, um Z-Index Bug bei namensgleichen Terminen zu beheben.
-// [2026-10-13] - REFACTOR: sanitizeId durch generateStableEventId ersetzt, event.uid in Callbacks durch safeEventId ausgetauscht.
-// [2026-10-12] - BUGFIX: e.stopPropagation() beim Google Maps Link ergänzt, um unbeabsichtigtes Schließen/Zurückspringen des Modals zu verhindern.
-// [2026-10-12] - REFACTOR: Logistik-Reihe (Fahrer/Betreuer) aus MatchLineupMatrixModal in eigene Komponente ausgelagert.
+// [2026-10-14] - BUGFIX: Safari/Chrome Autofill (Überlagerung des Dropdowns) blockiert, indem dem Input-Feld ein dynamisches 'name' Attribut und autoComplete="off" zugewiesen wurde.
+// [2026-10-14] - UX-FEATURE: 'hideIcon' Prop hinzugefügt, um das Emoji (🚗/🧑‍🏫) in sehr kompakten Listen flexibel ausblenden zu können.
+// [2026-10-13] - BUGFIX: pickerKey nutzt jetzt wieder event.uid statt safeEventId.
+// [2026-10-13] - REFACTOR: sanitizeId durch generateStableEventId ersetzt.
+// [2026-10-12] - BUGFIX: e.stopPropagation() beim Google Maps Link ergänzt.
+// [2026-10-12] - REFACTOR: Logistik-Reihe aus MatchLineupMatrixModal ausgelagert.
 // src/features/Users/components/MatchLineupLogisticsRow.tsx
 import React from 'react';
 import { Search, Clock, Map } from 'lucide-react';
@@ -15,6 +17,7 @@ interface MatchLineupLogisticsRowProps {
   team: Team;
   isReadOnly?: boolean;
   myHelperId?: string | null;
+  hideIcon?: boolean; 
   sortedAllHelpers: Helper[];
   filteredLogisticsHelpers: Helper[];
   openLogisticsPicker: string | null;
@@ -34,6 +37,7 @@ export const MatchLineupLogisticsRow: React.FC<MatchLineupLogisticsRowProps> = (
   team,
   isReadOnly,
   myHelperId,
+  hideIcon,
   sortedAllHelpers,
   filteredLogisticsHelpers,
   openLogisticsPicker,
@@ -46,9 +50,8 @@ export const MatchLineupLogisticsRow: React.FC<MatchLineupLogisticsRowProps> = (
   onDepartureTimeChange
 }) => {
   const safeEventId = generateStableEventId(team.id, event);
-  const uiKey = event.uid; // Die flüchtige UID für die lokale UI
+  const uiKey = event.uid; 
   
-  // Der Picker reagiert auf die UI-UID, damit er streng auf diese eine HTML-Zeile isoliert bleibt
   const pickerKey = `${uiKey}-${type}`;
   const isPickerOpen = openLogisticsPicker === pickerKey;
   
@@ -70,7 +73,9 @@ export const MatchLineupLogisticsRow: React.FC<MatchLineupLogisticsRowProps> = (
 
   return (
     <div className="flex flex-row items-center gap-1.5">
-      <span className="text-base cursor-help shrink-0 w-6 text-center" title={roleName}>{emoji}</span>
+      {!hideIcon && (
+        <span className="text-base cursor-help shrink-0 w-6 text-center" title={roleName}>{emoji}</span>
+      )}
       <div className="flex flex-wrap items-center gap-1.5 flex-1 relative">
         {ids.map(id => {
           const h = sortedAllHelpers.find(x => x.id === id);
@@ -85,7 +90,6 @@ export const MatchLineupLogisticsRow: React.FC<MatchLineupLogisticsRowProps> = (
                 if (isPast) return;
                 if (!isReadOnly) {
                   if (window.confirm(`Möchtest du ${h.name} als ${roleName} entfernen?`)) {
-                     // Speichern läuft weiter sicher über den Datenbank-Key!
                      onLogisticsAction(safeEventId, type, 'remove', id);
                   }
                 } else if (!isMe) {
@@ -124,14 +128,16 @@ export const MatchLineupLogisticsRow: React.FC<MatchLineupLogisticsRowProps> = (
                   <div className="absolute left-0 top-full mt-1.5 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden flex flex-col">
                     <div className="p-2 border-b border-gray-100 bg-gray-50 flex items-center relative">
                       <Search className="w-3.5 h-3.5 text-gray-400 absolute left-4" />
+                      {/* HIER IST DER ANTI-AUTOFILL FIX */}
                       <input
                         autoFocus
                         type="text"
+                        name={`search-dummy-${pickerKey}`}
                         placeholder="Name suchen..."
                         value={logisticsSearchTerm}
                         onChange={(e) => setLogisticsSearchTerm(e.target.value)}
                         onClick={(e) => e.stopPropagation()}
-                        autoComplete="new-password"
+                        autoComplete="off"
                         autoCapitalize="none"
                         autoCorrect="off"
                         spellCheck={false}
@@ -147,7 +153,6 @@ export const MatchLineupLogisticsRow: React.FC<MatchLineupLogisticsRowProps> = (
                             key={h.id}
                             onClick={(e) => {
                               e.stopPropagation();
-                              // Speichern läuft weiter sicher über den Datenbank-Key!
                               onLogisticsAction(safeEventId, type, 'add', h.id);
                               setOpenLogisticsPicker(null);
                             }}

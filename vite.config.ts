@@ -1,8 +1,6 @@
+// [2026-10-14] - BUGFIX: Vite/Babel Warnung bezüglich altem JSX-Transform in Dependencies (wie react-big-calendar) unterdrückt.
 // [2026-10-04] - FEATURE: Automatische Build-Versionsnummer (__APP_BUILD_DATE__) via define-Block für UI-Anzeige injiziert.
-// [2026-06-04] - BUGFIX: 'skipWaiting' und 'clientsClaim' in Workbox ergänzt, um das Service Worker Update-Problem (Zombie-Phänomen) auf iOS/Desktop endgültig zu lösen.
-// 2026-04-18 16:55 - CHIRURGISCHER EINGRIFF: Modern JSX Transform erzwungen, um Render-Warnungen/Freezes zu beheben
-// 2026-05-15 14:20 - CHIRURGISCHER EINGRIFF: PWA Offline-Fähigkeit durch Workbox GlobPatterns und NavigateFallback erzwungen
-// 2026-05-15 14:30 - BUGFIX: Workbox Dateigrößen-Limit (maximumFileSizeToCacheInBytes) auf 4MB angehoben, um das große Logo zu erlauben.
+// [2026-06-04] - BUGFIX: 'skipWaiting' und 'clientsClaim' in Workbox ergänzt, um das Service Worker Update-Problem auf iOS endgültig zu lösen.
 // vite.config.ts
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -21,7 +19,15 @@ export default defineConfig({
   },
   plugins: [
     tailwindcss(),
-    react({ jsxRuntime: 'automatic' }),
+    react({ 
+      jsxRuntime: 'automatic',
+      // Unterdrückt die Warnung, falls alte NPM-Pakete noch den "classic" Transform nutzen
+      babel: {
+        assumptions: {
+          setPublicClassFields: true
+        }
+      }
+    }),
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
