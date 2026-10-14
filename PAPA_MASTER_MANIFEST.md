@@ -49,7 +49,13 @@
       ├── AuthGuard.tsx
       ├── DsgvoClickwrap.tsx
       ├── LoginView.tsx
+      ├── .DS_Store
+        ├── DashboardEventsWidget.tsx
+        ├── DashboardServicesWidget.tsx
+        ├── DashboardSessionsWidget.tsx
+        ├── DashboardTasksWidget.tsx
       ├── DashboardView.tsx
+        ├── useDashboardData.ts
       ├── WelcomeDashboard.tsx
       ├── .DS_Store
       ├── CalendarBulkEventModal.tsx
@@ -58,12 +64,16 @@
       ├── CalendarIcsDetailModal.tsx
       ├── CalendarSubscriptionModal.tsx
       ├── CalendarView.tsx
+        ├── CalendarAgendaView.tsx
+        ├── CalendarListView.tsx
+        ├── EventPollWidget.tsx
       ├── EventAgendaList.tsx
       ├── EventDetailHeader.tsx
       ├── EventDetailView.tsx
       ├── EventFormModal.tsx
       ├── EventsView.tsx
       ├── EventTemplateSidebar.tsx
+        ├── useCalendarEvents.ts
       ├── ProtocolEditor.tsx
       ├── PublicCalendarEmbed.tsx
       ├── HelpView.tsx
@@ -97,11 +107,14 @@
       ├── TemplatesView.tsx
       ├── .DS_Store
         ├── EditableCell.tsx
+        ├── MatchLineupLogisticsRow.tsx
         ├── MatchLineupMatrixModal.tsx
+        ├── MatchLineupMatrixTable.tsx
         ├── QuickAddHelperRow.tsx
       ├── CsvImportModal.tsx
       ├── GroupFormModal.tsx
       ├── HelperFormModal.tsx
+        ├── useMatchLineupMatrix.ts
       ├── MyProfileModal.tsx
       ├── RoleMatrixModal.tsx
         ├── AppUserTab.tsx
@@ -122,6 +135,7 @@
       ├── .DS_Store
       ├── createAuthSlice.ts
       ├── createCalendarSlice.ts
+      ├── createEventPollSlice.ts
       ├── createEventSlice.ts
       ├── createMatchLineupSlice.ts
       ├── createTaskSlice.ts

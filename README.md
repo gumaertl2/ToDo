@@ -1,4 +1,4 @@
-// [2026-10-14] - MASTER SYNC: Datei-Baum (TEIL 8) aktualisiert. Welcome-Dashboard Reengineering (modulare, rollenbasierte Widgets). Neue ausgelagerte Kalender-Ansichten (CalendarListView, CalendarAgendaView) und Logistik-Komponenten (MatchLineupLogisticsRow) dokumentiert. UX-Richtlinien um LocalStorage-Filter-Persistenz erweitert.
+// [2026-10-14] - MASTER SYNC: Vollständiger Abgleich des Datei-Baums (TEIL 8) mit PAPA_MASTER_MANIFEST.md. Dashboard-Widgets, Event-Polls, Match-Lineup-Matrizen und Store-Slices vollständig dokumentiert.
 // [2026-09-28] - MASTER SYNC: Datei-Baum (TEIL 8) exakt mit PAPA_MASTER_MANIFEST synchronisiert (Fehlende Modale, Tabs, HelpView und DashboardView ergänzt).
 // [2026-09-28] - MASTER SYNC: Modul 'Aufstellungsplanung' (Base & Override, Lineup Matrix, WhatsApp-Kader) in Architektur & Datei-Baum dokumentiert.
 // [2026-07-23] - MASTER SYNC: DSGVO Clickwrap, Nutzer-Self-Service (Mein Profil) und Auto-Benachrichtigungen für Stammdaten-Updates dokumentiert.
@@ -109,7 +109,7 @@ Das System basiert nicht auf endlosen ToDo-Listen, sondern auf einem klaren Rhyt
    * **Szenario A: Die Standard-Aufgabe (Keine Routine, kein Container)**
      * *Live in der Sitzung:* Slider frei beweglich (0 % - 100 %). Nichts klont sich. `isHistorical` bleibt `false`.
      * *Beim Sitzungsabschluss (Versiegelung):*
-       * Aufgabe ist 100 %: Sie bekommt `isHistorical = true` und bleibt im alten Protokoll. Fertig.
+       * Aufgabe is 100 %: Sie bekommt `isHistorical = true` und bleibt im alten Protokoll. Fertig.
        * Aufgabe ist < 100 %: Sie bekommt `isHistorical = true` (als Beweis, dass sie damals nicht fertig wurde) **UND** das System erzeugt einen sauberen, frischen Klon (Übertrag) für das neue Meeting.
    * **Szenario B: Die Einfache Routine (Kein Container)**
      * *Live in der Sitzung:* Sobald der Slider 100 % erreicht, passiert der **Point of No Return**:
@@ -237,7 +237,7 @@ Um Verwirrung in der UI und Logik zu vermeiden, gibt es eine strikte Trennung:
 
 Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der europäischen Datenschutzgrundverordnung (DSGVO) aufgebaut:
 
-*   **Digitaler Clickwrap:** Beim ersten Login (oder nach einer Aktualisierung der Richtlinien) muss jeder Nutzer aktiv der App-Sichtbarkeit zustimmen oder diese ablehnen. 
+*   **Digitaler Clickwrap:** Beim ersten Login (or nach einer Aktualisierung der Richtlinien) muss jeder Nutzer aktiv der App-Sichtbarkeit zustimmen oder diese ablehnen. 
 *   **Lückenloser Audit-Trail:** Jede DSGVO-Entscheidung wird mit einem präzisen Zeitstempel (`consentConfirmedAt`) und dem Akteur (`USER` oder `ADMIN`) manipulationssicher in der Datenbank protokolliert.
 *   **Opt-In Sichtbarkeit:** Lehnt ein Nutzer die Sichtbarkeit ab, wird sein Profil für andere App-Nutzer strikt geschwärzt (Read-Only Firewall im Store). Die App bleibt für ihn jedoch vollumfänglich nutzbar.
 *   **Admin-Override & Reset:** Admins können analog vorliegende (papierhafte) Zustimmungen im System erfassen oder den DSGVO-Status eines Mitglieds komplett zurücksetzen, um bei dessen nächstem Login einen neuen Clickwrap zu erzwingen.
@@ -251,44 +251,52 @@ Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der e
 ## 📂 TEIL 8: Vollständiges Datei-Lexikon (Orientierung)
 
 ### Root & Infrastruktur
-* `.gitignore`, `eslint.config.js`, `package.json`, `tsconfig.json`: Standard Vite/Node Konfigurationen.
-* `vercel.json`: Deployment Konfiguration für Client-Side Routing (Rewrites auf `index.html`).
-* `vite.config.ts`: Vite Bundler Konfiguration.
-* `src/config/dsgvoConfig.ts`: Konfigurationsdatei für DSGVO-Texte und Versions-Tracking.
-* `api/calendar.ts`: Serverless Vercel Function (Backend) für das Abonnieren und Parsen externer `.ics` Kalender-Feeds. Vermeidet CORS-Probleme im Browser.
+* `.gitignore`, `eslint.config.js`, `package.json`, `tsconfig.json`, `tsconfig.app.json`, `tsconfig.node.json`, `vercel.json`, `vite.config.ts`: Standard Vite/Node, TypeScript und Vercel Deployment-Konfigurationen[span_1](start_span)[span_1](end_span).
+* `api/calendar.ts`: Serverless Vercel Function (Backend) für das Abonnieren und Parsen externer `.ics` Kalender-Feeds[span_2](start_span)[span_2](end_span).
 
-### State Management (Store)
-* `src/store/useClubStore.ts`: Der Master-Zustand. Führt alle Slices zusammen.
-* `src/store/slices/*`: Die modularisierten Store-Fragmente (Auth, User, Event, Task, etc.). Hier passiert 90% der Datenbank-Kommunikation mit Firestore.
-  * **WICHTIG:** `createMatchLineupSlice.ts`: Managt die Schatten-Akten für Aufstellungen inkl. Optimistic UI Updates, um das UI nicht durch Netzwerk-Delays zu blockieren.
+### Core, Services & State Management (Store)
+* `src/core/types/models.ts`: SSOT TypeScript Typendefinitionen für alle Modelle[span_3](start_span)[span_3](end_span).
+* `src/services/firebase.ts`: Firebase Initialisierung[span_4](start_span)[span_4](end_span).
+* `src/utils/DataProcessor.ts`: Hilfsfunktionen zur Datenverarbeitung[span_5](start_span)[span_5](end_span).
+* `src/store/useClubStore.ts`: Der Master-Zustand (Zustand Store)[span_6](start_span)[span_6](end_span).
+* `src/store/slices/*`: Modulare Store-Fragmente[span_7](start_span)[span_7](end_span):
+  * `createAuthSlice.ts`, `createCalendarSlice.ts`, `createEventPollSlice.ts` (Abstimmungslogik), `createEventSlice.ts`, `createMatchLineupSlice.ts` (Schatten-Akten & Optimistic Updates), `createTaskSlice.ts`, `createTeamPinsSlice.ts`, `createTeamSlice.ts`, `createTemplateSlice.ts`, `createUserSlice.ts`.
 
-### Features & UI
+### Features & UI Components
 
-* **Admin:** `OrphanCleanupModal.tsx` (Papierkorb-Verwaltung und Soft-Delete Cleanup).
-* **Auth:** `AuthGuard.tsx` (Routenschutz), `LoginView.tsx` (Firebase Auth), `DsgvoClickwrap.tsx` (Privacy-Gate).
-* **Dashboard:** `WelcomeDashboard.tsx` (Die komplett überarbeitete, rollenbasierte Kommandozentrale mit dynamischen Widgets), `DashboardView.tsx`.
-* **Events:** `CalendarView.tsx` (Interner Kalender Hub), `CalendarListView.tsx` (Listen- & Agenda-Ansicht für Termine/Dienste inkl. Admin-Cockpit & SmartLogistics), `CalendarAgendaView.tsx` (Eigenständiger Spielplan im Karten-Look mit Sticky-Toolbar-Filter), `EventDetailView.tsx` (Live-Protokollführung), `ProtocolEditor.tsx`, `EventsView.tsx`.
-  * *Kalender-Tools:* `CalendarBulkEventModal.tsx`, `CalendarExportModal.tsx`, `CalendarIcsDetailModal.tsx`, `CalendarSubscriptionModal.tsx`.
-  * *Event-Tools:* `EventAgendaList.tsx`, `EventDetailHeader.tsx`, `EventFormModal.tsx`, `EventTemplateSidebar.tsx`.
-  * *Extern:* `PublicCalendarEmbed.tsx` (Öffentliche Ansicht).
-* **Help:** `HelpView.tsx` (Integriertes Handbuch & Hilfe).
-* **Layout:** `AppLayout.tsx` (Responsive Shell & Mobile-Menü).
-* **Reminders:** `RemindersView.tsx` (WhatsApp-Kommandozentrale, Snooze-Logik & Auto-Kader Generator).
-* **Reports:** `ReportsView.tsx` (Statistik & Fristen-Radar).
-* **Tasks:** `TasksView.tsx` (Board/Liste), `KanbanBoard.tsx`, `TasksListView.tsx`, `TaskHistoryModal.tsx`, `TaskCard.tsx`, `TasksToolbar.tsx`.
-* **TeamPins:** `TeamPinsView.tsx` (Wettkampf-Tresor & PIN-Freigabe).
-* **Templates:** `TemplatesView.tsx` (Vorlagen-Management).
-* **Users:** `UsersView.tsx` (Nutzer & Helfer), `MyProfileModal.tsx` (Nutzer Self-Service), `RoleMatrixModal.tsx`.
-  * *Modale:* `CsvImportModal.tsx`, `GroupFormModal.tsx`, `HelperFormModal.tsx`, `TeamFormModal.tsx`, `UserFormModal.tsx`, `UserSuccessionModal.tsx`.
-  * *`tabs/`:* `AppUserTab.tsx`, `EhrungenTab.tsx`, `MitgliederTab.tsx`, `RollenTab.tsx`, `TeamsTab.tsx`, `VorstandTab.tsx`.
-    * *WICHTIG:* `TeamsTab.tsx` verwaltet Stammkader, Captains und bietet den Einstieg in die Saison-Planung.
-  * *`components/`:* `EditableCell.tsx`, `QuickAddHelperRow.tsx`, `MatchLineupLogisticsRow.tsx` (Universelle Logistik-Kommandozentrale für Fahrer & Betreuer).
-    * *WICHTIG:* `MatchLineupMatrixModal.tsx` (Base & Override Planungs-Matrix für Captains).
-* **Shared:** `ItemFormModal.tsx` (Universal-Editor), `AgendaItemRow.tsx` (Listenansicht), `ItemCard.tsx` (Kanban-Ansicht), `RichText.tsx`.
-  * *`components/AgendaItem/`:* `InlineEditors.tsx`, `ItemMetadata.tsx`, `ItemStatusSection.tsx`, `RowContextMenu.tsx` (Desktop Power-Features).
-  * *`components/ItemForm/`:* `AssigneePicker.tsx`, `ReminderSettings.tsx`, `RoutineSettings.tsx`.
-  * *`components/`:* `SmartEntityPicker.tsx`.
-  * *`utils/`:* `textUtils.tsx` (Highlighting & Formatierung).
+* **Admin:** `OrphanCleanupModal.tsx` (Papierkorb-Verwaltung und Soft-Delete Cleanup)[span_8](start_span)[span_8](end_span).
+* **Auth & Datenschutz:** `AuthGuard.tsx`, `LoginView.tsx`, `DsgvoClickwrap.tsx`[span_9](start_span)[span_9](end_span).
+* **Dashboard (`src/features/Dashboard/`):** 
+  * `DashboardView.tsx`, `WelcomeDashboard.tsx` (Rollenbasierte Kommandozentrale)[span_10](start_span)[span_10](end_span).
+  * `useDashboardData.ts` (Daten-Beschaffer)[span_11](start_span)[span_11](end_span).
+  * `widgets/`: `DashboardEventsWidget.tsx`, `DashboardServicesWidget.tsx`, `DashboardSessionsWidget.tsx`, `DashboardTasksWidget.tsx`[span_12](start_span)[span_12](end_span).
+* **Events & Kalender (`src/features/Events/`):** 
+  * `CalendarView.tsx` (Haupt-Kalender-Hub)[span_13](start_span)[span_13](end_span).
+  * `CalendarListView.tsx` (Listen- & Agenda-Ansicht für Termine/Dienste inkl. Admin-Cockpit, SmartLogistics und LocalStorage-Persistenz)[span_14](start_span)[span_14](end_span).
+  * `CalendarAgendaView.tsx` (Eigenständiger Spielplan im Karten-Look mit Sticky-Toolbar-Filter und LocalStorage-Persistenz)[span_15](start_span)[span_15](end_span).
+  * `EventDetailView.tsx`, `ProtocolEditor.tsx`, `EventsView.tsx`, `EventAgendaList.tsx`, `EventDetailHeader.tsx`[span_16](start_span)[span_16](end_span).
+  * `EventPollWidget.tsx` (Live-Abstimmungen in der Agenda)[span_17](start_span)[span_17](end_span).
+  * `EventTemplateSidebar.tsx`, `PublicCalendarEmbed.tsx`[span_18](start_span)[span_18](end_span).
+  * `modals/`: `CalendarBulkEventModal.tsx`, `CalendarEventFormModal.tsx`, `CalendarExportModal.tsx`, `CalendarIcsDetailModal.tsx`, `CalendarSubscriptionModal.tsx`, `EventFormModal.tsx`[span_19](start_span)[span_19](end_span).
+  * `hooks/`: `useCalendarEvents.ts`[span_20](start_span)[span_20](end_span).
+* **Help:** `HelpView.tsx` (Integriertes Handbuch mit aktualisiertem Leitfaden zu Filtern und Admin-Cockpit)[span_21](start_span)[span_21](end_span).
+* **Layout:** `AppLayout.tsx` (Responsive Shell & Mobile-Menü)[span_22](start_span)[span_22](end_span).
+* **Reminders:** `RemindersView.tsx` (WhatsApp-Kommandozentrale, Snooze-Logik & Auto-Kader Generator)[span_23](start_span)[span_23](end_span).
+* **Reports:** `ReportsView.tsx` (Statistik & Fristen-Radar)[span_24](start_span)[span_24](end_span).
+* **Tasks (`src/features/Tasks/`):** `TasksView.tsx`, `KanbanBoard.tsx`, `TasksListView.tsx`, `TaskCard.tsx`, `TasksToolbar.tsx`, `TaskHistoryModal.tsx`[span_25](start_span)[span_25](end_span).
+* **TeamPins:** `TeamPinsView.tsx` (Wettkampf-Tresor & PIN-Freigabe)[span_26](start_span)[span_26](end_span).
+* **Templates:** `TemplatesView.tsx` (Vorlagen-Management)[span_27](start_span)[span_27](end_span).
+* **Users & Aufstellungsplanung (`src/features/Users/`):** 
+  * `UsersView.tsx`, `MyProfileModal.tsx`, `RoleMatrixModal.tsx`[span_28](start_span)[span_28](end_span).
+  * `tabs/`: `AppUserTab.tsx`, `EhrungenTab.tsx`, `MitgliederTab.tsx`, `RollenTab.tsx`, `TeamsTab.tsx`, `VorstandTab.tsx`[span_29](start_span)[span_29](end_span).
+  * `components/`: `EditableCell.tsx`, `MatchLineupLogisticsRow.tsx` (Universelle Logistik-Kommandozentrale für Fahrer & Betreuer ohne Emoji-Clutter auf Desktop), `MatchLineupMatrixTable.tsx`, `QuickAddHelperRow.tsx`[span_30](start_span)[span_30](end_span).
+  * `modals/`: `CsvImportModal.tsx`, `GroupFormModal.tsx`, `HelperFormModal.tsx`, `MatchLineupMatrixModal.tsx` (Base & Override Planungs-Matrix für Captains), `TeamFormModal.tsx`, `UserFormModal.tsx`, `UserSuccessionModal.tsx`[span_31](start_span)[span_31](end_span).
+  * `hooks/`: `useMatchLineupMatrix.ts`[span_32](start_span)[span_32](end_span).
+* **Shared UI & Utils (`src/features/Shared/`):** 
+  * `ItemFormModal.tsx`, `AgendaItemRow.tsx`, `ItemCard.tsx`, `RichText.tsx`, `SmartEntityPicker.tsx`[span_33](start_span)[span_33](end_span).
+  * `components/AgendaItem/`: `InlineEditors.tsx`, `ItemMetadata.tsx`, `ItemStatusSection.tsx`, `RowContextMenu.tsx`[span_34](start_span)[span_34](end_span).
+  * `components/ItemForm/`: `AssigneePicker.tsx`, `ReminderSettings.tsx`, `RoutineSettings.tsx`[span_35](start_span)[span_35](end_span).
+  * `utils/`: `textUtils.tsx`[span_36](start_span)[span_36](end_span).
 
 ---
 
@@ -300,5 +308,5 @@ Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der e
 4.  `npm run dev` startet den lokalen Vite-Server.
 5.  `npm run build` führt einen strengen TypeScript Check (`tsc -b`) aus und baut das Production-Bundle.
 
-*Stand: 14.10.2026 - Protokoll: Dashboard-Reengineering, Admin-Cockpit, Persistente UI-Filter, Agenda-Listenansicht & Sticky-Toolbar*
+*Stand: 14.10.2026 - Protokoll: Dashboard-Reengineering, Admin-Cockpit für Dienste, Persistente UI-Filter via LocalStorage, Agenda-Listenansicht & Sticky-Toolbar*
 // --- END OF FILE ---
