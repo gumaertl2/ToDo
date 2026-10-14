@@ -1,6 +1,4 @@
-// [2026-10-14] - UX-FEATURE: '+ Weiterer Spieler' (Joker-Button & Such-Popup) direkt in jede Spielkarte integriert.
-// [2026-10-14] - UX-REFACTOR: Logistik (Betreuer & Fahrer) in die Kopfzeile verschoben und redundanten Ort (location) entfernt für maximale Kompaktheit.
-// [2026-10-14] - FEATURE: Karten-Ansicht (Agenda-Look) für die Saisonplanung erstellt. Kombiniert das Design von CalendarAgendaView mit der Aufstellungs- und Logistik-Steuerung.
+// [2026-10-14] - UX-REFACTOR: Lineares Layout von links nach rechts: Datum -> Betreuer -> Fahrer -> Uhrzeit -> Google-Icon Platzhalter -> Status.
 // src/features/Users/components/MatchLineupCardsView.tsx
 import React, { useEffect, useRef, useState } from 'react';
 import { format } from 'date-fns/format';
@@ -61,10 +59,8 @@ export const MatchLineupCardsView: React.FC<MatchLineupCardsViewProps> = ({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const today = startOfDay(new Date());
 
-  // Lokaler State für das Joker-Popup pro Karte
   const [openJokerCardKey, setOpenJokerCardKey] = useState<string | null>(null);
 
-  // Auto-Scroll zum fokussierten oder nächsten anstehenden Spiel (analog zu CalendarAgendaView)
   useEffect(() => {
     if (wrapperRef.current && !focusedEventId) {
       const timeoutId = setTimeout(() => {
@@ -88,7 +84,7 @@ export const MatchLineupCardsView: React.FC<MatchLineupCardsViewProps> = ({
   return (
     <div ref={wrapperRef} className="p-2 sm:p-4 space-y-4">
       
-      {/* KOPF-LEISTE: EINSATZ-BILANZ (Gesamte Saison) */}
+      {/* KOPF-LEISTE: EINSATZ-BILANZ */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
         <div className="flex items-center gap-1.5 text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
           <BarChart3 className="w-4 h-4 text-blue-600 shrink-0" />
@@ -164,6 +160,7 @@ export const MatchLineupCardsView: React.FC<MatchLineupCardsViewProps> = ({
         const displayTitle = (rawTitle.startsWith('🏠') || rawTitle.startsWith('🚌')) ? rawTitle : `${matchPrefix}${rawTitle}`;
 
         const timeStr = event.isAllDay ? 'Ganztägig' : `${format(eventDate, 'HH:mm')} Uhr`;
+        const shortDateStr = format(eventDate, 'eee, dd. MMM.', { locale: de });
 
         return (
           <div
@@ -174,31 +171,36 @@ export const MatchLineupCardsView: React.FC<MatchLineupCardsViewProps> = ({
               isToday ? 'border-blue-300 ring-2 ring-blue-100' : 'border-gray-200'
             } ${isPast && !isFocusedRow ? 'opacity-75 bg-gray-50/40' : ''} ${isPickerOpenInThisCard ? 'relative z-50' : 'relative z-10'}`}
           >
-            {/* KARTEN-HEADER */}
-            <div className={`px-4 py-2 border-b rounded-t-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
+            {/* KARTEN-HEADER: LINEARES FLIEẞEN VON LINKS NACH RECHTS */}
+            <div className={`px-4 py-2 border-b rounded-t-lg flex flex-wrap items-center justify-between gap-3 ${
               isToday || isFocusedRow ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'
             }`}>
-              <div className="flex items-center flex-wrap gap-2">
-                <h3 className={`text-sm font-bold ${isToday || isFocusedRow ? 'text-blue-800' : 'text-gray-700'}`}>
-                  {format(eventDate, 'EEEE, dd. MMMM yyyy', { locale: de })}
-                </h3>
-                {isToday && (
-                  <span className="text-[10px] uppercase tracking-wider font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full">
-                    Heute
-                  </span>
-                )}
-                {isFocusedRow && (
-                  <span className="text-[10px] uppercase tracking-wider font-bold bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-full">
-                    Ausgewähltes Spiel
-                  </span>
-                )}
-              </div>
+              
+              {/* LINKE SEITE: Datum direkt gefolgt von Betreuer und Fahrer */}
+              <div className="flex items-center flex-wrap gap-4">
+                
+                {/* 1. Datum */}
+                <div className="flex items-center gap-2">
+                  <h3 className={`text-sm font-bold ${isToday || isFocusedRow ? 'text-blue-800' : 'text-gray-700'}`}>
+                    {shortDateStr}
+                  </h3>
+                  {isToday && (
+                    <span className="text-[10px] uppercase tracking-wider font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full">
+                      Heute
+                    </span>
+                  )}
+                  {isFocusedRow && (
+                    <span className="text-[10px] uppercase tracking-wider font-bold bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-full">
+                      Ausgewählt
+                    </span>
+                  )}
+                </div>
 
-              {/* LOGISTIK & STATUS RECHTS IM HEADER */}
-              <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-                {(team.requiresFahrer || team.requiresBetreuer) && (
-                  <div className="flex flex-wrap items-center gap-3">
-                    {team.requiresBetreuer && (
+                {/* 2. Betreuer (Platz für bis zu 2 Personen) */}
+                {team.requiresBetreuer && (
+                  <div className="flex items-center gap-1.5 bg-white border border-gray-200 px-2.5 py-1 rounded-md shadow-2xs min-w-[150px] max-w-[220px]">
+                    <span className="text-xs shrink-0 select-none" title="Betreuer">🧑‍🏫</span>
+                    <div className="flex-1 min-w-0">
                       <MatchLineupLogisticsRow
                         type="betreuerHelperIds"
                         label="🧑‍🏫 Betreuer"
@@ -218,8 +220,15 @@ export const MatchLineupCardsView: React.FC<MatchLineupCardsViewProps> = ({
                         onLogisticsAction={onLogisticsAction}
                         onDepartureTimeChange={onDepartureTimeChange}
                       />
-                    )}
-                    {team.requiresFahrer && (
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Fahrer (Platz für bis zu 2 Fahrer, Abfahrtszeit und fixierter Platz für Google-Maps Icon) */}
+                {team.requiresFahrer && (
+                  <div className="flex items-center gap-1.5 bg-white border border-gray-200 px-2.5 py-1 rounded-md shadow-2xs min-w-[230px] max-w-[320px]">
+                    <span className="text-xs shrink-0 select-none" title="Fahrer">🚗</span>
+                    <div className="flex-1 min-w-0">
                       <MatchLineupLogisticsRow
                         type="fahrerHelperIds"
                         label="🚗 Fahrer"
@@ -239,43 +248,50 @@ export const MatchLineupCardsView: React.FC<MatchLineupCardsViewProps> = ({
                         onLogisticsAction={onLogisticsAction}
                         onDepartureTimeChange={onDepartureTimeChange}
                       />
+                    </div>
+                    {/* Fester Platzhalter für Google-Maps Button, damit die Breite absolut identisch bleibt */}
+                    {(isHeim || !event.location) && (
+                      <div className="w-6 h-6 shrink-0 opacity-0 pointer-events-none" aria-hidden="true" />
                     )}
                   </div>
                 )}
 
-                <div className="flex items-center gap-2 border-l border-gray-200 pl-3">
-                  <span
-                    className={`flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded border ${
-                      isOverride ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-blue-50 text-blue-700 border-blue-200'
-                    }`}
-                    title={`${activePlayers.length} Spieler eingeteilt`}
-                  >
-                    <Users className="w-3 h-3" /> {activePlayers.length}
-                  </span>
-
-                  {!isReadOnly && (!isPast || isFocusedRow) ? (
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); onToggleLock(safeEventId, !isManuallyLocked); }}
-                      className={`flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded border transition-colors ${
-                        isManuallyLocked ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' :
-                        isAutoFrozen ? 'bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200' :
-                        'bg-white text-gray-500 border-gray-200 hover:bg-gray-100 hover:text-gray-700'
-                      }`}
-                      title={isAutoFrozen ? `Auto-Freeze aktiv (${leadDays} Tage). Klick für manuelles Siegel.` : 'Kader manuell versiegeln (Sperre)'}
-                    >
-                      {isFrozen ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                      {isFrozen ? 'Versiegelt' : 'Offen'}
-                    </button>
-                  ) : (
-                    isFrozen && (
-                      <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded border bg-gray-100 text-gray-600 border-gray-300">
-                        <Lock className="w-3 h-3" /> Versiegelt
-                      </span>
-                    )
-                  )}
-                </div>
               </div>
+
+              {/* RECHTE SEITE: Status & Siegel */}
+              <div className="flex items-center gap-2">
+                <span
+                  className={`flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded border ${
+                    isOverride ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-blue-50 text-blue-700 border-blue-200'
+                  }`}
+                  title={`${activePlayers.length} Spieler eingeteilt`}
+                >
+                  <Users className="w-3 h-3" /> {activePlayers.length}
+                </span>
+
+                {!isReadOnly && (!isPast || isFocusedRow) ? (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onToggleLock(safeEventId, !isManuallyLocked); }}
+                    className={`flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded border transition-colors ${
+                      isManuallyLocked ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' :
+                      isAutoFrozen ? 'bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200' :
+                      'bg-white text-gray-500 border-gray-200 hover:bg-gray-100 hover:text-gray-700'
+                    }`}
+                    title={isAutoFrozen ? `Auto-Freeze aktiv (${leadDays} Tage). Klick für manuelles Siegel.` : 'Kader manuell versiegeln (Sperre)'}
+                  >
+                    {isFrozen ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+                    {isFrozen ? 'Versiegelt' : 'Offen'}
+                  </button>
+                ) : (
+                  isFrozen && (
+                    <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded border bg-gray-100 text-gray-600">
+                      <Lock className="w-3 h-3" /> Versiegelt
+                    </span>
+                  )
+                )}
+              </div>
+
             </div>
 
             {/* KARTEN-BODY: Uhrzeit & Spieltitel */}
@@ -402,7 +418,7 @@ export const MatchLineupCardsView: React.FC<MatchLineupCardsViewProps> = ({
                     );
                   })}
 
-                  {/* + WEITERER SPIELER (JOKER-BUTTON PRO KARTE) */}
+                  {/* + WEITERER SPIELER (JOKER-BUTTON) */}
                   {!isReadOnly && (!isPast || isFocusedRow) && (
                     <div className="relative inline-block">
                       <button
