@@ -1,3 +1,4 @@
+// [2026-10-14] - BUGFIX: 'title' Typisierungsfehler behoben (typeof e.title === 'string').
 // [2026-10-14] - UX-FEATURE: Langzeitgedächtnis für den Dienste-Filter! Die ausgewählten Kategorien (dienstFilters) werden nun via localStorage dauerhaft gespeichert.
 // [2026-10-14] - UX-FIX: Layout-Quetschung behoben. 'w-full' von der Titel-Spalte entfernt und stattdessen harte Mindestbreiten für Betreuer/Fahrer eingeführt.
 // [2026-10-14] - BUGFIX: React Hook Order Error (Crash beim Filtern) behoben. Der 'useMemo' Hook für die Tages-Gruppierung (groupedDienste) wurde vor das Early-Return verschoben.
@@ -189,7 +190,6 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
   currentDate,
   onSelectEvent
 }) => {
-  // HIER IST DAS LANGZEITGEDÄCHTNIS (Lesen beim Start)
   const [dienstFilters, setDienstFilters] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('papatodo_dienste_filters');
@@ -205,7 +205,6 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
   const isDienste = currentView === 'dienste';
   const today = startOfDay(new Date());
 
-  // HIER IST DAS AUTO-SAVE (Speichern bei jeder Änderung) - VOR dem Early Return platziert!
   useEffect(() => {
     localStorage.setItem('papatodo_dienste_filters', JSON.stringify(dienstFilters));
   }, [dienstFilters]);
@@ -380,7 +379,7 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
                          {!showDateHeaders && (
                             <span className="inline-block w-3 h-3 rounded-full mr-2 shrink-0 mt-1 lg:mt-0" style={{ backgroundColor: e.color || '#3b82f6' }}></span>
                          )}
-                         <span className="truncate block flex-1" title={e.title}>{e.title}</span>
+                         <span className="truncate block flex-1" title={typeof e.title === 'string' ? e.title : undefined}>{e.title}</span>
                       </div>
                       
                       {e.sourceEvent?.pollConfig?.isActive && (
@@ -436,7 +435,7 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
                 <div className="flex flex-col lg:flex-row lg:items-center gap-1 lg:gap-3 min-w-0 w-full overflow-hidden">
                    <div className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors flex items-start lg:items-center min-w-0 shrink">
                       <span className="inline-block w-3 h-3 rounded-full mr-2 shrink-0 mt-1 lg:mt-0" style={{ backgroundColor: e.color || '#3b82f6' }}></span>
-                      <span className="truncate block flex-1" title={e.title}>{e.title}</span>
+                      <span className="truncate block flex-1" title={typeof e.title === 'string' ? e.title : undefined}>{e.title}</span>
                    </div>
                    {e.sourceEvent?.pollConfig?.isActive && (
                       <div className="ml-5 lg:ml-0 shrink-0">

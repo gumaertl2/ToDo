@@ -1,3 +1,4 @@
+// [2026-10-14] - BUGFIX: Unused import 'generateStableEventId' removed to fix TS6133 build error.
 // [2026-10-14] - UX-REFACTOR: Statische Logistik-Badges aus dem Event-Titel entfernt. Die App nutzt nun interaktive Inline-Komponenten direkt in der Kalender-Listenansicht.
 // [2026-10-13] - FEATURE: pollSummary zum AdaptedEvent hinzugefügt.
 // [2026-10-13] - BUGFIX: ev.uid durch generateStableEventId (Stable-ID) ersetzt.
@@ -8,7 +9,6 @@ import type { Event as RBCEvent } from 'react-big-calendar';
 import { startOfDay } from 'date-fns/startOfDay';
 import { useClubStore } from '../../../store/useClubStore';
 import type { CalendarEvent, Event } from '../../../core/types/models';
-import { generateStableEventId } from '../../Users/hooks/useMatchLineupMatrix';
 
 export interface AdaptedEvent extends RBCEvent {
   id: string; 
@@ -131,7 +131,6 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
             const isAuswaerts = ev.location && !isHeim;
             const matchPrefix = sub.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
 
-            // WIR BAUEN DIE LOGISTIK EVENTS (nur die Hüllen, die Details macht das Frontend live!)
             logisticsEvents.push({
                 id: `logistics-${sub.id}-${ev.uid}-${index}`,
                 sourceId: sub.id, 
