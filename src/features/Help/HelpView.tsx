@@ -1,3 +1,4 @@
+// [2026-10-15] - UX-FIX: Handbuch um "Teil 9: Backup & Restore (Datensicherung & Testumgebung)" erweitert. Erklärt JSON-Export, 12-Uhr-Reminder, Restore-Modi (Merge/Wipe) und die E-Mail-Authentifizierungsbrücke.
 // [2026-10-14] - UX-FIX: Handbuch um "Admin-Cockpit" für schnelle Logistik-Zuweisungen (Teil 2) und die "Sticky Toolbar" für Team-Filter im Spielplan (Teil 8) ergänzt. Persistente Filter dokumentiert.
 // [2026-10-14] - UX-FIX: Modulares Welcome-Dashboard (Reengineering) im Handbuch (Teil 1) redaktionell berücksichtigt.
 // [2026-09-28] - UX-FIX: Handbuch um "Teil 8: Saison- & Aufstellungsplanung" (Base & Override, Matrix, Kader-Erinnerungen) für Mannschaftsführer erweitert.
@@ -11,7 +12,7 @@
 // 2026-04-18 20:15 - CHIRURGISCHER EINGRIFF: Integration von Teil 9 (Rollen & Berechtigungen)
 // src/features/Help/HelpView.tsx
 import React from 'react';
-import { BookOpen, Target, Calendar, ListTodo, Layers, Printer, Repeat, Lock, ArrowUp, Users } from 'lucide-react';
+import { BookOpen, Target, Calendar, ListTodo, Layers, Printer, Repeat, Lock, ArrowUp, Users, Database } from 'lucide-react';
 
 interface HelpSectionProps {
   id: string;
@@ -111,6 +112,7 @@ export const HelpView: React.FC = () => {
               <li><button onClick={() => scrollToSection('templates')} className="hover:underline text-left">Teil 6: Vorlagen & Die geregelte Aufgabenübergabe</button></li>
               <li><button onClick={() => scrollToSection('security')} className="hover:underline text-left">Teil 7: Sicherheit, Rechte & Rollen-Profile</button></li>
               <li><button onClick={() => scrollToSection('lineups')} className="hover:underline text-left">Teil 8: Saison- & Aufstellungsplanung (Für Captains)</button></li>
+              <li><button onClick={() => scrollToSection('backup')} className="hover:underline text-left">Teil 9: Backup & Restore (Datensicherung)</button></li>
             </ul>
           </div>
 
@@ -345,6 +347,46 @@ export const HelpView: React.FC = () => {
             <div className="bg-gray-50 border border-gray-200 p-5 rounded-lg">
               <h4 className="font-bold text-gray-900 mb-2">Datenschutz-Hinweis</h4>
               <p className="text-sm text-gray-800">Aufstellungen sind ausschließlich für eingeloggte Vereinsmitglieder sichtbar. Gäste und Besucher, die über einen öffentlichen Link auf den Vereinskalender zugreifen, sehen lediglich den Termin und den Spielort, jedoch aus DSGVO-Gründen niemals die Spielernamen.</p>
+            </div>
+          </HelpSection>
+
+          <HelpSection id="backup" title="Teil 9: Backup & Restore (Datensicherung & Testumgebung)" icon={Database} audience="admin">
+            <p className="font-bold text-lg mb-4 text-blue-900">Wofür ist das da? Für die vollständige lokale Sicherung aller Vereinsdaten und das Klonen der Produktionsdatenbank in eine Testumgebung (Staging).</p>
+
+            <p className="mb-4 text-sm leading-relaxed">PapaToDo läuft komplett serverlos (Serverless PWA). Die Daten liegen in Google Firestore. Um jederzeit einen vom Internetanbieter unabhängigen, manipulationssicheren Snapshot (Sicherungskopie) in den eigenen Händen zu halten, bietet das <strong>Reports & Statistik</strong> Modul im Tab <strong>Backup & Restore</strong> einen direkten Download-Mechanismus.</p>
+
+            <div className="space-y-4 mb-8 text-sm">
+              <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-sm border-l-4 border-l-emerald-500">
+                <strong className="text-emerald-700 block mb-1">JSON-Export (1-Klick Backup)</strong>
+                Das System liest alle 12 relevanten Datenbank-Tabellen (Mitglieder, Termine, ToDos, Aufstellungen, PINs etc.) roh aus und verpackt sie in eine universell lesbare <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">.json</code> Datei. Sie können diese direkt auf Ihrem Mac oder iCloud Drive speichern.
+              </div>
+              <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-sm border-l-4 border-l-emerald-500">
+                <strong className="text-emerald-700 block mb-1">Automatischer 12:00-Uhr Reminder</strong>
+                Administratoren können konfigurieren, welche Vorstandsmitglieder das Backup durchführen sollen. Wurde an einem Tag noch keine Sicherung durchgeführt, blendet die App ab 12:00 Uhr mittags ein dezentes, rotes Banner ein, über das das Backup mit einem einzigen Klick sofort heruntergeladen werden kann.
+              </div>
+            </div>
+
+            <h4 className="font-bold text-gray-900 text-lg mb-3 mt-6">Restore & Testumgebungen (Staging)</h4>
+            <p className="text-sm mb-4">Sie können Backup-Dateien jederzeit über die App zurück in die aktuell verbundene Datenbank spielen. Hierbei warnt das System vorher ausdrücklich, mit welcher Datenbank-ID (Project-ID) Sie gerade verbunden sind. Sie haben zwei Möglichkeiten:</p>
+            
+            <ul className="space-y-4 list-none pl-0 text-sm mb-8">
+              <li className="flex items-start">
+                <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold mr-3 shrink-0">Merge</span>
+                <div><strong>Ergänzen & Aktualisieren.</strong> Vorhandene Datensätze mit gleicher ID werden überschrieben, fehlende hinzugefügt. Alte Daten-Leichen, die nur in der Zieldatenbank existieren, bleiben bestehen.</div>
+              </li>
+              <li className="flex items-start">
+                <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded font-bold mr-3 shrink-0">Wipe & Replace</span>
+                <div><strong>Test-Datenbank klonen (1:1 Spiegel).</strong> Das System löscht vor dem Einspielen die gesamte Zieldatenbank. Dies ist der optimale Weg, um eine Testumgebung (z.B. für neue Vereinsjahre oder experimentelle Updates) exakt auf den Stand der Produktionsdatenbank zu bringen.</div>
+              </li>
+            </ul>
+
+            <div className="bg-blue-50 border border-blue-100 p-5 rounded-lg mb-6">
+              <h4 className="font-bold text-blue-900 mb-2">Wichtig: Zuweisungen und die E-Mail-Brücke</h4>
+              <p className="text-sm text-blue-800">
+                Da Google aus Sicherheitsgründen die Nutzer-Konten (Passwörter & Authentifizierung) strikt von der Firestore-Datenbank trennt, hat eine Testumgebung (ein neues Firebase-Projekt) komplett andere Google-Auth-IDs als das Produktivsystem. 
+                <br /><br />
+                <strong>Das ist jedoch kein Problem:</strong> PapaToDo verknüpft nach dem Login den Google-Account automatisch über die <strong>E-Mail-Adresse</strong> mit dem in der Datenbank gesicherten Benutzerprofil. Wenn Sie ein Backup in die Test-Datenbank spiegeln, müssen sich die Administratoren dort lediglich einmal mit exakt derselben E-Mail-Adresse registrieren bzw. anmelden. Das System stellt die Brücke sofort her und alle Zuweisungen (z.B. offene Aufgaben im Dashboard) greifen wie gewohnt.
+              </p>
             </div>
           </HelpSection>
 
