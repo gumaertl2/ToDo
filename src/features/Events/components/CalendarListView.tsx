@@ -1,3 +1,4 @@
+// [2026-10-15] - FEATURE: 'ignoreYearFilter' Prop hinzugefügt, damit die Listen-Ansicht nahtlos als Child-Komponente im Saison-Modal (MatchLineupMatrix) verwendet werden kann.
 // [2026-10-14] - BUGFIX: 'title' Typisierungsfehler behoben (typeof e.title === 'string').
 // [2026-10-14] - UX-FEATURE: Langzeitgedächtnis für den Dienste-Filter! Die ausgewählten Kategorien (dienstFilters) werden nun via localStorage dauerhaft gespeichert.
 // [2026-10-14] - UX-FIX: Layout-Quetschung behoben. 'w-full' von der Titel-Spalte entfernt und stattdessen harte Mindestbreiten für Betreuer/Fahrer eingeführt.
@@ -182,13 +183,15 @@ interface CalendarListViewProps {
   displayEvents: AdaptedEvent[];
   currentDate: Date;
   onSelectEvent: (event: AdaptedEvent) => void;
+  ignoreYearFilter?: boolean; // <--- NEU
 }
 
 export const CalendarListView: React.FC<CalendarListViewProps> = ({
   currentView,
   displayEvents,
   currentDate,
-  onSelectEvent
+  onSelectEvent,
+  ignoreYearFilter
 }) => {
   const [dienstFilters, setDienstFilters] = useState<string[]>(() => {
     try {
@@ -237,8 +240,9 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
   };
 
   const yearEvents = useMemo(() => {
+    if (ignoreYearFilter) return displayEvents;
     return displayEvents.filter(e => e.start && e.start.getFullYear() === currentDate.getFullYear());
-  }, [displayEvents, currentDate]);
+  }, [displayEvents, currentDate, ignoreYearFilter]);
 
   const categories = useMemo(() => {
     return Array.from(new Set(yearEvents.map(getCategory))).sort();
@@ -289,7 +293,7 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-gray-400 h-full p-8 relative">
         <CalendarDays className="w-12 h-12 mb-3 opacity-20" />
-        <p>Keine {currentView === 'termine' ? 'Termine' : 'Dienste'} für {currentDate.getFullYear()} gefunden.</p>
+        <p>Keine {currentView === 'termine' ? 'Termine' : 'Dienste'} für das gewählte Kriterium gefunden.</p>
         {dienstFilters.length > 0 && (
           <button onClick={() => setDienstFilters([])} className="mt-4 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-200">
             Filter zurücksetzen

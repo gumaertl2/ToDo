@@ -10,7 +10,7 @@ npm run dev -- --port 5174 &
 sleep 2
 
 # Öffnet die lokale Webseite im Standardbrowser
-echo "Öffne http://localhost:5173 im Browser..."
+echo "Öffne http://localhost:5174 im Browser..."
 open "http://localhost:5174"
 
 # Bringt den Hintergrundprozess wieder in den Vordergrund, 

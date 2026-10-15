@@ -1,3 +1,4 @@
+// [2026-10-15] - FEATURE: 'Dienste'-Ansicht (CalendarListView) in das Saison-Modal eingebettet (Container-Swap-Prinzip), inkl. Zurück-Button zur Kader-Planung.
 // [2026-10-14] - UX-FEATURE: Joker-Props (availableJokers, handleAddJoker, jokerSearchTerm, setJokerSearchTerm) an MatchLineupCardsView durchgereicht.
 // [2026-10-14] - UX-FEATURE: Ansicht-Umschalter (Karten vs. Matrix) mit localStorage-Persistenz ('papatodo_lineup_view_mode') im Header integriert.
 // [2026-10-12] - REFACTOR: Hauptdatei massiv verschlankt. Komplette Logik in useMatchLineupMatrix ausgelagert, Tabellen-Struktur in MatchLineupMatrixTable und MatchLineupLogisticsRow gekapselt.
@@ -11,12 +12,14 @@
 // [2026-09-30] - FEATURE: Base & Override V2 (Bottom-Up). Spieler können ihre eigene Zelle anklicken (Verfügbarkeit: Da/Weg).
 // [2026-09-30] - FEATURE: Auto-Freeze und manuelles Siegel (🔒) in die Matrix integriert. Notfall-Alert bei verspäteten Absagen eingebaut.
 // src/features/Users/components/MatchLineupMatrixModal.tsx
-import React, { useState, useEffect } from 'react';
-import { X, Calendar as CalendarIcon, UserPlus, Search, LayoutList, Table as TableIcon } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Calendar as CalendarIcon, UserPlus, Search, LayoutList, Table as TableIcon, Car, ArrowLeft } from 'lucide-react';
 import type { Team } from '../../../core/types/models';
 import { useMatchLineupMatrix } from '../hooks/useMatchLineupMatrix';
 import { MatchLineupMatrixTable } from './MatchLineupMatrixTable';
 import { MatchLineupCardsView } from './MatchLineupCardsView';
+import { CalendarListView } from '../../Events/components/CalendarListView';
+import type { AdaptedEvent } from '../../Events/hooks/useCalendarEvents';
 
 interface MatchLineupMatrixModalProps {
   team: Team;
@@ -30,10 +33,10 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
   const matrixData = useMatchLineupMatrix(team, focusedEventId, isReadOnly);
 
   // --- ANSICHTS-MODUS (Langzeitgedächtnis via localStorage) ---
-  const [viewMode, setViewMode] = useState<'cards' | 'matrix'>(() => {
+  const [viewMode, setViewMode] = useState<'cards' | 'matrix' | 'dienste'>(() => {
     try {
       const saved = localStorage.getItem('papatodo_lineup_view_mode');
-      return (saved === 'cards' || saved === 'matrix') ? saved : 'cards';
+      return (saved === 'cards' || saved === 'matrix' || saved === 'dienste') ? saved : 'cards';
     } catch {
       return 'cards';
     }
@@ -46,6 +49,23 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
       // Ignorieren, falls localStorage blockiert ist
     }
   }, [viewMode]);
+
+  // Transformiert die rohen ICS-Events in AdaptedEvents, die von der CalendarListView (Dienste) verstanden werden.
+  const adaptedEventsForDienste = useMemo(() => {
+    if (viewMode !== 'dienste') return [];
+    return matrixData.events.map(e => ({
+      id: e.uid,
+      title: e.title,
+      start: new Date(e.startTime),
+      end: new Date(e.endTime || e.startTime),
+      allDay: e.isAllDay,
+      location: e.location,
+      color: matrixData.linkedSubscription?.color || '#3b82f6',
+      isLogisticsDuty: true,
+      teamName: team.name,
+      sourceEvent: e // Das Original-ICS-Event (CachedIcsEvent), auf das SmartLogisticsBlock wartet
+    } as AdaptedEvent));
+  }, [matrixData.events, matrixData.linkedSubscription, team.name, viewMode]);
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-0 md:p-4">
@@ -66,7 +86,7 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
           </div>
           
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {/* ANSICHT-UMSCHALTER (Karten vs. Matrix) */}
+            {/* ANSICHT-UMSCHALTER (Karten vs. Matrix vs. Dienste) */}
             {matrixData.linkedSubscription && matrixData.events.length > 0 && (
               <div className="flex items-center bg-gray-200/80 p-0.5 rounded-lg border border-gray-200">
                 <button
@@ -80,7 +100,7 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                   title="Karten-Ansicht (Spielplan-Look)"
                 >
                   <LayoutList className="w-3.5 h-3.5" />
-                  <span>Karten</span>
+                  <span className="hidden sm:inline">Karten</span>
                 </button>
                 <button
                   type="button"
@@ -93,7 +113,23 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                   title="Klassische Tabellen-Matrix"
                 >
                   <TableIcon className="w-3.5 h-3.5" />
-                  <span>Matrix</span>
+                  <span className="hidden sm:inline">Matrix</span>
+                </button>
+                
+                <div className="w-px h-4 bg-gray-300 mx-1"></div>
+                
+                <button
+                  type="button"
+                  onClick={() => setViewMode('dienste')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-bold transition-all ${
+                    viewMode === 'dienste'
+                      ? 'bg-white text-emerald-600 shadow-2xs'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                  title="Dienste & Logistik Übersicht"
+                >
+                  <Car className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Dienste</span>
                 </button>
               </div>
             )}
@@ -207,6 +243,30 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
           ) : matrixData.events.length === 0 ? (
             <div className="p-10 text-center text-gray-500 flex flex-col items-center justify-center h-full">
               Keine Termine im verknüpften Kalender gefunden.
+            </div>
+          ) : viewMode === 'dienste' ? (
+            <div className="flex flex-col h-full bg-white relative">
+              <div className="p-3 bg-emerald-50/80 border-b border-emerald-100 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md shrink-0">
+                <button 
+                  onClick={() => setViewMode('cards')} 
+                  className="flex items-center text-sm font-bold text-emerald-700 hover:bg-emerald-100/60 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Zurück zur Kader-Planung
+                </button>
+                <div className="text-[11px] font-bold text-emerald-600 bg-white px-2 py-1 rounded-md shadow-2xs border border-emerald-200">
+                  Dienste-Übersicht
+                </div>
+              </div>
+              <div className="flex-1 overflow-hidden relative">
+                <CalendarListView 
+                  currentView="dienste"
+                  displayEvents={adaptedEventsForDienste}
+                  currentDate={new Date()}
+                  onSelectEvent={() => {}}
+                  ignoreYearFilter={true}
+                />
+              </div>
             </div>
           ) : viewMode === 'cards' ? (
             <MatchLineupCardsView 
