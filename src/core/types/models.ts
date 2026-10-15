@@ -1,3 +1,4 @@
+// [2026-10-15] - FEATURE: Optionales Feld 'receiveBackupReminder' im User-Modell ergänzt (steuert das tägliche 12:00-Uhr Backup-Hinweisbanner).
 // [2026-10-12] - FEATURE: Feld 'homeArenaAddress' (Heimhalle / Treffpunkt) im Team-Modell hinzugefügt (für Google Maps Routing).
 // [2026-10-12] - FEATURE: Feld 'rankingUrl' zum TeamPin-Modell hinzugefügt (für Ranglisten/Tabellen-Links in der Detailansicht).
 // [2026-10-11] - FEATURE: Feld 'departureTime' zum MatchLineup-Modell hinzugefügt (Grundlage für spätere Google Maps Integration).
@@ -109,6 +110,7 @@ export interface User extends BaseDocument {
   groupIds: string[];
   permissions?: UserPermissions; 
   lastActivityAt?: number; 
+  receiveBackupReminder?: boolean;
 }
 
 export interface Team extends BaseDocument {
@@ -119,7 +121,7 @@ export interface Team extends BaseDocument {
   lineupLockMessage?: string;        
   requiresBetreuer?: boolean; 
   requiresFahrer?: boolean;
-  homeArenaAddress?: string; // <--- NEU
+  homeArenaAddress?: string;
 }
 
 export interface Group extends BaseDocument {
@@ -160,7 +162,6 @@ export interface Helper extends BaseDocument {
   lastAppLoginAt?: number;
 }
 
-// ---> NEU: Umfrage / RSVP Konfiguration <---
 export interface PollOption {
   id: string;
   text: string;

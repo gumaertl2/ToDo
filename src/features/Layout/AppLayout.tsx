@@ -1,3 +1,5 @@
+// [2026-10-15] - FIX: Import-Pfad für backupService auf '../../services/backupService' korrigiert.
+// [2026-10-15] - FEATURE: Tägliches 12:00-Uhr Backup-Reminder-Banner (gesteuert über user.receiveBackupReminder) mit 1-Klick-Download und Deep-Link nach /reports?tab=backup integriert.
 // [2026-10-04] - FEATURE: Automatische Build-Versionsnummer (__APP_BUILD_DATE__) im Footer (Desktop & Mobile) der App integriert.
 // [2026-10-03] - BUGFIX: Vergangenheits-Filter (todayStart <= eventDateStart) in die Badge-Berechnung (reminderCounts) integriert, um die rote Zahl in der Navigation mit der RemindersView zu synchronisieren.
 // [2026-10-01] - BUGFIX: 'fetchTeams' zum globalen App-Init hinzugefügt, um Regression-Bug bei der Team-Zuweisung (Abo-Erinnerungen) zu beheben.
@@ -14,27 +16,34 @@
 // [2026-05-28] - ARCHITEKTUR-FIX: Synchronisation der Erinnerungs-Schutzschilde. AppLayout nutzt nun dieselben Filter wie RemindersView.
 // src/features/Layout/AppLayout.tsx
 import React, { useEffect, useState, useMemo } from 'react';
-import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { 
    Users, Calendar, ClipboardList, CheckSquare, LogOut, 
    LayoutDashboard, BookOpen, CalendarDays, Pin, PinOff,
-  MessageCircle, BarChart2, Menu, X, Key, Home, UserCircle
+  MessageCircle, BarChart2, Menu, X, Key, Home, UserCircle,
+  Download, ShieldCheck, RefreshCw
 } from 'lucide-react';
 import { useClubStore } from '../../store/useClubStore';
 import { DsgvoClickwrap } from '../Auth/DsgvoClickwrap';
 import { MyProfileModal } from '../Users/MyProfileModal';
+import { 
+  shouldShowBackupReminder, 
+  exportFullDatabaseBackup, 
+  dismissBackupReminderToday 
+} from '../../services/backupService';
 
 declare const __APP_BUILD_DATE__: string | undefined;
 
 export const AppLayout: React.FC = () => {
   const { 
-     logout, user, roleProfiles, fetchUsersAndHelpers, fetchGroups, fetchTeams,
+     logout, user, users, roleProfiles, fetchUsersAndHelpers, fetchGroups, fetchTeams,
      calendarEvents, allAgendaItems, events, calendarSubscriptions,
      fetchEvents, fetchTasks, fetchCalendarData,
     helpers, groups, tasks,
     fetchTeamPins, fetchMatchLineups 
   } = useClubStore();
   const location = useLocation();
+  const useNavigateInstance = useNavigate();
 
   const [isPinned, setIsPinned] = useState(() => {
     const saved = localStorage.getItem('papatodo_sidebar_pinned');
@@ -45,6 +54,42 @@ export const AppLayout: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+  // Backup-Reminder State
+  const [showBackupBanner, setShowBackupBanner] = useState(false);
+  const [isQuickBackingUp, setIsQuickBackingUp] = useState(false);
+
+  // Wir ziehen das frisch geladene User-Objekt aus `users`, damit Änderungen an receiveBackupReminder sofort greifen
+  const liveCurrentUser = useMemo(() => {
+    if (!user) return null;
+    return users?.find(u => u.id === user.id) || user;
+  }, [user, users]);
+
+  useEffect(() => {
+    const checkBackup = () => {
+      setShowBackupBanner(shouldShowBackupReminder(liveCurrentUser?.receiveBackupReminder));
+    };
+    checkBackup();
+    const intervalId = setInterval(checkBackup, 60_000);
+    return () => clearInterval(intervalId);
+  }, [liveCurrentUser, location.pathname]);
+
+  const handleQuickBackupDownload = async () => {
+    setIsQuickBackingUp(true);
+    try {
+      await exportFullDatabaseBackup(liveCurrentUser?.name);
+      setShowBackupBanner(false);
+    } catch (err) {
+      console.error('Fehler beim Schnell-Backup:', err);
+    } finally {
+      setIsQuickBackingUp(false);
+    }
+  };
+
+  const handleDismissBackupBanner = () => {
+    dismissBackupReminderToday();
+    setShowBackupBanner(false);
+  };
 
   const currentProfile = useMemo(() => {
     return roleProfiles.find(p => p.id === user?.roleProfileId) || 
@@ -490,6 +535,55 @@ export const AppLayout: React.FC = () => {
       </nav>
 
       <main className="flex-1 overflow-y-auto min-h-0 p-4 lg:p-8 lg:pb-8 pb-6 landscape:order-1 print:!overflow-visible print:!p-0 print:!w-full print:!block print:!m-0">
+        
+        {/* TÄGLICHES 12:00-UHR BACKUP-REMINDER BANNER */}
+        {showBackupBanner && (
+          <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl p-3 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200 print:!hidden">
+            <div className="flex items-center gap-2.5 text-xs sm:text-sm text-amber-900">
+              <ShieldCheck className="w-5 h-5 text-amber-600 shrink-0" />
+              <div>
+                <span className="font-bold">Tägliche Datensicherung fällig:</span>{' '}
+                <span>Heute wurde auf diesem Gerät noch kein Datenbank-Backup erstellt.</span>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleQuickBackupDownload}
+                disabled={isQuickBackingUp}
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                {isQuickBackingUp ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Sichere...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Jetzt 1-Klick-Backup laden</span>
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => useNavigateInstance('/reports?tab=backup')}
+                className="px-3 py-1.5 bg-white hover:bg-amber-100/60 text-amber-900 border border-amber-300 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+              >
+                Zu Backup & Restore →
+              </button>
+              <button
+                type="button"
+                onClick={handleDismissBackupBanner}
+                className="p-1.5 text-amber-600 hover:text-amber-900 hover:bg-amber-100 rounded-lg transition-colors cursor-pointer"
+                title="Heute nicht mehr erinnern"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         <Outlet />
       </main>
 

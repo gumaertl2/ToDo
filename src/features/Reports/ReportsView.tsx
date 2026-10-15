@@ -1,3 +1,5 @@
+// [2026-10-15] - FEATURE: Data Explorer um 'matchLineups' (Aufstellungen) und 'eventPollResponses' (Umfrage-Antworten) erweitert.
+// [2026-10-15] - FEATURE: Tab 'Backup & Restore' (BackupRestoreTab) inkl. URL-Query-Support (?tab=backup) in ReportsView integriert.
 // [2026-06-04] - FEATURE: "Copy to Clipboard"-Funktion in Data Explorer integriert. Generiert TSV (Tab-Separated Values) für verlustfreies Copy&Paste direkt in den KI-Chat oder nach Excel.
 // [2026-06-04] - FEATURE: Data-Explorer (Phase 2) massiv aufgerüstet. Dropdown auf alle 11 Haupt-Kollektionen erweitert (inkl. Helfer, Teams, Profile). Spaltenköpfe bieten nun direkte In-App Filter (Textsuche) und Sortierung (ASC/DESC). Der CSV-Export exportiert nun exakt die gefilterte und sortierte Ansicht.
 // [2026-06-04] - FEATURE: Data-Explorer (Phase 1) integriert. Flache, unmaskierte Tabellenansicht für alle Hauptkollektionen (Tasks, Events, Users) mit CSV/Excel-Exportfunktion zur Identifikation von Datenbank-Anomalien (Legacy-Daten).
@@ -8,20 +10,45 @@
 // 2026-04-24 22:15 - BUGFIX: 'isTemplate' Flag berücksichtigt - Vorlagen werden nun korrekt aus allen Statistiken gefiltert
 // src/features/Reports/ReportsView.tsx
 import React, { useMemo, useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../../services/firebase';
 import { useClubStore } from '../../store/useClubStore';
-import { BarChart2, Clock, CheckCircle, AlertTriangle, Target, Users, FolderSearch, Database, Download, Settings2, ArrowUp, ArrowDown, ArrowUpDown, Copy, Check } from 'lucide-react';
+import type { EventPollResponse } from '../../core/types/models';
+import { BarChart2, Clock, CheckCircle, AlertTriangle, Target, Users, FolderSearch, Database, Download, Settings2, ArrowUp, ArrowDown, ArrowUpDown, Copy, Check, ShieldCheck } from 'lucide-react';
+import { BackupRestoreTab } from './BackupRestoreTab';
 
 export const ReportsView: React.FC = () => {
   const { 
     tasks, users, events, 
     allAgendaItems, helpers, groups, teams, 
-    roleProfiles, calendarEvents, calendarSubscriptions, teamPins, templates 
+    roleProfiles, calendarEvents, calendarSubscriptions, teamPins, templates,
+    matchLineups, pollResponsesByEvent
   } = useClubStore();
   
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedSeriesId, setSelectedSeriesId] = useState<string>('');
   
-  // Tabs Navigation
-  const [activeTab, setActiveTab] = useState<'reports' | 'explorer'>('reports');
+  // Tabs Navigation (unterstützt Deep-Link ?tab=backup vom Reminder-Banner)
+  const initialTab = useMemo(() => {
+    const t = searchParams.get('tab');
+    if (t === 'backup' || t === 'explorer') return t;
+    return 'reports';
+  }, [searchParams]);
+
+  const [activeTab, setActiveTab] = useState<'reports' | 'explorer' | 'backup'>(initialTab);
+
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t === 'backup' || t === 'explorer' || t === 'reports') {
+      setActiveTab(t);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (tab: 'reports' | 'explorer' | 'backup') => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
 
   // Data Explorer State
   const [explorerCollection, setExplorerCollection] = useState<string>('allAgendaItems');
@@ -29,6 +56,23 @@ export const ReportsView: React.FC = () => {
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [allPollResponses, setAllPollResponses] = useState<EventPollResponse[]>([]);
+
+  // Lädt bei Auswahl von 'eventPollResponses' im Data Explorer alle Umfrage-Antworten direkt aus Firestore,
+  // da createEventPollSlice im Normalbetrieb nur punktuell pro geöffnetem Event abonniert.
+  useEffect(() => {
+    if (activeTab === 'explorer' && explorerCollection === 'eventPollResponses') {
+      getDocs(collection(db, 'event_poll_responses'))
+        .then((snap) => {
+          const list: EventPollResponse[] = [];
+          snap.forEach((d) => list.push({ ...d.data(), id: d.id } as EventPollResponse));
+          setAllPollResponses(list);
+        })
+        .catch((err) => {
+          console.error('Fehler beim Laden der EventPollResponses für Data Explorer:', err);
+        });
+    }
+  }, [activeTab, explorerCollection]);
 
   // Data Explorer Logic
   const rawExplorerData = useMemo(() => {
@@ -44,9 +88,14 @@ export const ReportsView: React.FC = () => {
       case 'calendarSubscriptions': return calendarSubscriptions;
       case 'teamPins': return teamPins;
       case 'templates': return templates;
+      case 'matchLineups': return matchLineups;
+      case 'eventPollResponses': {
+        if (allPollResponses.length > 0) return allPollResponses;
+        return Object.values(pollResponsesByEvent || {}).flat();
+      }
       default: return tasks;
     }
-  }, [explorerCollection, allAgendaItems, events, users, helpers, groups, teams, roleProfiles, calendarEvents, calendarSubscriptions, teamPins, templates, tasks]);
+  }, [explorerCollection, allAgendaItems, events, users, helpers, groups, teams, roleProfiles, calendarEvents, calendarSubscriptions, teamPins, templates, matchLineups, allPollResponses, pollResponsesByEvent, tasks]);
 
   const allKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -340,25 +389,34 @@ export const ReportsView: React.FC = () => {
         </div>
         
         {/* TAB NAVIGATION */}
-        <div className="flex bg-gray-100 p-1 rounded-xl shrink-0 self-start md:self-auto shadow-inner">
+        <div className="flex flex-wrap bg-gray-100 p-1 rounded-xl shrink-0 self-start md:self-auto shadow-inner gap-1">
           <button 
-            onClick={() => setActiveTab('reports')} 
+            onClick={() => handleTabChange('reports')} 
             className={`px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 ${activeTab === 'reports' ? 'bg-white shadow-sm text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}
           >
             Dashboard
           </button>
           <button 
-            onClick={() => setActiveTab('explorer')} 
+            onClick={() => handleTabChange('explorer')} 
             className={`px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 flex items-center ${activeTab === 'explorer' ? 'bg-white shadow-sm text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}
           >
             <Database className="w-4 h-4 mr-1.5" /> 
             Data Explorer
           </button>
+          <button 
+            onClick={() => handleTabChange('backup')} 
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 flex items-center ${activeTab === 'backup' ? 'bg-white shadow-sm text-emerald-700' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            <ShieldCheck className="w-4 h-4 mr-1.5" /> 
+            Backup & Restore
+          </button>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar px-2 md:px-0 pb-10 flex flex-col">
-        {activeTab === 'reports' ? (
+        {activeTab === 'backup' ? (
+          <BackupRestoreTab />
+        ) : activeTab === 'reports' ? (
           <div className="space-y-6">
             <section className="bg-indigo-50/50 p-6 rounded-2xl shadow-sm border border-indigo-100">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -589,6 +647,8 @@ export const ReportsView: React.FC = () => {
                   <option value="roleProfiles">Rechte-Profile</option>
                   <option value="calendarEvents">Kalender-Termine</option>
                   <option value="calendarSubscriptions">Kalender-Abos</option>
+                  <option value="matchLineups">Aufstellungen (MatchLineups)</option>
+                  <option value="eventPollResponses">Umfrage-Antworten (Polls)</option>
                   <option value="teamPins">Team-PINs</option>
                   <option value="templates">Vorlagen</option>
                 </select>
