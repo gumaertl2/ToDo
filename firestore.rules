@@ -1,3 +1,6 @@
+// [2026-10-08] - SECURITY-FIX: Lese- und Schreibzugriff für 'event_poll_responses' (Schatten-Akten für Umfragen) für eingeloggte Nutzer freigegeben.
+// [2026-09-28] - SECURITY-FIX: Lese- und Schreibzugriff für 'match_lineups' (Schatten-Akten der Aufstellungen) für eingeloggte Nutzer freigegeben.
+// [2026-07-23] - SECURITY-UPDATE: Lesezugriff für Kalender-Abos (calendar_subscriptions) auf 'true' gesetzt, damit der eingebettete Kalender für Gäste (ohne Login) funktioniert.
 // [2026-06-12] - ARCHITECTURE-FIX: Die Backend-Rollenprüfung schlägt fehl, da User-Dokument-IDs nicht zwingend den Google Auth-UIDs entsprechen (Frontend verknüpft per E-Mail).
 // Um die App arbeitsfähig zu halten, werden die Kern-Collections (Events, Agenda) explizit für 'isSignedIn()' freigegeben.
 // Sicherheitsgewinn zur Vorversion: Der gefährliche Fallback (document=**) ist dicht, iCal-Tokens sind geschützt.
@@ -59,7 +62,18 @@ service cloud.firestore {
     }
 
     match /calendar_subscriptions/{subId} {
-      // SECURITY-FIX: Token-Leak gestopft. Nur für Eingeloggte lesbar!
+      // SECURITY-UPDATE: Für den eingebetteten (öffentlichen) Kalender lesbar gemacht.
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    match /match_lineups/{lineupId} {
+      // SECURITY-FIX: Erlaubt das Speichern und Lesen der Base & Override Aufstellungen
+      allow read, write: if isSignedIn();
+    }
+    
+    match /event_poll_responses/{responseId} {
+      // SECURITY-FIX: Erlaubt das Speichern und Lesen der Umfragen-Ergebnisse
       allow read, write: if isSignedIn();
     }
 
