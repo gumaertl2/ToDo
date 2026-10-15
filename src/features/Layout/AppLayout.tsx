@@ -1,3 +1,4 @@
+// [2026-10-15] - FEATURE: Projekt-ID (Datenbank) als Mouseover beim Logo und dauerhaft im Footer (neben der Build-Version) integriert, um Test- und Prod-Umgebung sofort unterscheiden zu können.
 // [2026-10-15] - FIX: Import-Pfad für backupService auf '../../services/backupService' korrigiert.
 // [2026-10-15] - FEATURE: Tägliches 12:00-Uhr Backup-Reminder-Banner (gesteuert über user.receiveBackupReminder) mit 1-Klick-Download und Deep-Link nach /reports?tab=backup integriert.
 // [2026-10-04] - FEATURE: Automatische Build-Versionsnummer (__APP_BUILD_DATE__) im Footer (Desktop & Mobile) der App integriert.
@@ -101,6 +102,7 @@ export const AppLayout: React.FC = () => {
   const canViewAllReminders = !!perms?.viewAllReminders || !!user?.permissions?.viewAllReminders;
   
   const appVersion = typeof __APP_BUILD_DATE__ !== 'undefined' ? __APP_BUILD_DATE__ : 'Dev-Modus';
+  const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'unbekannt';
 
   useEffect(() => {
     localStorage.setItem('papatodo_sidebar_pinned', String(isPinned));
@@ -426,7 +428,7 @@ export const AppLayout: React.FC = () => {
       >
         <div className="p-4 border-b border-gray-200 flex items-center justify-between h-[73px] overflow-hidden shrink-0">
           <div className={`transition-all duration-300 whitespace-nowrap overflow-hidden ${isExpanded ? 'opacity-100 w-full' : 'opacity-0 w-0'}`}>
-            <NavLink to="/" className="flex items-center hover:opacity-80 transition-opacity group">
+            <NavLink to="/" className="flex items-center hover:opacity-80 transition-opacity group" title={`Verbundene DB: ${projectId}`}>
               <Home className="w-5 h-5 text-blue-600 mr-2 group-hover:text-blue-700 transition-colors" strokeWidth={2.5} />
               <h1 className="text-xl font-bold text-blue-600 group-hover:text-blue-700 transition-colors">PapaToDo</h1>
             </NavLink>
@@ -482,7 +484,7 @@ export const AppLayout: React.FC = () => {
           </button>
           
           <div className={`text-center text-[10px] text-gray-400 font-medium transition-all duration-300 mt-2 ${isExpanded ? 'opacity-100 block' : 'opacity-0 hidden'}`}>
-            Build: {appVersion}
+            Build: {appVersion} • DB: {projectId}
           </div>
         </div>
       </aside>
@@ -636,7 +638,7 @@ export const AppLayout: React.FC = () => {
               </button>
               
               <div className="text-center text-[10px] text-gray-400 pt-2 pb-1 font-medium">
-                Build: {appVersion}
+                Build: {appVersion} • DB: {projectId}
               </div>
             </div>
           </div>
