@@ -1,3 +1,4 @@
+// [2026-10-15] - BUGFIX: Filter-Bleed behoben. 'dienstFilters' (aus localStorage) wird nun strikt nur noch angewendet, wenn currentView === 'dienste' ist, damit normale Termine nicht ausgeblendet werden.
 // [2026-10-15] - FEATURE: 'ignoreYearFilter' Prop hinzugefügt, damit die Listen-Ansicht nahtlos als Child-Komponente im Saison-Modal (MatchLineupMatrix) verwendet werden kann.
 // [2026-10-14] - BUGFIX: 'title' Typisierungsfehler behoben (typeof e.title === 'string').
 // [2026-10-14] - UX-FEATURE: Langzeitgedächtnis für den Dienste-Filter! Die ausgewählten Kategorien (dienstFilters) werden nun via localStorage dauerhaft gespeichert.
@@ -183,7 +184,7 @@ interface CalendarListViewProps {
   displayEvents: AdaptedEvent[];
   currentDate: Date;
   onSelectEvent: (event: AdaptedEvent) => void;
-  ignoreYearFilter?: boolean; // <--- NEU
+  ignoreYearFilter?: boolean; 
 }
 
 export const CalendarListView: React.FC<CalendarListViewProps> = ({
@@ -249,7 +250,12 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
   }, [yearEvents]);
 
   const filteredYearEvents = useMemo(() => {
-    const filtered = yearEvents.filter(e => dienstFilters.length === 0 || dienstFilters.includes(getCategory(e)));
+    const filtered = yearEvents.filter(e => {
+      // FIX: Den localStorage Filter NUR anwenden, wenn wir im 'Dienste'-Tab sind!
+      if (currentView !== 'dienste') return true;
+      return dienstFilters.length === 0 || dienstFilters.includes(getCategory(e));
+    });
+
     filtered.sort((a, b) => {
       if (a.start!.getTime() !== b.start!.getTime()) return a.start!.getTime() - b.start!.getTime();
       if (a.allDay && !b.allDay) return -1;
@@ -257,7 +263,7 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
       return 0;
     });
     return filtered;
-  }, [yearEvents, dienstFilters]);
+  }, [yearEvents, dienstFilters, currentView]);
 
   const groupedDienste = useMemo(() => {
      if (!isDienste) return [];
@@ -293,9 +299,9 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-gray-400 h-full p-8 relative">
         <CalendarDays className="w-12 h-12 mb-3 opacity-20" />
-        <p>Keine {currentView === 'termine' ? 'Termine' : 'Dienste'} für das gewählte Kriterium gefunden.</p>
-        {dienstFilters.length > 0 && (
-          <button onClick={() => setDienstFilters([])} className="mt-4 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-200">
+        <p>Keine {currentView === 'termine' ? 'Termine' : 'Dienste'} für {ignoreYearFilter ? 'das gewählte Kriterium' : currentDate.getFullYear()} gefunden.</p>
+        {isDienste && dienstFilters.length > 0 && (
+          <button onClick={() => setDienstFilters([])} className="mt-4 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-200 cursor-pointer">
             Filter zurücksetzen
           </button>
         )}
