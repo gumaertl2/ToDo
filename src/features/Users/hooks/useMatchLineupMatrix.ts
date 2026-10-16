@@ -1,3 +1,4 @@
+// [2026-10-16] - UX-FEATURE: Automatisches Vorziehen des eingeloggten Nutzers an die erste Position (Index 0) in 'displayMembers', damit man auf Mobilgeräten nicht mehr nach rechts scrollen muss.
 // [2026-10-13] - REFACTOR: Umstellung auf Stable Event ID (Natural Key: TeamID + Saison + Titel + Description), um Datenverlust durch wechselnde Verbands-UIDs zu verhindern.
 // [2026-10-12] - REFACTOR: Komplette Daten- und State-Logik aus MatchLineupMatrixModal in diesen Hook ausgelagert.
 // src/features/Users/hooks/useMatchLineupMatrix.ts
@@ -82,8 +83,17 @@ export const useMatchLineupMatrix = (team: Team, focusedEventId?: string, isRead
     kader.forEach(h => combined.push({ helper: h, category: 'KADER' }));
     extern.forEach(h => combined.push({ helper: h, category: 'EXTERN' }));
 
+    // UX-FIX: Den eingeloggten Nutzer (myHelperId) immer ganz nach vorne an Index 0 sortieren
+    if (myHelperId) {
+      const index = combined.findIndex(item => item.helper.id === myHelperId);
+      if (index > 0) {
+        const [me] = combined.splice(index, 1);
+        combined.unshift(me);
+      }
+    }
+
     return combined;
-  }, [helpers, team, matchLineups, tempJokers]);
+  }, [helpers, team, matchLineups, tempJokers, myHelperId]);
 
   const availableJokers = useMemo(() => {
     const currentDisplayIds = new Set(displayMembers.map(item => item.helper.id));
