@@ -1,3 +1,4 @@
+// [2026-10-16] - UX-REFACTOR: Aufgeräumtes 3-Zonen-Kartenlayout (Datum/Gegner oben, Logistik-Zellen im Header, sauber getrennte Spieler-Pillen im Body).
 // [2026-10-14] - UX-REFACTOR: Lineares Layout von links nach rechts: Datum -> Betreuer -> Fahrer -> Uhrzeit -> Google-Icon Platzhalter -> Status.
 // src/features/Users/components/MatchLineupCardsView.tsx
 import React, { useEffect, useRef, useState } from 'react';

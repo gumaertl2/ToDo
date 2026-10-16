@@ -1,3 +1,4 @@
+// [2026-10-16] - UX-FIX: Im eingebetteten Team-Modus (ignoreYearFilter) wird der globale localStorage-Filter ignoriert, damit alle Saisonspiele des Teams garantiert sichtbar bleiben.
 // [2026-10-15] - BUGFIX: Filter-Bleed behoben. 'dienstFilters' (aus localStorage) wird nun strikt nur noch angewendet, wenn currentView === 'dienste' ist, damit normale Termine nicht ausgeblendet werden.
 // [2026-10-15] - FEATURE: 'ignoreYearFilter' Prop hinzugefügt, damit die Listen-Ansicht nahtlos als Child-Komponente im Saison-Modal (MatchLineupMatrix) verwendet werden kann.
 // [2026-10-14] - BUGFIX: 'title' Typisierungsfehler behoben (typeof e.title === 'string').
@@ -251,8 +252,8 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
 
   const filteredYearEvents = useMemo(() => {
     const filtered = yearEvents.filter(e => {
-      // FIX: Den localStorage Filter NUR anwenden, wenn wir im 'Dienste'-Tab sind!
-      if (currentView !== 'dienste') return true;
+      // FIX: Den localStorage Filter NUR anwenden, wenn wir im globalen 'Dienste'-Tab sind (nicht im Team-Modal)!
+      if (currentView !== 'dienste' || ignoreYearFilter) return true;
       return dienstFilters.length === 0 || dienstFilters.includes(getCategory(e));
     });
 
@@ -263,7 +264,7 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
       return 0;
     });
     return filtered;
-  }, [yearEvents, dienstFilters, currentView]);
+  }, [yearEvents, dienstFilters, currentView, ignoreYearFilter]);
 
   const groupedDienste = useMemo(() => {
      if (!isDienste) return [];
@@ -299,8 +300,8 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-gray-400 h-full p-8 relative">
         <CalendarDays className="w-12 h-12 mb-3 opacity-20" />
-        <p>Keine {currentView === 'termine' ? 'Termine' : 'Dienste'} für {ignoreYearFilter ? 'das gewählte Kriterium' : currentDate.getFullYear()} gefunden.</p>
-        {isDienste && dienstFilters.length > 0 && (
+        <p>Keine {currentView === 'termine' ? 'Termine' : 'Dienste'} für {ignoreYearFilter ? 'diese Mannschaft' : currentDate.getFullYear()} gefunden.</p>
+        {isDienste && !ignoreYearFilter && dienstFilters.length > 0 && (
           <button onClick={() => setDienstFilters([])} className="mt-4 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-200 cursor-pointer">
             Filter zurücksetzen
           </button>
@@ -310,7 +311,7 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
   }
 
   // --- SMART TABLE RENDER LOGIC ---
-  const showDateHeaders = isDienste && (dienstFilters.length === 0 || dienstFilters.length > 1);
+  const showDateHeaders = isDienste && (ignoreYearFilter || dienstFilters.length === 0 || dienstFilters.length > 1);
   const tableRows: React.ReactNode[] = [];
 
   if (isDienste) {
@@ -473,41 +474,47 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
                      {showDateHeaders ? 'Zeit' : 'Datum'}
                   </th>
                   <th className="py-3 px-4 font-bold text-gray-700 relative border-b border-gray-200">
-                     <button 
-                        onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)} 
-                        className="flex items-center gap-1.5 font-bold text-gray-800 hover:text-blue-700 outline-none transition-colors"
-                        title="Dienste gezielt filtern"
-                     >
-                        {filterLabel}
-                        <ChevronDown className="w-4 h-4 text-gray-400" />
-                     </button>
-                     
-                     {isFilterMenuOpen && (
+                     {ignoreYearFilter ? (
+                        <span className="font-bold text-gray-800 uppercase tracking-wider text-xs">Spiel / Begegnung</span>
+                     ) : (
                         <>
-                           <div className="fixed inset-0 z-40" onClick={() => setIsFilterMenuOpen(false)}></div>
-                           <div className="absolute top-full left-4 mt-2 w-56 bg-white border border-gray-200 shadow-xl rounded-xl p-2 z-50 flex flex-col gap-0.5" onClick={e => e.stopPropagation()}>
-                              <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer text-sm font-medium transition-colors">
-                                 <input 
-                                    type="checkbox" 
-                                    checked={dienstFilters.length === 0} 
-                                    onChange={() => setDienstFilters([])} 
-                                    className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4" 
-                                 />
-                                 Alle Dienste zeigen
-                              </label>
-                              <div className="h-px bg-gray-100 my-1 mx-2"></div>
-                              {categories.map(c => (
-                                 <label key={c} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer text-sm font-medium transition-colors">
-                                    <input 
-                                       type="checkbox" 
-                                       checked={dienstFilters.includes(c)} 
-                                       onChange={() => handleToggleFilter(c)} 
-                                       className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4" 
-                                    />
-                                    {c}
-                                 </label>
-                              ))}
-                           </div>
+                           <button 
+                              onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)} 
+                              className="flex items-center gap-1.5 font-bold text-gray-800 hover:text-blue-700 outline-none transition-colors"
+                              title="Dienste gezielt filtern"
+                           >
+                              {filterLabel}
+                              <ChevronDown className="w-4 h-4 text-gray-400" />
+                           </button>
+                           
+                           {isFilterMenuOpen && (
+                              <>
+                                 <div className="fixed inset-0 z-40" onClick={() => setIsFilterMenuOpen(false)}></div>
+                                 <div className="absolute top-full left-4 mt-2 w-56 bg-white border border-gray-200 shadow-xl rounded-xl p-2 z-50 flex flex-col gap-0.5" onClick={e => e.stopPropagation()}>
+                                    <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer text-sm font-medium transition-colors">
+                                       <input 
+                                          type="checkbox" 
+                                          checked={dienstFilters.length === 0} 
+                                          onChange={() => setDienstFilters([])} 
+                                          className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4" 
+                                       />
+                                       Alle Dienste zeigen
+                                    </label>
+                                    <div className="h-px bg-gray-100 my-1 mx-2"></div>
+                                    {categories.map(c => (
+                                       <label key={c} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer text-sm font-medium transition-colors">
+                                          <input 
+                                             type="checkbox" 
+                                             checked={dienstFilters.includes(c)} 
+                                             onChange={() => handleToggleFilter(c)} 
+                                             className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4" 
+                                          />
+                                          {c}
+                                       </label>
+                                    ))}
+                                 </div>
+                              </>
+                           )}
                         </>
                      )}
                   </th>

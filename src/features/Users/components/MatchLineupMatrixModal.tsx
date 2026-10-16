@@ -1,3 +1,4 @@
+// [2026-10-16] - UX-REFACTOR: Sauberer Tab-Wechsel (Karten | Matrix | Dienste) im Header ohne redundante Unterbalken, ehrlicher "Fertig"-Button im Footer.
 // [2026-10-15] - FEATURE: 'Dienste'-Ansicht (CalendarListView) in das Saison-Modal eingebettet (Container-Swap-Prinzip), inkl. Zurück-Button zur Kader-Planung.
 // [2026-10-14] - UX-FEATURE: Joker-Props (availableJokers, handleAddJoker, jokerSearchTerm, setJokerSearchTerm) an MatchLineupCardsView durchgereicht.
 // [2026-10-14] - UX-FEATURE: Ansicht-Umschalter (Karten vs. Matrix) mit localStorage-Persistenz ('papatodo_lineup_view_mode') im Header integriert.
@@ -13,7 +14,7 @@
 // [2026-09-30] - FEATURE: Auto-Freeze und manuelles Siegel (🔒) in die Matrix integriert. Notfall-Alert bei verspäteten Absagen eingebaut.
 // src/features/Users/components/MatchLineupMatrixModal.tsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Calendar as CalendarIcon, UserPlus, Search, LayoutList, Table as TableIcon, Car, ArrowLeft } from 'lucide-react';
+import { X, Calendar as CalendarIcon, UserPlus, Search, LayoutList, Table as TableIcon, Car } from 'lucide-react';
 import type { Team } from '../../../core/types/models';
 import { useMatchLineupMatrix } from '../hooks/useMatchLineupMatrix';
 import { MatchLineupMatrixTable } from './MatchLineupMatrixTable';
@@ -134,7 +135,7 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
               </div>
             )}
 
-            {!isReadOnly && matrixData.linkedSubscription && (
+            {!isReadOnly && matrixData.linkedSubscription && viewMode !== 'dienste' && (
               <div className="relative hidden sm:block">
                 <button 
                   onClick={() => matrixData.setIsJokerMenuOpen(!matrixData.isJokerMenuOpen)}
@@ -191,7 +192,7 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
         </div>
 
         {/* MOBILE ACTION BAR (Joker) */}
-        {!isReadOnly && matrixData.linkedSubscription && (
+        {!isReadOnly && matrixData.linkedSubscription && viewMode !== 'dienste' && (
           <div className="sm:hidden p-3 bg-white border-b border-gray-200 flex justify-end relative z-40">
              <button 
                 onClick={() => matrixData.setIsJokerMenuOpen(!matrixData.isJokerMenuOpen)}
@@ -246,18 +247,6 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
             </div>
           ) : viewMode === 'dienste' ? (
             <div className="flex flex-col h-full bg-white relative">
-              <div className="p-3 bg-emerald-50/80 border-b border-emerald-100 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md shrink-0">
-                <button 
-                  onClick={() => setViewMode('cards')} 
-                  className="flex items-center text-sm font-bold text-emerald-700 hover:bg-emerald-100/60 px-3 py-1.5 rounded-lg transition-colors"
-                >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Zurück zur Kader-Planung
-                </button>
-                <div className="text-[11px] font-bold text-emerald-600 bg-white px-2 py-1 rounded-md shadow-2xs border border-emerald-200">
-                  Dienste-Übersicht
-                </div>
-              </div>
               <div className="flex-1 overflow-hidden relative">
                 <CalendarListView 
                   currentView="dienste"
@@ -331,12 +320,15 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
         </div>
         
         {/* FOOTER */}
-        <div className="p-4 border-t border-gray-200 bg-white flex justify-end shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] relative z-40">
+        <div className="p-4 border-t border-gray-200 bg-white flex items-center justify-between shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] relative z-40">
+          <div className="text-xs text-gray-400 hidden sm:block">
+            ✓ Alle Änderungen werden automatisch im Hintergrund gespeichert
+          </div>
           <button 
             onClick={onClose} 
-            className={`w-full sm:w-auto px-6 py-2.5 text-white rounded-lg font-bold shadow-sm transition-colors text-sm ${isReadOnly ? 'bg-gray-600 hover:bg-gray-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+            className="w-full sm:w-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-sm transition-colors text-sm cursor-pointer"
           >
-            {isReadOnly ? 'Ansicht schließen' : 'Speichern & Schließen'}
+            Fertig
           </button>
         </div>
       </div>
