@@ -1,3 +1,4 @@
+// [2026-10-17] - REFACTOR: Snapshot-Expansion entfernt. Der SmartEntityPicker fügt bei Team-Auswahl keine automatischen helperIds mehr hinzu, wodurch Teams nun absolut sauber und dynamisch als reine Team-IDs referenziert werden.
 // [2026-06-03] - UX-FIX: SmartEntityPicker stark verbessert. Suchfeld wird nun auch bei Obergruppen ("Alle", "Aktiv") gelöscht, wenn es der einzige Treffer ist. Fokus bleibt danach im Suchfeld. Ein X-Button zum schnellen Löschen wurde hinzugefügt, und der Text im Eingabefeld wird bei Klicks automatisch markiert (Auto-Select), um ihn direkt überschreiben zu können (Frictionless UI).
 // [2026-05-16] - UX-FIX: closeOnSelect Prop hinzugefügt, um Single-Select-Dropdowns (wie Absender) nach Auswahl sofort zu schließen
 // [2026-05-16] - UX-FIX: Badge-Rendering für USER und GROUP hinzugefügt
@@ -104,7 +105,7 @@ export const SmartEntityPicker: React.FC<SmartEntityPickerProps> = ({
       teams.forEach(t => {
         list.push({
           id: t.id, name: t.name, type: 'TEAM',
-          subtext: 'Team (Fügt Kader hinzu)', isSelected: selections.teamIds.includes(t.id)
+          subtext: 'Team (Zentraler Bezug)', isSelected: selections.teamIds.includes(t.id)
         });
       });
     }
@@ -214,53 +215,21 @@ export const SmartEntityPicker: React.FC<SmartEntityPickerProps> = ({
       }
       
       case 'TEAM': {
-        const isTeamSelected = nextSelections.teamIds.includes(entity.id);
-        const isVirtualGroup = entity.id.startsWith('vgroup-');
-        
-        let targetHelpers: typeof helpers = [];
-        if (isVirtualGroup) {
-          const match = VIRTUAL_GROUPS.find(v => v.id === entity.id)?.statusMatch;
-          if (match === 'ALL') targetHelpers = helpers;
-          else targetHelpers = helpers.filter(h => h.memberStatus?.toLowerCase() === match?.toLowerCase());
-        } else {
-          targetHelpers = helpers.filter(h => h.teamIds?.includes(entity.id));
-        }
-
-        if (isTeamSelected) {
-          const remainingTeamIds = nextSelections.teamIds.filter(id => id !== entity.id);
-          nextSelections.teamIds = remainingTeamIds;
-          
-          const helperIdsToRemove = targetHelpers.filter(h => {
-            const inOtherTeam = h.teamIds?.some((tId: string) => remainingTeamIds.includes(tId));
-            const inOtherVGroup = remainingTeamIds.some(rtId => {
-               if (!rtId.startsWith('vgroup-')) return false;
-               const vMatch = VIRTUAL_GROUPS.find(v => v.id === rtId)?.statusMatch;
-               return vMatch === 'ALL' || h.memberStatus?.toLowerCase() === vMatch?.toLowerCase();
-            });
-            return !inOtherTeam && !inOtherVGroup;
-          }).map(h => h.id!);
-          
-          nextSelections.helperIds = nextSelections.helperIds.filter(id => !helperIdsToRemove.includes(id));
-        } else {
-          nextSelections.teamIds = [...nextSelections.teamIds, entity.id];
-          const helperIdsToAdd = targetHelpers.map(h => h.id!).filter(id => !nextSelections.helperIds.includes(id));
-          nextSelections.helperIds = [...nextSelections.helperIds, ...helperIdsToAdd];
-        }
+        // REIN GEWICHTETES TEAM-MAPPING: Keine automatische Snapshot-Expansion in helperIds mehr!
+        nextSelections.teamIds = toggleInArray(nextSelections.teamIds, entity.id);
         break;
       }
     }
 
-    // CHIRURGISCHER EINGRIFF: Fokus-Magie & Auto-Select
+    // Fokus-Magie & Auto-Select
     if (closeOnSelect) {
       setSearchTerm('');
       setIsFocused(false);
       inputRef.current?.blur();
     } else if (displayEntities.length === 1) { 
-      // Suchfeld löschen (auch bei V-Groups) und Cursor hartnäckig im Feld belassen
       setSearchTerm('');
       inputRef.current?.focus(); 
     } else {
-      // Bei mehreren Treffern: Text markieren, damit der nächste Tastendruck ihn direkt überschreibt (Auto-Select)
       setTimeout(() => {
         inputRef.current?.select();
       }, 0);
@@ -380,7 +349,7 @@ export const SmartEntityPicker: React.FC<SmartEntityPickerProps> = ({
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           onFocus={(e) => { 
-            e.target.select(); // CHIRURGISCHER EINGRIFF: Auto-Select Text
+            e.target.select(); 
             setIsFocused(true); 
           }}
           onBlur={() => setTimeout(() => setIsFocused(false), 200)}
@@ -388,12 +357,10 @@ export const SmartEntityPicker: React.FC<SmartEntityPickerProps> = ({
           className="w-full bg-transparent border-none focus:ring-0 text-sm outline-none pr-8"
         />
         
-        {/* CHIRURGISCHER EINGRIFF: Das "X" zum schnellen Löschen */}
         {searchTerm && (
           <button
             type="button"
             onMouseDown={(e) => { 
-               // preventDefault ist hier extrem wichtig, damit das Input-Feld beim Klick nicht den Fokus verliert!
                e.preventDefault(); 
                setSearchTerm(''); 
                inputRef.current?.focus(); 
@@ -457,4 +424,4 @@ export const SmartEntityPicker: React.FC<SmartEntityPickerProps> = ({
     </div>
   );
 };
-// --- END OF FILE ---
+// --- END OF FILE ---4

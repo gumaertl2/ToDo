@@ -1,3 +1,4 @@
+// [2026-10-17] - BUGFIX: Ghost-Data Prävention (Explicit Empty Array). Arrays in subPayload werden nun zwingend auf [] gesetzt, um zu verhindern, dass der undefined-Filter sie entfernt und Firebase alte Relikte in der Datenbank belässt.
 // [2026-10-04] - UX-FEATURE: 'lastSyncAttemptAt' in Tooltip integriert. Das UI zeigt nun wieder dauerhaft das Datum des letzten ERFOLGREICHEN Syncs (lastSyncedAt), markiert es bei späteren Fehlern aber rot.
 // [2026-10-04] - UX-FEATURE: Hover-Tooltip ('title') für 'lastSyncBy' und 'lastSyncError' hinzugefügt, um Sync-Details und Verursacher am Mac/Desktop anzuzeigen.
 // [2026-07-23] - BUGFIX: Fehlermeldungen (z.B. Sync-Fehler) werden nun auch in der Master-Listenansicht gerendert.
@@ -106,18 +107,22 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
 
     let targetSubId: string;
 
+    // CHIRURGISCHER EINGRIFF: Explizites Array-Mapping, um Ghost-Data zu verhindern!
+    const isActiveReminder = !!reminderSenderUserId;
     const subPayload: any = {
       name: name.trim(),
       url: importType === 'file' ? 'FILE_IMPORT' : url.trim(),
       color,
       showInMatchPlan,
-      reminderSenderUserId: reminderSenderUserId || null,
-      reminderLeadDays: reminderSenderUserId ? parseInt(reminderLeadDays, 10) : null,
-      reminderCustomText: reminderSenderUserId && reminderCustomText.trim() ? reminderCustomText.trim() : null,
-      reminderRecipientUserIds,
-      reminderRecipientGroupIds,
-      reminderRecipientTeamIds,
-      reminderRecipientHelperIds
+      reminderSenderUserId: isActiveReminder ? reminderSenderUserId : null,
+      reminderLeadDays: isActiveReminder ? parseInt(reminderLeadDays, 10) : null,
+      reminderCustomText: isActiveReminder && reminderCustomText.trim() ? reminderCustomText.trim() : null,
+      
+      // Zwingend '[]' übergeben statt undefined, damit Firebase alte IDs wirklich löscht!
+      reminderRecipientUserIds: isActiveReminder ? (reminderRecipientUserIds || []) : [],
+      reminderRecipientGroupIds: isActiveReminder ? (reminderRecipientGroupIds || []) : [],
+      reminderRecipientTeamIds: isActiveReminder ? (reminderRecipientTeamIds || []) : [],
+      reminderRecipientHelperIds: isActiveReminder ? (reminderRecipientHelperIds || []) : []
     };
 
     if (editingId) {
@@ -322,7 +327,6 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
             )}
 
             <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-4">
-              {/* Rest des Formulars bleibt absolut identisch */}
               <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
                 <div className="md:col-span-4">
                   <label className="block text-xs font-bold text-gray-700 mb-1.5">Abo-Name</label>
@@ -482,7 +486,6 @@ export const CalendarSubscriptionModal: React.FC<Props> = ({ onClose }) => {
           </div>
         ) : (
           <div className="p-6 overflow-y-auto flex-1 bg-white custom-scrollbar">
-            {/* CHIRURGISCHER EINGRIFF: Fehler-Anzeige nun auch in der Listenansicht sichtbar! */}
             {error && (
                <div className="bg-red-50 text-red-700 p-3 mb-4 rounded-lg flex items-center border border-red-100 text-sm font-bold">
                  <AlertCircle className="w-5 h-5 mr-2 shrink-0" /> {error}

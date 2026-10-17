@@ -1,3 +1,4 @@
+// [2026-10-17] - MASTER SYNC: Ghost-Data Prävention, Explicit Empty Array Rule und dynamische Team-Referenzierung via SmartEntityPicker dokumentiert.
 // [2026-10-17] - MASTER SYNC: Firebase Early-Return-Pattern (Free-Tier Quoten-Schutz) und Listener-Cleanup beim Logout für Offline-First-Fähigkeit dokumentiert.
 // [2026-10-15] - MASTER SYNC: Backup & Restore System (JSON-Export, Wipe/Merge, 12:00-Uhr Reminder) dokumentiert.
 // [2026-10-14] - MASTER SYNC: Vollständiger Abgleich des Datei-Baums (TEIL 8) mit PAPA_MASTER_MANIFEST.md. Dashboard-Widgets, Event-Polls, Match-Lineup-Matrizen und Store-Slices vollständig dokumentiert.
@@ -51,6 +52,8 @@ Eine Serverless Progressive Web App (PWA), entwickelt mit React, TypeScript, Tai
 * **CRITICAL:** If you add a new field to a data model, it MUST be optional (`?`). 
 * If a new field requires a database migration script, you must STOP and warn the user. 
 * NEVER rename existing database fields. Add new ones and deprecate old ones if absolutely necessary.
+* **Explicit Empty Array Rule (Ghost-Data Prevention):** Arrays (wie Empfänger-Listen oder Team-IDs) dürfen niemals als `undefined` an Firestore übergeben werden. Leere oder abgewählte Felder müssen zwingend als leeres Array (`[]`) übergeben werden, damit Firebase alte Werte restlos überschreibt.
+* **Dynamic Team Reference:** Team-Auswahlen im `SmartEntityPicker` erfolgen als reine Team-ID-Referenzen. Es finden keine statischen Kader-Snapshots in die Helfer-IDs (`helperIds`) statt; die Auflösung erfolgt dynamisch zur Laufzeit.
 
 ---
 
@@ -118,7 +121,7 @@ Das System basiert nicht auf endlosen ToDo-Listen, sondern auf einem klaren Rhyt
        * Aufgabe is 100 %: Sie bekommt `isHistorical = true` und bleibt im alten Protokoll. Fertig.
        * Aufgabe ist < 100 %: Sie bekommt `isHistorical = true` (als Beweis, dass sie damals nicht fertig wurde) **UND** das System erzeugt einen sauberen, frischen Klon (Übertrag) für das neue Meeting.
    * **Szenario B: Die Einfache Routine (Kein Container)**
-     * *Live in der Sitzung:* Sobald der Slider 100 % erreicht, passiert der **Point of No Return**:
+     * *Live in der Sitzung:* Sobald the Slider 100 % erreicht, passiert der **Point of No Return**:
        1. Die Routine erschafft sofort ihren Zukunfts-Klon (`isHistorical = false`, 0 %).
        2. Die *alte* 100 %-Aufgabe bekommt **sofort live** den Stempel `isHistorical = true` und verschwindet aus der aktuellen Ansicht.
    * **Szenario C: Die Container-Routine (Der Boss mit seinen Unterpunkten)**
@@ -191,7 +194,7 @@ Für ein blitzschnelles Arbeiten am Desktop wurden Power-Features integriert:
 * **"Mein Profil" (Self-Service):** Mitglieder können ihre Kontaktdaten (Telefon, E-Mail der Eltern, etc.) sowie ihre DSGVO-Einstellungen jederzeit selbstständig in der App aktualisieren.
 * **Transparenz nach Art. 15 DSGVO:** Nutzer haben jederzeit vollen Lese-Zugriff auf die vom Verein über sie gespeicherten Stammdaten (Name, App-Alias, Mitgliedsstatus, Geburts- und Eintrittsdatum).
 * **Auto-Benachrichtigungen:** Ändert ein Mitglied seine Kontaktdaten im Self-Service, generiert das System automatisch eine In-App-Erinnerung (Aufgabe) an alle Vorstandsmitglieder (Recht: `manageMitglieder`), damit diese die Daten in externen Systemen (Kasse, DTTB) synchronisieren können.
-* **Login-Sicherheit:** Das primäre E-Mail-Feld ist im Self-Service gesperrt (Read-Only), um die unzerstörbare Brücke zum Firebase-Authentication-Login zu garantieren.
+* **Login-Sicherheit:** Das primäre E-Mail-Feld ist im Self-Service gesperrt (Read-Only), um die unzerstörbare Brücke zur Firebase-Authentication-Login zu garantieren.
 
 ### 11. Backup & Restore (Sicherung & Staging)
 * **Vollständiger Export:** Mit einem Klick können Administratoren alle 12 Firestore-Collections (Mitglieder, Teams, Aufstellungen, Termine, Sitzungen, Aufgaben, PINs, Umfragen) als strukturierte `.json`-Datei exportieren (iCloud/Mac kompatibel).
@@ -226,7 +229,7 @@ Die Datenbank ist flach (flat-hierarchy) aufgebaut. Um die App-Logik (Klonen, Hi
 **Domain-Language (Das Lexikon der Nutzer):**
 Um Verwirrung in der UI und Logik zu vermeiden, gibt es eine strikte Trennung:
 * **App-Nutzer (Collection: `users`):** Das sind die "Macher" (Vorstand, Teamleitung). Ein Nutzer ist **nur dann** ein echter "App-Nutzer", wenn er ein offizielles `amt` hat ODER über sein Profil (`roleProfileId`) administrative Rechte (z.B. `manageEvents`, `manageTasks`) besitzt. Nur sie haben Zugriff auf ToDo-Boards, erhalten ToDo-Zuweisungen (`assigneeUserIds`) und sehen Planungs-Sitzungen in ihrem Dashboard.
-* **Mitglieder & Helfer (Collection: `helpers`):** Das ist die breite Vereins-Basis. Sie haben Felder wie `teamIds` oder `memberStatus`. Wenn sich ein Helfer in die App einloggt, bleibt er für das System ein "purer Helfer". Das UI (Dashboard) blendet für diese Nutzer alle ToDo-Container und Sitzungen restlos aus, da sie weder Vorstand-ToDos abarbeiten können, noch zu internen Sitzungen geladen werden. Sie werden lediglich für Dienste via `assigneeHelperIds` eingeteilt.
+* **Mitglieder & Helfer (Collection: `helpers`):** Das ist die breite Vereins-Basis. Sie haben Felder wie `teamIds` oder `memberStatus`. Wenn sich an Helfer in die App einloggt, bleibt er für das System ein "purer Helfer". Das UI (Dashboard) blendet für diese Nutzer alle ToDo-Container und Sitzungen restlos aus, da sie weder Vorstand-ToDos abarbeiten können, noch zu internen Sitzungen geladen werden. Sie werden lediglich für Dienste via `assigneeHelperIds` eingeteilt.
 
 **Das Data-Dictionary (Die Beziehungs-Logik):**
 * **`eventId` (Die Sitzungs-Zuordnung):** Verbindet ein `AgendaItem` mit einem `Event`. Ist dieses Feld leer (`null`/`undefined`), handelt es sich um eine freie "Backlog"-Aufgabe ohne festen Sitzungs-Kontext. Ist es gesetzt, teilt das Item den Lebenszyklus dieser Sitzung.
@@ -327,5 +330,5 @@ Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der e
 4.  `npm run dev` startet den lokalen Vite-Server.
 5.  `npm run build` führt einen strengen TypeScript Check (`tsc -b`) aus und baut das Production-Bundle.
 
-*Stand: 15.10.2026 - Protokoll: Backup & Restore, Staging, Filter-Fixes, Saisonplaner-Tabs (Dienste-Ansicht)*
+*Stand: 17.10.2026 - Protokoll: Ghost-Data Prävention, Explicit Empty Array Rule, Dynamische Team-Referenzierung im SmartEntityPicker*
 // --- END OF FILE ---
