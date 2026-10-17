@@ -1,4 +1,4 @@
-// [2026-10-17] - FEATURE: Smart-Mapping Popover für den Data Explorer zur Übersetzung von IDs in Klarnamen.
+// [2026-10-17] - RESTORE: Originales ColumnMappingPopover mit intelligentem select-Dropdown, Vorauswahl und Layout wiederhergestellt.
 // src/features/Reports/ColumnMappingPopover.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Check, Link2Off } from 'lucide-react';
@@ -22,7 +22,10 @@ export const ColumnMappingPopover: React.FC<ColumnMappingPopoverProps> = ({
   onRemove,
   onClose
 }) => {
-  const [selectedKey, setSelectedKey] = useState<string>(currentDisplayKey || (availableKeys.includes('name') ? 'name' : availableKeys.includes('title') ? 'title' : availableKeys[0] || 'id'));
+  const [selectedKey, setSelectedKey] = useState<string>(
+    currentDisplayKey || 
+    (availableKeys.includes('name') ? 'name' : availableKeys.includes('title') ? 'title' : availableKeys[0] || 'id')
+  );
   const popoverRef = useRef<HTMLDivElement>(null);
 
   // Schließen bei Klick außerhalb
@@ -50,7 +53,9 @@ export const ColumnMappingPopover: React.FC<ColumnMappingPopoverProps> = ({
       </div>
       
       <div className="mb-4">
-        <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wide">Zeige statt ID dieses Feld:</label>
+        <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wide">
+          Zeige für "{columnName}":
+        </label>
         <select
           value={selectedKey}
           onChange={(e) => setSelectedKey(e.target.value)}
