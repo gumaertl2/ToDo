@@ -1,3 +1,4 @@
+// [2026-10-17] - BUGFIX: Ungenutzte Joker-Props (TS6133 Build Error) aus Interface und Signatur entfernt, da der Button nun zentral im Modal-Header lebt.
 // [2026-10-17] - UX-FIX: Redundanten Joker-Button ("+ Weiterer Spieler") und zugehörigen State (openJokerCardKey) aus der Spielkarte restlos entfernt.
 // [2026-10-16] - UX-REFACTOR: Aufgeräumtes 3-Zonen-Kartenlayout (Datum/Gegner oben, Logistik-Zellen im Header, sauber getrennte Spieler-Pillen im Body).
 // [2026-10-14] - UX-REFACTOR: Lineares Layout von links nach rechts: Datum -> Betreuer -> Fahrer -> Uhrzeit -> Google-Icon Platzhalter -> Status.
@@ -21,12 +22,6 @@ export interface MatchLineupCardsViewProps {
   focusedEventId?: string;
   isReadOnly?: boolean;
   matchLineups: MatchLineup[];
-  
-  // Joker Props
-  availableJokers: Helper[];
-  jokerSearchTerm: string;
-  setJokerSearchTerm: (val: string) => void;
-  onAddJoker: (helperId: string) => void;
 
   // States & Overrides
   localOverrides: Record<string, string[]>;
@@ -52,7 +47,6 @@ export interface MatchLineupCardsViewProps {
 
 export const MatchLineupCardsView: React.FC<MatchLineupCardsViewProps> = ({
   team, subscriptionColor, events, displayMembers, playerGameCounts, myHelperId, focusedEventId, isReadOnly, matchLineups,
-  availableJokers, jokerSearchTerm, setJokerSearchTerm, onAddJoker,
   localOverrides, localAvailOverrides, localLockOverrides, localSetByMFOverrides, localLogisticsOverrides,
   openLogisticsPicker, setOpenLogisticsPicker, logisticsSearchTerm, setLogisticsSearchTerm,
   sortedAllHelpers, filteredLogisticsHelpers,
