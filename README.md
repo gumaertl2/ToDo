@@ -1,3 +1,4 @@
+// [2026-10-17] - MASTER SYNC: Firebase Early-Return-Pattern (Free-Tier Quoten-Schutz) und Listener-Cleanup beim Logout für Offline-First-Fähigkeit dokumentiert.
 // [2026-10-15] - MASTER SYNC: Backup & Restore System (JSON-Export, Wipe/Merge, 12:00-Uhr Reminder) dokumentiert.
 // [2026-10-14] - MASTER SYNC: Vollständiger Abgleich des Datei-Baums (TEIL 8) mit PAPA_MASTER_MANIFEST.md. Dashboard-Widgets, Event-Polls, Match-Lineup-Matrizen und Store-Slices vollständig dokumentiert.
 // [2026-09-28] - MASTER SYNC: Datei-Baum (TEIL 8) exakt mit PAPA_MASTER_MANIFEST synchronisiert (Fehlende Modale, Tabs, HelpView und DashboardView ergänzt).
@@ -31,14 +32,17 @@ Eine Serverless Progressive Web App (PWA), entwickelt mit React, TypeScript, Tai
 
 ### 2. Zero-Loss & Zero-Build-Error Output
 * **Full File Output Only:** Never output partial code blocks with placeholders like `// ... rest of code`. You must output the ENTIRE file from line 1 to the end.
-* **Top/Bottom Markers:** * Add a comment at line 1: `// [YYYY-MM-DD] - [Reason for change]`
+* **Top/Bottom Markers:** 
+  * Add a comment at line 1: `// [YYYY-MM-DD] - [Reason for change]`
   * Add at the very end: `// --- END OF FILE ---`
 * **Vercel / TS strictness:** Do not introduce implicitly typed variables (`any`). Handle undefined/null checks strictly.
 
 ### 3. Architectural Integrity
 * **State Management (SSOT):** `useClubStore.ts` is the Single Source of Truth. No local state mutations that bypass the store. UI components ONLY trigger store actions.
 * **Separation of Concerns:** Business logic lives in the store. Presentation logic lives in the React components. Do not mix them.
-* **Frictionless UI / Contextual Navigation:** * Auto-focus inputs in modals.
+* **Firebase / Firestore Listeners (Quoten-Schutz):** Nutze zwingend das Early-Return-Muster in allen Slices (`if (get().unsubX) return;`), um redundante `onSnapshot`-Verbindungen und Free-Tier Überlastung zu blockieren. Beim Logout MÜSSEN alle `unsub`-Variablen im Store explizit auf `null` gesetzt werden, damit der Offline-Cache und der Re-Login fehlerfrei greifen.
+* **Frictionless UI / Contextual Navigation:** 
+  * Auto-focus inputs in modals.
   * Double-click to edit rows.
   * Use deep links and auto-scroll (`scrollIntoView`) when routing from Dashboard/Kanban back to a specific Agenda Item.
 
@@ -85,7 +89,8 @@ PapaToDo verwandelt statische PDF-Protokolle in dynamische Kanban-Workflows.
 
 Das System basiert nicht auf endlosen ToDo-Listen, sondern auf einem klaren Rhythmus (Events). Um Chaos zu vermeiden, gelten diese Leitplanken:
 
-1. **Der Meeting-Rhythmus (Ein endloser Kreislauf):** - *Vor der Sitzung:* Die lebende Agenda dient der Vorbereitung. **Wichtig:** Offene ToDos aus alten Sitzungen (Vererbte Punkte) sind hier sofort sichtbar. Neu angelegte Punkte (Entwürfe) bleiben im ToDo-Board unsichtbar, bis die Agenda offiziell veröffentlicht wird.
+1. **Der Meeting-Rhythmus (Ein endloser Kreislauf):** 
+   - *Vor der Sitzung:* Die lebende Agenda dient der Vorbereitung. **Wichtig:** Offene ToDos aus alten Sitzungen (Vererbte Punkte) sind hier sofort sichtbar. Neu angelegte Punkte (Entwürfe) bleiben im ToDo-Board unsichtbar, bis die Agenda offiziell veröffentlicht wird.
    - *Während der Sitzung:* Live-Protokollierung.
    - *Nach der Sitzung:* Das versiegelte Protokoll dient als unveränderliches Archiv. Dank UX-Schnellzugriff ("📜 Protokolle") sind alte Sitzungen direkt aus dem Dashboard oder der Kachel-Ansicht über Dropdowns erreichbar.
    - *Der nahtlose Neustart:* Beim Schließen wird das nächste Meeting generiert und alle offenen Themen automatisch migriert.
@@ -141,7 +146,8 @@ Punkte auf der Agenda wechseln fließend ihren Zustand. Ein `INFO`-Punkt kann pe
 Wiederkehrende Aufgaben (z.B. "Kasse prüfen wöchentlich") blähen die Datenbank nicht künstlich auf. 
 * **Kein Flooding:** Die Aufgabe existiert in der aktiven ToDo-Liste *immer nur einmal* als offener Punkt.
 * **Auto-Respawn:** Wird die Aufgabe auf 100% (Erledigt) gesetzt, friert sie für die Historie ein. Das System erzeugt im Hintergrund *sofort* einen neuen Klon für das nächste Intervall. (Dies verhindert, dass bei 3 Monaten Meeting-Pause plötzlich Dutzende identische ToDos entstehen).
-* **Beim Protokoll-Abschluss:** * Ist die Routine-Aufgabe noch *unerledigt*, wandert sie normal ins neue Protokoll. 
+* **Beim Protokoll-Abschluss:** 
+  * Ist die Routine-Aufgabe noch *unerledigt*, wandert sie normal ins neue Protokoll. 
   * Ist sie bereits *erledigt*, ignoriert das Skript sie (da der Klon für die Zukunft ja schon existiert).
   * **Enddatum-Sicherung:** Wenn das `routineEndDate` überschritten ist, stoppt der Respawn. Wichtig: Die Routine verschwindet erst aus der UI, wenn auch die allerletzte noch offene Aufgabe dieser Blutlinie wirklich als erledigt abgehakt wurde (kein Verschwinden von Altlasten!).
 
