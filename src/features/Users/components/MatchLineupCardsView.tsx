@@ -1,11 +1,12 @@
+// [2026-10-17] - UX-FIX: Redundanten Joker-Button ("+ Weiterer Spieler") und zugehörigen State (openJokerCardKey) aus der Spielkarte restlos entfernt.
 // [2026-10-16] - UX-REFACTOR: Aufgeräumtes 3-Zonen-Kartenlayout (Datum/Gegner oben, Logistik-Zellen im Header, sauber getrennte Spieler-Pillen im Body).
 // [2026-10-14] - UX-REFACTOR: Lineares Layout von links nach rechts: Datum -> Betreuer -> Fahrer -> Uhrzeit -> Google-Icon Platzhalter -> Status.
 // src/features/Users/components/MatchLineupCardsView.tsx
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { format } from 'date-fns/format';
 import { startOfDay } from 'date-fns/startOfDay';
 import { de } from 'date-fns/locale/de';
-import { Lock, Unlock, CheckSquare, Square, Users, BarChart3, UserPlus, Search } from 'lucide-react';
+import { Lock, Unlock, CheckSquare, Square, Users, BarChart3 } from 'lucide-react';
 import type { Team, MatchLineup, Helper } from '../../../core/types/models';
 import { generateStableEventId, type PlayerCategory } from '../hooks/useMatchLineupMatrix';
 import { MatchLineupLogisticsRow } from './MatchLineupLogisticsRow';
@@ -59,8 +60,6 @@ export const MatchLineupCardsView: React.FC<MatchLineupCardsViewProps> = ({
 }) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const today = startOfDay(new Date());
-
-  const [openJokerCardKey, setOpenJokerCardKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (wrapperRef.current && !focusedEventId) {
@@ -128,7 +127,7 @@ export const MatchLineupCardsView: React.FC<MatchLineupCardsViewProps> = ({
         const uiKey = event.uid;
 
         const isFocusedRow = focusedEventId === safeEventId;
-        const isPickerOpenInThisCard = openLogisticsPicker?.startsWith(uiKey) || openJokerCardKey === uiKey;
+        const isPickerOpenInThisCard = openLogisticsPicker?.startsWith(uiKey);
 
         const storeLineup = matchLineups.find(m => m.id === safeEventId);
         const hasLocalOverride = localOverrides[safeEventId] !== undefined;
@@ -312,7 +311,7 @@ export const MatchLineupCardsView: React.FC<MatchLineupCardsViewProps> = ({
                 </div>
               </div>
 
-              {/* SPIELER-PILLEN & JOKER-BUTTON */}
+              {/* SPIELER-PILLEN */}
               <div className="mt-2 pt-2 border-t border-gray-100">
                 <div className="flex flex-wrap items-center gap-2">
                   {displayMembers.map(({ helper: m, category }) => {
@@ -418,71 +417,6 @@ export const MatchLineupCardsView: React.FC<MatchLineupCardsViewProps> = ({
                       </div>
                     );
                   })}
-
-                  {/* + WEITERER SPIELER (JOKER-BUTTON) */}
-                  {!isReadOnly && (!isPast || isFocusedRow) && (
-                    <div className="relative inline-block">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setOpenJokerCardKey(openJokerCardKey === uiKey ? null : uiKey);
-                          setJokerSearchTerm('');
-                        }}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-dashed border-gray-300 text-xs font-bold text-gray-600 bg-white hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-2xs"
-                        title="Weiteren Spieler / Joker hinzufügen"
-                      >
-                        <UserPlus className="w-3.5 h-3.5 text-blue-600" />
-                        <span>+ Weiterer Spieler</span>
-                      </button>
-
-                      {openJokerCardKey === uiKey && (
-                        <>
-                          <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpenJokerCardKey(null); }}></div>
-                          <div className="absolute left-0 top-full mt-1.5 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden flex flex-col">
-                            <div className="p-2 border-b border-gray-100 bg-gray-50 flex items-center relative">
-                              <Search className="w-3.5 h-3.5 text-gray-400 absolute left-4" />
-                              <input
-                                autoFocus
-                                type="text"
-                                name={`joker-search-${uiKey}`}
-                                placeholder="Name suchen..."
-                                value={jokerSearchTerm}
-                                onChange={(e) => setJokerSearchTerm(e.target.value)}
-                                onClick={(e) => e.stopPropagation()}
-                                autoComplete="off"
-                                autoCapitalize="none"
-                                autoCorrect="off"
-                                spellCheck={false}
-                                className="w-full pl-7 pr-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              />
-                            </div>
-                            <div className="max-h-48 overflow-y-auto p-1 custom-scrollbar">
-                              {availableJokers.length === 0 ? (
-                                <div className="p-3 text-center text-xs text-gray-500">Keine Spieler gefunden.</div>
-                              ) : (
-                                availableJokers.map(j => (
-                                  <button
-                                    key={j.id}
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onAddJoker(j.id);
-                                      setOpenJokerCardKey(null);
-                                    }}
-                                    className="w-full text-left px-2 py-1.5 text-xs text-gray-800 hover:bg-blue-50 hover:text-blue-700 rounded transition-colors flex items-center justify-between"
-                                  >
-                                    <span className="font-medium truncate">{j.name}</span>
-                                    {j.alias && <span className="text-[10px] text-gray-400 ml-2 shrink-0">{j.alias}</span>}
-                                  </button>
-                                ))
-                              )}
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
