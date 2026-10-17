@@ -1,3 +1,4 @@
+// [2026-10-17] - OPTIMIZATION: Firebase onSnapshot Listener-Zerstörung in fetchTeamPins verhindert (Early Return), um Free-Tier Lese-Quoten zu sparen.
 // 2026-04-30 17:15 - FEATURE: Slice für Team-PINs (Wettkampf-Tresor)
 // src/store/slices/createTeamPinsSlice.ts
 import type { StateCreator } from 'zustand';
@@ -23,7 +24,11 @@ export const createTeamPinsSlice: StateCreator<TeamPinsSlice, [], [], TeamPinsSl
   unsubTeamPins: null,
 
   fetchTeamPins: async () => {
-    if (get().unsubTeamPins) get().unsubTeamPins!();
+    // CHIRURGISCHER EINGRIFF: Quoten-Falle geschlossen!
+    if (get().unsubTeamPins) {
+      return;
+    }
+    
     set({ isTeamPinsLoading: true });
     
     const sub = onSnapshot(collection(db, 'team_pins'), (snap) => {

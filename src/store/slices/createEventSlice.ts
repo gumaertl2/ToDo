@@ -1,3 +1,4 @@
+// [2026-10-17] - OPTIMIZATION: Firebase onSnapshot Listener-Zerstörung in fetchEvents verhindert (Early Return), um Free-Tier Lese-Quoten zu sparen.
 // 2026-04-24 14:00 - FEATURE: Paket-Import (importTemplateToEvent) kopiert Vorlage inkl. aller Unterpunkte
 // 2026-04-24 14:30 - BUGFIX: Firebase 'undefined' Error beim Importieren der Hauptvorlage behoben
 // 2026-04-24 22:00 - FEATURE: Entfernt 'isTemplate' Flag beim Import, damit Punkt zur echten Aufgabe wird
@@ -47,7 +48,9 @@ export const createEventSlice: StateCreator<EventSlice, [], [], EventSlice> = (s
   unsubEventAgenda: null,
 
   fetchEvents: async () => {
-    if (get().unsubEvents) get().unsubEvents!();
+    // CHIRURGISCHER EINGRIFF: Quoten-Falle für globale Events geschlossen!
+    if (get().unsubEvents) return;
+    
     set({ isEventsLoading: true });
     
     const unsub = onSnapshot(collection(db, 'events'), (snap) => {

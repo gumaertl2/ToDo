@@ -1,3 +1,4 @@
+// [2026-10-17] - OPTIMIZATION: Firebase onSnapshot Listener-Zerstörung in fetchTasks verhindert (Early Return), um Free-Tier Lese-Quoten zu sparen und Offline-Starts zu ermöglichen.
 // [2026-06-11] - ARCHITEKTUR-FIX: Fate-Binding ('isHistorical') in fetchTasks integriert. Sanfter Fallback für Legacy-Daten (isHistorical === undefined) implementiert, damit alte Protokolle nicht explodieren. Live-Versiegelung beim Klonen in processRoutineRespawn eingebaut (Szenario B & C).
 // [2026-06-10] - BUGFIX: Routine-Klon-Engine (processRoutineRespawn) ignoriert nun strikt Unterpunkte mit dem Status 'TRASH'. Soft-gelöschte Unterpunkte werden nicht mehr in den neuen Sitzungs-Zyklus kopiert.
 // [2026-06-08] - BUGFIX: Routine-Respawn berücksichtigt nun das 'routineEndDate'. Überschreitet der nächste errechnete Klon dieses Datum, wird die Endlos-Schleife gestoppt und kein neuer Klon mehr angelegt.
@@ -241,8 +242,12 @@ export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set,
   unsubTasks: null,
   
   fetchTasks: async () => {
-    const currentUnsub = get().unsubTasks;
-    if (currentUnsub) currentUnsub();
+    // CHIRURGISCHER EINGRIFF: Quoten-Falle geschlossen!
+    // Wenn bereits ein aktiver Listener läuft, brechen wir hier sofort ab.
+    // Dadurch bleibt der ressourcenschonende Firebase-Cache intakt und lädt nur noch Delta-Updates.
+    if (get().unsubTasks) {
+      return { success: true, data: [] };
+    }
 
     set({ isTasksLoading: true });
     try {

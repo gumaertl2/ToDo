@@ -1,3 +1,4 @@
+// [2026-10-17] - OPTIMIZATION: Firebase onSnapshot Listener-Zerstörung in fetchTemplatesAndRoutines verhindert (Early Return), um Free-Tier Lese-Quoten zu sparen.
 // 2026-04-15 19:40 - FEATURE: Echtzeit-Sync (onSnapshot) für Vorlagen implementiert
 // 2026-04-24 22:00 - BUGFIX: Filter erweitert - erlaubt nun beliebige ItemTypes (Aufgaben etc.) in der Vorlagen-Liste via isTemplate Flag
 // 2026-05-12 12:05 - BUGFIX: Originale Funktionen (fetchTemplatesAndRoutines, deleteAgendaItem) wiederhergestellt, saveItemAsTemplateWithChildren sicher hinzugefügt.
@@ -24,7 +25,10 @@ export const createTemplateSlice: StateCreator<TemplateSlice, [], [], TemplateSl
   unsubTemplates: null,
 
   fetchTemplatesAndRoutines: async () => {
-    if (get().unsubTemplates) get().unsubTemplates!();
+    // CHIRURGISCHER EINGRIFF: Quoten-Falle geschlossen!
+    if (get().unsubTemplates) {
+      return;
+    }
     set({ isTemplatesLoading: true });
     
     // CHIRURGISCHER EINGRIFF: Lädt alte Typ-'VORLAGE' Items ODER neue Items mit 'isTemplate: true'
@@ -112,4 +116,4 @@ export const createTemplateSlice: StateCreator<TemplateSlice, [], [], TemplateSl
     }
   }
 });
-// --- END OF FILE 108 Zeilen ---
+// --- END OF FILE ---

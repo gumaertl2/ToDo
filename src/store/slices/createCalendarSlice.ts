@@ -1,3 +1,4 @@
+// [2026-10-17] - OPTIMIZATION: Firebase onSnapshot Listener-Zerstörung in fetchCalendarData verhindert (Early Return), um Free-Tier Lese-Quoten zu sparen und Offline-Starts zu ermöglichen.
 // [2026-10-13] - ARCHITECTURE-FIX: Clean Rollback auf stabile Proxy-Basis (AllOrigins, CorsProxyIO, Direkt). Experimentelle Proxies und Header entfernt, da diese zu oft Browser-Sicherheitswarnungen (Load failed) auslösten.
 // [2026-10-13] - BUGFIX: Smarter Cache-Buster (_t=...) wird nun exklusiv nur noch für 'mytischtennis.de' verwendet. Starre Kalender (Feiertage) blockieren sonst.
 // [2026-10-13] - UX-FIX: Detaillierte Fehlererfassung (X-Ray Scanner) beim Sync beibehalten, um Fehler pro Proxy transparent zu machen.
@@ -43,8 +44,10 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
   unsubCalendarSubs: null,
 
   fetchCalendarData: async () => {
-    if (get().unsubCalendarEvents) get().unsubCalendarEvents!();
-    if (get().unsubCalendarSubs) get().unsubCalendarSubs!();
+    // CHIRURGISCHER EINGRIFF: Quoten-Falle geschlossen!
+    if (get().unsubCalendarEvents || get().unsubCalendarSubs) {
+      return;
+    }
     
     set({ isCalendarLoading: true });
     

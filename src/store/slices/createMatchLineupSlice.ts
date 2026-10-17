@@ -1,3 +1,4 @@
+// [2026-10-17] - OPTIMIZATION: Firebase onSnapshot Listener-Zerstörung in fetchMatchLineups verhindert (Early Return), um Free-Tier Lese-Quoten zu sparen.
 // [2026-09-30] - FEATURE: Store unterstützt nun 'availabilities' und 'isLocked' (Base & Override V2).
 // [2026-09-28] - BUGFIX: Optimistic Store-Update in saveMatchLineup hinzugefügt, um "Geister-Speichern" zu verhindern.
 // [2026-09-28] - FEATURE: Slice für MatchLineups (Schatten-Akten für Aufstellungen) erstellt, um das Base & Override Prinzip zu unterstützen.
@@ -25,8 +26,9 @@ export const createMatchLineupSlice: StateCreator<MatchLineupSlice, [], [], Matc
   unsubMatchLineups: null,
 
   fetchMatchLineups: async () => {
+    // CHIRURGISCHER EINGRIFF: Quoten-Falle geschlossen!
     if (get().unsubMatchLineups) {
-      get().unsubMatchLineups!();
+      return;
     }
     
     set({ isMatchLineupsLoading: true });

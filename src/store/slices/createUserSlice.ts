@@ -1,3 +1,4 @@
+// [2026-10-17] - OPTIMIZATION: Firebase onSnapshot Listener-Zerstörung in fetchUsersAndHelpers & fetchRoleProfiles verhindert (Early Return), um Free-Tier Lese-Quoten zu sparen.
 // [2026-07-27] - SEC-FEATURE: Neues Recht 'viewJugend' in Standard-Profile und die harte Filter-Pipeline integriert (DSGVO-Schutz Minderjährige).
 // [2026-07-26] - SEC-FIX: Rechte-Prüfung in updateFilteredHelpers repariert. (Fehlerhaftes Überschreiben von Rollen-Profilen durch leere User-Rechte behoben, was Admins blockiert hat).
 // [2026-07-26] - BUGFIX: Initiales Systemprofil 'pro-gast' von 'Gast' auf 'Mitglied' umbenannt.
@@ -129,7 +130,8 @@ export const createUserSlice: StateCreator<StoreState, [], [], UserSlice> = (set
     unsubRoleProfiles: null,
 
     fetchRoleProfiles: async () => {
-      if (get().unsubRoleProfiles) get().unsubRoleProfiles!();
+      // CHIRURGISCHER EINGRIFF: Quoten-Falle geschlossen!
+      if (get().unsubRoleProfiles) return;
       
       const rpSub = onSnapshot(collection(db, 'role_profiles'), async (snap) => {
         if (snap.empty) {
@@ -171,8 +173,8 @@ export const createUserSlice: StateCreator<StoreState, [], [], UserSlice> = (set
     },
 
     fetchUsersAndHelpers: async () => {
-      if (get().unsubUsers) get().unsubUsers!();
-      if (get().unsubHelpers) get().unsubHelpers!();
+      // CHIRURGISCHER EINGRIFF: Quoten-Falle geschlossen!
+      if (get().unsubUsers || get().unsubHelpers) return;
       
       get().fetchRoleProfiles();
       
@@ -196,7 +198,7 @@ export const createUserSlice: StateCreator<StoreState, [], [], UserSlice> = (set
     },
 
     fetchGroups: async () => {
-      if (get().unsubGroups) get().unsubGroups!();
+      if (get().unsubGroups) return; // Quoten-Falle auch hier schließen
       const gSub = onSnapshot(collection(db, 'groups'), (snap) => {
         const groups: Group[] = [];
         snap.forEach((d) => groups.push(d.data() as Group));

@@ -1,3 +1,4 @@
+// [2026-10-17] - BUGFIX: Alle unsub-Listener-Variablen beim Logout explizit auf null gesetzt, um Re-Login Blockaden durch Early-Return zu verhindern.
 // [2026-10-06] - UX-FIX: E-Mail als URL-Parameter im Magic Link übergeben, um das window.prompt bei leerem localStorage (z.B. Inkognito) zu umgehen.
 // [2026-10-06] - UX-FIX: Stummen Türsteher gesprächig gemacht. Schlägt der Magic Link oder die Profil-Prüfung fehl, wird nun ein sichtbares window.alert ausgegeben.
 // [2026-10-06] - BUGFIX: Race-Condition beim Magic Link behoben. 'isProcessingMagicLink' blockiert den AuthGuard-Rauswurf, bis der Link fertig geladen ist.
@@ -109,13 +110,11 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
       isProcessingMagicLink = true;
       let emailForSignIn = window.localStorage.getItem('emailForSignIn');
       
-      // CHIRURGISCHER EINGRIFF: Falls der localStorage leer ist, holen wir die E-Mail lautlos aus der URL
       if (!emailForSignIn) {
         const searchParams = new URLSearchParams(window.location.search);
         emailForSignIn = searchParams.get('email');
       }
       
-      // Fallback, falls weder im Speicher noch in der URL eine E-Mail gefunden wurde
       if (!emailForSignIn) {
         emailForSignIn = window.prompt('Sicherheitsprüfung: Bitte bestätige deine E-Mail-Adresse für den Login:');
       }
@@ -124,7 +123,6 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
         signInWithEmailLink(auth, emailForSignIn, window.location.href)
           .then(() => {
             window.localStorage.removeItem('emailForSignIn');
-            // Die URL wieder bereinigen (E-Mail und kryptische Parameter entfernen)
             window.history.replaceState(null, '', window.location.pathname);
           })
           .catch((error) => {
@@ -139,7 +137,6 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
     }
 
     onAuthStateChanged(auth, async (firebaseUser) => {
-      // Race Condition Block
       if (isProcessingMagicLink && !firebaseUser) {
         return;
       }
@@ -177,7 +174,6 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
 
   sendMagicLink: async (email) => {
     try {
-      // CHIRURGISCHER EINGRIFF: Wir hängen die E-Mail-Adresse direkt als Parameter an den Link
       const returnUrl = new URL(window.location.href);
       returnUrl.searchParams.set('email', email);
       
@@ -261,7 +257,22 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
       templates: [],
       calendarEvents: [],
       calendarSubscriptions: [],
-      matchLineups: [] 
+      matchLineups: [],
+      // CHIRURGISCHER EINGRIFF: Alle unsub-Pointer beim Logout explizit auf null setzen, 
+      // damit das Early-Return beim Re-Login die Listener nicht fälschlicherweise blockiert.
+      unsubTasks: null,
+      unsubEvents: null,
+      unsubEventDetails: null,
+      unsubEventAgenda: null,
+      unsubCalendarEvents: null,
+      unsubCalendarSubs: null,
+      unsubUsers: null,
+      unsubHelpers: null,
+      unsubGroups: null,
+      unsubRoleProfiles: null,
+      unsubTeamPins: null,
+      unsubMatchLineups: null,
+      unsubTemplates: null
     });
   },
 

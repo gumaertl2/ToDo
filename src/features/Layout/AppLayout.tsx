@@ -1,3 +1,4 @@
+// [2026-10-17] - OPTIMIZATION: visibilitychange Listener entfernt, um Firebase Lesezugriffe (Free-Tier) drastisch zu reduzieren und Offline-Hänger zu verhindern.
 // [2026-10-15] - FEATURE: Projekt-ID (Datenbank) als Mouseover beim Logo und dauerhaft im Footer (neben der Build-Version) integriert, um Test- und Prod-Umgebung sofort unterscheiden zu können.
 // [2026-10-15] - FIX: Import-Pfad für backupService auf '../../services/backupService' korrigiert.
 // [2026-10-15] - FEATURE: Tägliches 12:00-Uhr Backup-Reminder-Banner (gesteuert über user.receiveBackupReminder) mit 1-Klick-Download und Deep-Link nach /reports?tab=backup integriert.
@@ -121,26 +122,6 @@ export const AppLayout: React.FC = () => {
       if (fetchMatchLineups) await fetchMatchLineups(); 
     };
     initApp();
-  }, [fetchUsersAndHelpers, fetchGroups, fetchTeams, fetchEvents, fetchTasks, fetchCalendarData, fetchTeamPins, fetchMatchLineups]);
-
-  // Wenn die App aus dem Hintergrund zurückkehrt (Visibility-Change)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && navigator.onLine) {
-        if (fetchUsersAndHelpers) fetchUsersAndHelpers();
-        if (fetchGroups) fetchGroups();
-        if (fetchTeams) fetchTeams();
-        if (fetchEvents) fetchEvents();
-        if (fetchTasks) fetchTasks();
-        if (fetchCalendarData) fetchCalendarData();
-        if (fetchTeamPins) fetchTeamPins(); 
-        if (fetchMatchLineups) fetchMatchLineups(); 
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
   }, [fetchUsersAndHelpers, fetchGroups, fetchTeams, fetchEvents, fetchTasks, fetchCalendarData, fetchTeamPins, fetchMatchLineups]);
 
   const reminderCounts = useMemo(() => {
