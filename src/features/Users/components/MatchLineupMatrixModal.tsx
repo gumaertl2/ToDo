@@ -1,3 +1,4 @@
+// [2026-10-17] - BUGFIX: Ungenutzte Joker-Props aus dem <MatchLineupCardsView> Aufruf entfernt (behebt TS2322 Build-Error).
 // [2026-10-16] - UX-REFACTOR: Sauberer Tab-Wechsel (Karten | Matrix | Dienste) im Header ohne redundante Unterbalken, ehrlicher "Fertig"-Button im Footer.
 // [2026-10-15] - FEATURE: 'Dienste'-Ansicht (CalendarListView) in das Saison-Modal eingebettet (Container-Swap-Prinzip), inkl. Zurück-Button zur Kader-Planung.
 // [2026-10-14] - UX-FEATURE: Joker-Props (availableJokers, handleAddJoker, jokerSearchTerm, setJokerSearchTerm) an MatchLineupCardsView durchgereicht.
@@ -268,10 +269,6 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
               playerGameCounts={matrixData.playerGameCounts}
               myHelperId={matrixData.myHelperId}
               matchLineups={matrixData.matchLineups}
-              availableJokers={matrixData.availableJokers}
-              jokerSearchTerm={matrixData.jokerSearchTerm}
-              setJokerSearchTerm={matrixData.setJokerSearchTerm}
-              onAddJoker={matrixData.handleAddJoker}
               localOverrides={matrixData.localOverrides}
               localAvailOverrides={matrixData.localAvailOverrides}
               localLockOverrides={matrixData.localLockOverrides}
