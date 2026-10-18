@@ -1,3 +1,4 @@
+// [2026-10-18] - FIX: TypeScript Type-Narrowing für sub.reminderSenderUserId in verschachtelter forEach-Schleife (TS2345 bei Vercel Build) behoben.
 // [2026-10-18] - SYNC: Badge-Zähler (reminderCounts) in der Seitenleiste 1:1 mit useRemindersData synchronisiert (Erledigt-Filter, Überfällig-Regel für offene Aufgaben, Strikte Mitternachtsregel für Termine & auto-Absender-Auflösung).
 // [2026-10-17] - OPTIMIZATION: visibilitychange Listener entfernt, um Firebase Lesezugriffe (Free-Tier) drastisch zu reduzieren und Offline-Hänger zu verhindern.
 // [2026-10-15] - FEATURE: Projekt-ID (Datenbank) als Mouseover beim Logo und dauerhaft im Footer (neben der Build-Version) integriert, um Test- und Prod-Umgebung sofort unterscheiden zu können.
@@ -5,7 +6,7 @@
 // [2026-10-15] - FEATURE: Tägliches 12:00-Uhr Backup-Reminder-Banner (gesteuert über user.receiveBackupReminder) mit 1-Klick-Download und Deep-Link nach /reports?tab=backup integriert.
 // [2026-10-04] - FEATURE: Automatische Build-Versionsnummer (__APP_BUILD_DATE__) im Footer (Desktop & Mobile) der App integriert.
 // [2026-10-03] - BUGFIX: Vergangenheits-Filter (todayStart <= eventDateStart) in die Badge-Berechnung (reminderCounts) integriert, um die rote Zahl in der Navigation mit der RemindersView zu synchronisieren.
-// [2026-01-01] - BUGFIX: 'fetchTeams' zum globalen App-Init hinzugefügt, um Regression-Bug bei der Team-Zuweisung (Abo-Erinnerungen) zu beheben.
+// [2026-10-01] - BUGFIX: 'fetchTeams' zum globalen App-Init hinzugefügt, um Regression-Bug bei der Team-Zuweisung (Abo-Erinnerungen) zu beheben.
 // [2026-09-28] - BUGFIX: Globale Store-Fetches (fetchMatchLineups, fetchTeamPins) in den App-Init und Visibility-Check aufgenommen.
 // [2026-07-26] - BUGFIX: Domain-Language Fallback ('Gast' -> 'Mitglied') korrigiert, um Menü-Sichtbarkeit wiederherzustellen.
 // [2026-07-22] - FEATURE: 'Mein Profil' Button in Desktop-Sidebar und Mobile-Menu integriert (Self-Service).
@@ -139,7 +140,8 @@ export const AppLayout: React.FC = () => {
     const myHelperId = myHelper?.id;
     const myTeamIds = myHelper?.teamIds || [];
 
-    const resolveSenderId = (rawSenderId: string, fallbackUserIds?: string[]) => {
+    const resolveSenderId = (rawSenderId?: string, fallbackUserIds?: string[]) => {
+      if (!rawSenderId) return '';
       return rawSenderId === 'auto' ? (fallbackUserIds?.[0] || 'auto') : rawSenderId;
     };
 
@@ -246,7 +248,8 @@ export const AppLayout: React.FC = () => {
 
     if (calendarSubscriptions) {
       calendarSubscriptions.forEach(sub => {
-        if (sub.isActive && sub.reminderSenderUserId && sub.cachedEvents) {
+        const subSenderUserId = sub.reminderSenderUserId;
+        if (sub.isActive && subSenderUserId && sub.cachedEvents) {
           const leadDays = Number(sub.reminderLeadDays) || 0;
           sub.cachedEvents.forEach(cachedEv => {
             if (!cachedEv.reminderSentAt) {
@@ -261,7 +264,7 @@ export const AppLayout: React.FC = () => {
                 const isGroupRecipient = sub.reminderRecipientGroupIds?.some(gId => userGroupIds.includes(gId));
                 const isTeamRecipient = sub.reminderRecipientTeamIds?.some(tId => myTeamIds.includes(tId));
                 const isHelperRecipient = myHelperId && sub.reminderRecipientHelperIds?.includes(myHelperId);
-                const effectiveSenderId = resolveSenderId(sub.reminderSenderUserId, sub.reminderRecipientUserIds);
+                const effectiveSenderId = resolveSenderId(subSenderUserId, sub.reminderRecipientUserIds);
 
                 if (effectiveSenderId === user.id || isDirectRecipient || isGroupRecipient || isTeamRecipient || isHelperRecipient) myCount++;
               }
