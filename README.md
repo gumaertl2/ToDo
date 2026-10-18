@@ -1,3 +1,4 @@
+// [2026-10-18] - MASTER SYNC: Erinnerungs-Historie (Audit-Trail: reminderSentBy/reminderAction, Mitternachts-Cutoff vs. überfällige Aufgaben), persönliches Einsatz-Highlighting im Kalender/Spielplan/Dienste (🏓, 🚗, 📋, ☕) sowie Reminders-Submodule im Datei-Lexikon ergänzt.
 // [2026-10-18] - MASTER SYNC: Vollständiger Ist-Abgleich mit dem Quellcode (Tech-Stack Versionen, 4-Wege-Zuweisung, Magic-Link Auth, RBAC-Rechte inkl. viewJugend/viewAllReminders/manageMitglieder, alle 12 Collections, Jugend-Firewall und exaktes Datei-Lexikon in TEIL 8 aktualisiert).
 // [2026-10-17] - MASTER SYNC: Ghost-Data Prävention, Explicit Empty Array Rule und dynamische Team-Referenzierung via SmartEntityPicker dokumentiert.
 // [2026-10-17] - MASTER SYNC: Firebase Early-Return-Pattern (Free-Tier Quoten-Schutz) und Listener-Cleanup beim Logout für Offline-First-Fähigkeit dokumentiert.
@@ -167,10 +168,12 @@ Benutzer sehen nur, was sie betrifft.
 * Auf dem **Dashboard**, dem **Kanban-Board** und im **Vereinskalender** sehen Nutzer nur Aufgaben und Events, denen sie direkt oder über ihre Gruppe/ihr Amt/ihr Team zugewiesen sind.
 * Interne Vorstandsprotokolle bleiben für Helfer völlig unsichtbar. Der **Access Control Guard** blockiert direkte URL-Aufrufe rigoros, wenn der User nicht Teilnehmer oder Admin ist.
 
-### 5. WhatsApp Erinnerungs-Zentrale & Poka-Yoke
-Kein automatischer E-Mail-Spam! Der User (z.B. der Vorstand) versendet Erinnerungen (an Aufgaben oder Dienste) proaktiv per WhatsApp-Deep-Link über die Reminders-Ansicht. 
+### 5. WhatsApp Erinnerungs-Zentrale, Historie & Poka-Yoke
+Kein automatischer E-Mail-Spam! Der User (z.B. der Vorstand) versendet Erinnerungen (an Aufgaben, Sitzungen, Spiele oder Dienste) proaktiv per WhatsApp-Deep-Link über die Reminders-Ansicht. 
 * Aufgaben und Termine können mit Vorlaufzeiten (`reminderLeadDays`) versehen werden.
 * Ist ein Empfänger nicht greifbar, kann die Erinnerung via **Snooze-Button** tageweise auf Wiedervorlage geschoben werden.
+* **Strikte Mitternachts-Schranke vs. Überfällige Aufgaben:** Vergangene Termine, Spiele und Sitzungen verschwinden ab Mitternacht automatisch aus der aktiven Zentrale (und dem Navigations-Badge in `AppLayout`), während **unerledigte Aufgaben (`AUFGABE`)** bewusst auch nach Überschreiten der Deadline als überfällige Mahnung aktiv bleiben, bis sie erledigt oder verworfen werden.
+* **Audit-Trail & Historien-Modus:** Beim Versenden oder Verwerfen einer Erinnerung wird ein Audit-Trail (`reminderSentAt`, `reminderSentBy`, `reminderAction: 'SENT' | 'DISMISSED'`) gespeichert. Über den **Historien-Umschalter** (inkl. einstellbarem Rückblick-Zeitraum in Tagen via `localStorage`) lassen sich erledigte/verworfene Erinnerungen samt Bearbeiter und Zeitstempel einsehen und bei Bedarf mit einem Klick („Wieder aktivieren“) zurück in die aktive Liste holen.
 * **WhatsApp-Narrensicherung (Poka-Yoke):** Externe Betreuer (ohne App-Account) besitzen kein eigenes Dashboard. Weist man einem solchen "echten" Externen eine Aufgabe zu, aktiviert das System im Formular *automatisch* die WhatsApp-Erinnerung und trägt den Autor als Versender ein. So wird das Kommunikations-Vakuum sicher verhindert.
 
 ### 6. Wettkampf-Tresor (Team-PINs)
@@ -180,6 +183,7 @@ Sichere Ablage von Passwörtern, Zugangscodes, Spielberichts-PINs oder Rangliste
 PapaToDo kann externe Kalender (z.B. myTischtennis, BFV oder Google) abonnieren. An diese importierten Termine (z.B. ein Auswärtsspiel) können dann intern "Dienste" (z.B. Fahren, Betreuer) angehängt und Personen zugewiesen werden.
 *   **Base & Override Aufstellung:** Für verknüpfte Kalender-Abos können Team-Captains (`captainHelperIds`) eine Matrix öffnen ("Saison planen"). Das System nutzt den im Team hinterlegten Stammkader (`defaultLineupHelperIds` als "Base") und erlaubt dem Captain, pro Spieltag per Klick Verfügbarkeiten (`availabilities`), Abweichungen, Logistik (`betreuerHelperIds`, `fahrerHelperIds`, `departureTime`) oder Sperren (`isLocked`, `lineupFreezeLeadDays`) als Schatten-Akte (`match_lineups`) zu speichern.
 *   **Live-Integration:** Die berechnete finale Aufstellung wird automatisch in der Termin-Detailansicht für die Spieler angezeigt und bei aktivierten WhatsApp-Erinnerungen nahtlos an den Info-Text angehängt. Der öffentliche Kalender bleibt aus DSGVO-Gründen für Gäste (ohne Login) von diesen Aufstellungen isoliert.
+*   **Persönliches Einsatz-Highlighting:** Im **Spielplan (`CalendarAgendaView`)**, in der **Dienste- & Terminliste (`CalendarListView`)** sowie in der **Monats-/Wochen-/Tagesansicht (`CalendarView`)** werden Tage und Begegnungen, bei denen der eingeloggte Nutzer selbst eingeteilt ist (`useCalendarEvents.ts`), automatisch in Smaragdgrün hervorgehoben und mit kompakten Rollen-Symbolen direkt hinter dem Titel (`🏓` Spieler, `🚗` Fahrer, `📋` Betreuer, `☕` Vereinsdienst) markiert – ohne das Tabellen- oder Karten-Layout zu verschieben.
 
 ### 8. Soft-Delete (Trash) & Papierkorb-Management
 Gelöschte Elemente (Agenda-Punkte, Aufgaben) werden nicht physisch aus der Datenbank entfernt, sondern erhalten den Status `TRASH` und einen `deletedAt` Zeitstempel. Sie werden in der regulären Agenda und im Kanban-Board ausgeblendet, können aber von Administratoren über die `OrphanCleanupModal` wiederhergestellt oder endgültig (hard-delete) bereinigt werden.
@@ -306,16 +310,20 @@ Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der e
   * `hooks/useDashboardData.ts` (Daten-Beschaffer).
   * `components/`: `DashboardEventsWidget.tsx`, `DashboardServicesWidget.tsx`, `DashboardSessionsWidget.tsx`, `DashboardTasksWidget.tsx`.
 * **Events & Kalender (`src/features/Events/`):** 
-  * `CalendarView.tsx` (Haupt-Kalender-Hub).
-  * `components/CalendarListView.tsx` (Listen- & Agenda-Ansicht für Termine/Dienste inkl. Admin-Cockpit, SmartLogistics und LocalStorage-Persistenz).
-  * `components/CalendarAgendaView.tsx` (Eigenständiger Spielplan im Karten-Look mit Sticky-Toolbar-Filter und LocalStorage-Persistenz).
+  * `CalendarView.tsx` (Haupt-Kalender-Hub inkl. Einsatz-Highlighting in der Monats-/Wochen-/Tagesansicht).
+  * `components/CalendarListView.tsx` (Listen- & Agenda-Ansicht für Termine/Dienste inkl. Admin-Cockpit, SmartLogistics, Einsatz-Highlighting und LocalStorage-Persistenz).
+  * `components/CalendarAgendaView.tsx` (Eigenständiger Spielplan im Karten-Look mit Sticky-Toolbar-Filter, Einsatz-Highlighting und LocalStorage-Persistenz).
   * `components/EventPollWidget.tsx` (Live-Abstimmungen in Terminen und Agenden).
   * `EventDetailView.tsx`, `ProtocolEditor.tsx`, `EventsView.tsx`, `EventAgendaList.tsx`, `EventDetailHeader.tsx`, `EventTemplateSidebar.tsx`, `PublicCalendarEmbed.tsx`.
   * Modals in `src/features/Events/`: `CalendarBulkEventModal.tsx`, `CalendarEventFormModal.tsx`, `CalendarExportModal.tsx`, `CalendarIcsDetailModal.tsx`, `CalendarSubscriptionModal.tsx`, `EventFormModal.tsx`.
-  * `hooks/useCalendarEvents.ts`.
+  * `hooks/useCalendarEvents.ts` (Daten-Mapping & persönliche Einsatz-Erkennung `isMyAssignment` / `myAssignmentIcons`).
 * **Help (`src/features/Help/`):** `HelpView.tsx` (Integriertes Handbuch mit Leitfaden zu Filtern, Rollen und Admin-Cockpit).
-* **Layout (`src/features/Layout/`):** `AppLayout.tsx` (Responsive Shell, Navigation & Backup-Reminder-Banner).
-* **Reminders (`src/features/Reminders/`):** `RemindersView.tsx` (WhatsApp-Kommandozentrale, Snooze-Logik & Auto-Kader Generator).
+* **Layout (`src/features/Layout/`):** `AppLayout.tsx` (Responsive Shell, Navigation, Live-Badges & Backup-Reminder-Banner).
+* **Reminders (`src/features/Reminders/`):** 
+  * `RemindersView.tsx` (WhatsApp-Kommandozentrale, Meine/Verein-Filter & Historien-Modus).
+  * `components/ReminderCard.tsx` (Karten-UI inkl. Snooze, Audit-Banner & „Wieder aktivieren“).
+  * `hooks/useRemindersData.ts` (Daten-Aggregation, Mitternachts-Schranke, Überfälligkeits-Logik & Historien-Filter).
+  * `utils/whatsappFormatter.ts` (WhatsApp-Text- & Auto-Kader-Generator).
 * **Reports (`src/features/Reports/`):** 
   * `ReportsView.tsx` (Hauptansicht für Auswertungen & Datensicherung).
   * `ReportsDashboardTab.tsx` (Statistik & Fristen-Radar).
@@ -347,5 +355,5 @@ Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der e
 4.  `npm run dev` startet den lokalen Vite-Server (oder per Doppelklick auf `node starten.command`).
 5.  `npm run build` führt einen strengen TypeScript Check (`tsc -b`) aus und baut das Production-Bundle.
 
-*Stand: 18.10.2026 - Protokoll: Vollständiger Code-Sync (Tech-Stack, 4-Wege-Zuweisung, RBAC inkl. Jugend-Firewall, alle 12 Collections & aktuelles Datei-Lexikon)*
+*Stand: 18.10.2026 - Protokoll: Vollständiger Code-Sync (Tech-Stack, 4-Wege-Zuweisung, RBAC inkl. Jugend-Firewall, Erinnerungs-Historie, Einsatz-Highlighting, alle 12 Collections & aktuelles Datei-Lexikon)*
 // --- END OF FILE ---
