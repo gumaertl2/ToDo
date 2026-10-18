@@ -1,3 +1,4 @@
+// [2026-10-18] - MASTER SYNC: Vollständiger Ist-Abgleich mit dem Quellcode (Tech-Stack Versionen, 4-Wege-Zuweisung, Magic-Link Auth, RBAC-Rechte inkl. viewJugend/viewAllReminders/manageMitglieder, alle 12 Collections, Jugend-Firewall und exaktes Datei-Lexikon in TEIL 8 aktualisiert).
 // [2026-10-17] - MASTER SYNC: Ghost-Data Prävention, Explicit Empty Array Rule und dynamische Team-Referenzierung via SmartEntityPicker dokumentiert.
 // [2026-10-17] - MASTER SYNC: Firebase Early-Return-Pattern (Free-Tier Quoten-Schutz) und Listener-Cleanup beim Logout für Offline-First-Fähigkeit dokumentiert.
 // [2026-10-15] - MASTER SYNC: Backup & Restore System (JSON-Export, Wipe/Merge, 12:00-Uhr Reminder) dokumentiert.
@@ -78,13 +79,13 @@ Eine Serverless Progressive Web App (PWA), entwickelt mit React, TypeScript, Tai
 PapaToDo verwandelt statische PDF-Protokolle in dynamische Kanban-Workflows. 
 
 **Technologien:**
-* **Frontend:** React 18, TypeScript, TailwindCSS 3.
-* **Build-Tool:** Vite (Lightning fast HMR).
-* **State-Management:** Zustand (persistiert via LocalStorage).
-* **Backend (Serverless):** Firebase (Firestore, Auth).
+* **Frontend:** React 19, TypeScript (~5.9), TailwindCSS 4.
+* **Build-Tool:** Vite 8 (inkl. `vite-plugin-pwa`).
+* **State-Management:** Zustand v5 (persistiert via LocalStorage).
+* **Backend (Serverless):** Firebase v12 (Firestore, Auth inkl. E-Mail/Passwort & Magic-Link).
 * **Hosting/Deployment:** Vercel (CI/CD Pipeline).
-* **Routing:** React Router v6.
-* **Icons:** Lucide React.
+* **Routing:** React Router v7 (`react-router-dom`).
+* **Icons & UI-Helfer:** Lucide React, `@dnd-kit/core`, `date-fns`, `fuse.js`, `ical.js`, `react-big-calendar`, `leaflet` / `react-leaflet`.
 
 ---
 
@@ -118,10 +119,10 @@ Das System basiert nicht auf endlosen ToDo-Listen, sondern auf einem klaren Rhyt
    * **Szenario A: Die Standard-Aufgabe (Keine Routine, kein Container)**
      * *Live in der Sitzung:* Slider frei beweglich (0 % - 100 %). Nichts klont sich. `isHistorical` bleibt `false`.
      * *Beim Sitzungsabschluss (Versiegelung):*
-       * Aufgabe is 100 %: Sie bekommt `isHistorical = true` und bleibt im alten Protokoll. Fertig.
+       * Aufgabe ist 100 %: Sie bekommt `isHistorical = true` und bleibt im alten Protokoll. Fertig.
        * Aufgabe ist < 100 %: Sie bekommt `isHistorical = true` (als Beweis, dass sie damals nicht fertig wurde) **UND** das System erzeugt einen sauberen, frischen Klon (Übertrag) für das neue Meeting.
    * **Szenario B: Die Einfache Routine (Kein Container)**
-     * *Live in der Sitzung:* Sobald the Slider 100 % erreicht, passiert der **Point of No Return**:
+     * *Live in der Sitzung:* Sobald der Slider 100 % erreicht, passiert der **Point of No Return**:
        1. Die Routine erschafft sofort ihren Zukunfts-Klon (`isHistorical = false`, 0 %).
        2. Die *alte* 100 %-Aufgabe bekommt **sofort live** den Stempel `isHistorical = true` und verschwindet aus der aktuellen Ansicht.
    * **Szenario C: Die Container-Routine (Der Boss mit seinen Unterpunkten)**
@@ -154,29 +155,30 @@ Wiederkehrende Aufgaben (z.B. "Kasse prüfen wöchentlich") blähen die Datenban
   * Ist sie bereits *erledigt*, ignoriert das Skript sie (da der Klon für die Zukunft ja schon existiert).
   * **Enddatum-Sicherung:** Wenn das `routineEndDate` überschritten ist, stoppt der Respawn. Wichtig: Die Routine verschwindet erst aus der UI, wenn auch die allerletzte noch offene Aufgabe dieser Blutlinie wirklich als erledigt abgehakt wurde (kein Verschwinden von Altlasten!).
 
-### 3. Aufgaben & 3-Wege-Zuweisung
-Aufgaben können in PapaToDo an drei verschiedene Entitäten zugewiesen werden:
-1. **User (Direkt):** Zuweisung an eine spezifische Person (z.B. "Max Mustermann").
-2. **Rolle/Amt (Funktional):** Zuweisung an das Amt (z.B. "1. Vorstand").
-3. **Gruppe (Kollektiv):** Zuweisung an ein Team (z.B. "Festkomitee").
+### 3. Aufgaben & 4-Wege-Zuweisung (`SmartEntityPicker`)
+Aufgaben, Termine, Dienste und Team-PINs können über den `SmartEntityPicker` flexibel an vier Dimensionen zugewiesen werden:
+1. **App-Nutzer (`userIds`):** Direkte Zuweisung an eine verantwortliche Person im Vorstand/Leitungsteam.
+2. **Amt / Gruppe (`groupIds`):** Funktionale Zuweisung an ein Gremium (z.B. "Festausschuss").
+3. **Mannschaft / Team (`teamIds`):** Dynamische Referenz auf ein Team (z.B. "Herren I") oder virtuelle Struktur-Filter (`vgroup-all`, `vgroup-aktiv`, `vgroup-passiv`, `vgroup-jugend`).
+4. **Mitglied / Helfer (`helperIds`):** Direkte Zuweisung einzelner Vereinsmitglieder oder externer Helfer (z.B. für Dienste).
 
 ### 4. Participation-First Firewall (Security & "Least-to-know")
 Benutzer sehen nur, was sie betrifft.
-* Auf dem **Dashboard**, dem **Kanban-Board** und im **Vereinskalender** sehen Nutzer nur Aufgaben und Events, denen sie direkt oder über ihre Gruppe/ihr Amt zugewiesen sind.
-* Interne Vorstandsprotokolle bleiben für Helfer völlig unsichtbar. Der **Access Control Guard** blockiert direkte URL-Aufrufe rigoros, wenn der User nicht Teilnehmer oder Admin.
+* Auf dem **Dashboard**, dem **Kanban-Board** und im **Vereinskalender** sehen Nutzer nur Aufgaben und Events, denen sie direkt oder über ihre Gruppe/ihr Amt/ihr Team zugewiesen sind.
+* Interne Vorstandsprotokolle bleiben für Helfer völlig unsichtbar. Der **Access Control Guard** blockiert direkte URL-Aufrufe rigoros, wenn der User nicht Teilnehmer oder Admin ist.
 
 ### 5. WhatsApp Erinnerungs-Zentrale & Poka-Yoke
-Kein automatcher E-Mail-Spam! Der User (z.B. der Vorstand) versendet Erinnerungen (an Aufgaben oder Dienste) proaktiv per WhatsApp-Deep-Link über die Reminders-Ansicht. 
+Kein automatischer E-Mail-Spam! Der User (z.B. der Vorstand) versendet Erinnerungen (an Aufgaben oder Dienste) proaktiv per WhatsApp-Deep-Link über die Reminders-Ansicht. 
 * Aufgaben und Termine können mit Vorlaufzeiten (`reminderLeadDays`) versehen werden.
 * Ist ein Empfänger nicht greifbar, kann die Erinnerung via **Snooze-Button** tageweise auf Wiedervorlage geschoben werden.
 * **WhatsApp-Narrensicherung (Poka-Yoke):** Externe Betreuer (ohne App-Account) besitzen kein eigenes Dashboard. Weist man einem solchen "echten" Externen eine Aufgabe zu, aktiviert das System im Formular *automatisch* die WhatsApp-Erinnerung und trägt den Autor als Versender ein. So wird das Kommunikations-Vakuum sicher verhindert.
 
 ### 6. Wettkampf-Tresor (Team-PINs)
-Sichere Ablage von Passwörtern, Zugangscodes oder Kabinenschlüsseln. Der Zugriff ist an strikte Berechtigungen gekoppelt (nur Admins oder befugte Trainer sehen den Klartext).
+Sichere Ablage von Passwörtern, Zugangscodes, Spielberichts-PINs oder Ranglisten-Links (`rankingUrl`). Der Zugriff ist an strikte Berechtigungen gekoppelt (`viewTeamPins` / `manageTeamPins` sowie zugewiesene Nutzer, Gruppen, Teams oder Helfer).
 
 ### 7. Externe Kalender (ICS) & Aufstellungsplanung (Base & Override)
-PapaToDo kann externe Kalender (z.B. vom BFV oder Google) abonnieren. An diese importierten Termine (z.B. ein Auswärtsspiel) können dann intern "Dienste" (z.B. Fahren) angehängt und Personen zugewiesen werden.
-*   **Base & Override Aufstellung:** Für verknüpfte Kalender-Abos können Team-Captains eine Matrix öffnen ("Saison planen"). Das System nutzt den im Team hinterlegten Stammkader ("Base") und erlaubt dem Captain, pro Spieltag per Klick Abweichungen, Ausfälle oder Joker ("Override") als Schatten-Akte zu speichern.
+PapaToDo kann externe Kalender (z.B. myTischtennis, BFV oder Google) abonnieren. An diese importierten Termine (z.B. ein Auswärtsspiel) können dann intern "Dienste" (z.B. Fahren, Betreuer) angehängt und Personen zugewiesen werden.
+*   **Base & Override Aufstellung:** Für verknüpfte Kalender-Abos können Team-Captains (`captainHelperIds`) eine Matrix öffnen ("Saison planen"). Das System nutzt den im Team hinterlegten Stammkader (`defaultLineupHelperIds` als "Base") und erlaubt dem Captain, pro Spieltag per Klick Verfügbarkeiten (`availabilities`), Abweichungen, Logistik (`betreuerHelperIds`, `fahrerHelperIds`, `departureTime`) oder Sperren (`isLocked`, `lineupFreezeLeadDays`) als Schatten-Akte (`match_lineups`) zu speichern.
 *   **Live-Integration:** Die berechnete finale Aufstellung wird automatisch in der Termin-Detailansicht für die Spieler angezeigt und bei aktivierten WhatsApp-Erinnerungen nahtlos an den Info-Text angehängt. Der öffentliche Kalender bleibt aus DSGVO-Gründen für Gäste (ohne Login) von diesen Aufstellungen isoliert.
 
 ### 8. Soft-Delete (Trash) & Papierkorb-Management
@@ -186,39 +188,46 @@ Gelöschte Elemente (Agenda-Punkte, Aufgaben) werden nicht physisch aus der Date
 Für ein blitzschnelles Arbeiten am Desktop wurden Power-Features integriert:
 * **Native Rechtsklick-Kontextmenüs (`RowContextMenu`):** Erlaubt die Bearbeitung, Positionierung und das Einfügen neuer Zeilen ohne Mauswege.
 * **Inline-Editoren (`InlineEditors`):** Bearbeitung von Titeln, Beschreibungen und Dauer direkt in der Liste.
-* **Volltext- & Ähnlichkeitssuche:** Ein globales Suchfeld im Agenda-Header filtert den Baum in Echtzeit. Treffer in Titeln oder Notizen (`RichTextRenderer`) werden visuell gelb (`<mark>`) hervorgehoben.
+* **Volltext- & Ähnlichkeitssuche:** Ein globales Suchfeld im Agenda-Header filtert den Baum in Echtzeit. Treffer in Titeln oder Notizen (`RichText`) werden visuell gelb (`<mark>`) hervorgehoben.
 * **Safe-Edit Fokus-Schutz:** Eine komplexe Interceptor-Logik verhindert den Fokus-Klau und Datenüberschreibungen zwischen Inline-Editoren (onBlur-Speichern) und Modal-Overlays.
 * **Smart-Sorting & Sub-Item Drag&Drop:** Neu angelegte Punkte erhalten strikt die `protocolIndex = max + 1` und fügen sich nahtlos in die Hierarchie ein. Unterpunkte sind vollständig drag-and-drop-fähig.
 
-### 10. Mitglieder-Self-Service & Stammdaten
-* **"Mein Profil" (Self-Service):** Mitglieder können ihre Kontaktdaten (Telefon, E-Mail der Eltern, etc.) sowie ihre DSGVO-Einstellungen jederzeit selbstständig in der App aktualisieren.
+### 10. Mitglieder-Self-Service, Magic-Link & Stammdaten
+* **Passwortloser Login (Magic-Link) & E-Mail-Auth:** Nutzer können sich klassisch per E-Mail/Passwort oder passwortlos per E-Mail-Magic-Link (`sendMagicLink`) anmelden, sofern ihre E-Mail-Adresse in der Vorstands- (`users`) oder Mitgliederliste (`helpers`) hinterlegt ist.
+* **"Mein Profil" (Self-Service):** Mitglieder können ihre Kontaktdaten (Telefon, Adresse, E-Mail der Eltern, etc.) sowie ihre DSGVO-Einstellungen jederzeit selbstständig in der App aktualisieren.
 * **Transparenz nach Art. 15 DSGVO:** Nutzer haben jederzeit vollen Lese-Zugriff auf die vom Verein über sie gespeicherten Stammdaten (Name, App-Alias, Mitgliedsstatus, Geburts- und Eintrittsdatum).
 * **Auto-Benachrichtigungen:** Ändert ein Mitglied seine Kontaktdaten im Self-Service, generiert das System automatisch eine In-App-Erinnerung (Aufgabe) an alle Vorstandsmitglieder (Recht: `manageMitglieder`), damit diese die Daten in externen Systemen (Kasse, DTTB) synchronisieren können.
-* **Login-Sicherheit:** Das primäre E-Mail-Feld ist im Self-Service gesperrt (Read-Only), um die unzerstörbare Brücke zur Firebase-Authentication-Login zu garantieren.
+* **Login-Sicherheit:** Das primäre E-Mail-Feld ist im Self-Service gesperrt (Read-Only), um die unzerstörbare Brücke zum Firebase-Authentication-Login zu garantieren.
 
 ### 11. Backup & Restore (Sicherung & Staging)
-* **Vollständiger Export:** Mit einem Klick können Administratoren alle 12 Firestore-Collections (Mitglieder, Teams, Aufstellungen, Termine, Sitzungen, Aufgaben, PINs, Umfragen) als strukturierte `.json`-Datei exportieren (iCloud/Mac kompatibel).
-* **Täglicher Reminder:** Konfigurierbare 12:00-Uhr-Erinnerung im Dashboard, falls am aktuellen Tag noch kein Backup auf dem Gerät durchgeführt wurde.
+* **Vollständiger Export:** Mit einem Klick können Administratoren alle 12 Firestore-Collections (`users`, `helpers`, `groups`, `teams`, `role_profiles`, `events`, `calendar_events`, `calendar_subscriptions`, `match_lineups`, `event_poll_responses`, `agenda_items`, `team_pins`) als strukturierte `.json`-Datei exportieren (iCloud/Mac kompatibel).
+* **Täglicher Reminder:** Konfigurierbare 12:00-Uhr-Erinnerung (`receiveBackupReminder`) im Dashboard, falls am aktuellen Tag noch kein Backup auf dem Gerät durchgeführt wurde.
 * **Restore & Staging (2 Modi):** 
   * *Merge:* Aktualisiert und ergänzt bestehende Daten.
   * *Wipe & Replace (1:1 Spiegel):* Leert die Zieldatenbank komplett vor dem Import. Ideal, um eine Testumgebung (Staging) exakt mit den Produktivdaten zu überschreiben.
-* **Auth-Brücke:** Da Benutzerzuweisungen in PapaToDo bei der Anmeldung über die E-Mail-Adresse validiert werden, funktioniert ein Datenbank-Klon auch dann nahtlos, wenn die Testumgebung völlig neue Google-Auth-UIDs verwendet.
+* **Auth-Brücke:** Da Benutzerzuweisungen in PapaToDo bei der Anmeldung über die E-Mail-Adresse validiert werden, funktioniert ein Datenbank-Klon auch dann nahtlos, wenn die Testumgebung völlig neue Firebase-Auth-UIDs verwendet.
 
 ---
 
 ## 🔒 TEIL 5: Berechtigungskonzept & Rollen (RBAC)
 
-Jeder Nutzer in PapaToDo bekommt ein Rollen-Profil (z.B. "Admin", "Vorstand", "Helfer"), welches über ein striktes Flag-System im Firestore abgesichert ist.
+Jeder Nutzer in PapaToDo bekommt ein Rollen-Profil (`RoleProfile` in Collection `role_profiles`, z.B. "ADMIN", "Vorstand", "Bereichsleiter", "Mannschaftsführer / Trainer", "Mitglied"), welches über ein striktes Flag-System (`RolePermissions` in `src/core/types/models.ts`) abgesichert ist:
 
-* `manageUsers`: Darf neue Helfer anlegen, Berechtigungen ändern und Rollenprofile erstellen (Super-Admin).
-* `manageEvents`: Darf Sitzungen anlegen, Agenden veröffentlichen und Protokolle schließen.
-* `manageTasks`: Darf Aufgaben erstellen, bearbeiten und verschieben (Kanban-Board).
-* `manageTemplates`: Darf die Vorlagen-Bibliothek administrieren.
-* `manageTeamPins`: Darf sensible Zugangsdaten im Tresor verwalten.
-* `manageCalendar`: Darf externe Feeds abonnieren und Dienste festlegen.
-* `viewEhrungen`: Darf das Jubiläums-Radar einsehen UND fungiert als strikte DSGVO-Firewall für die Einsicht in Daten passiver Mitglieder.
+* **Ansichts-Rechte (Navigation & Module):** `viewDashboard`, `viewEvents`, `viewTasks`, `viewCalendar`, `viewUsers`, `viewReports`, `viewReminders`, `viewTemplates`.
+* **Admin- & Struktur-Rechte:**
+  * `viewAppUsers`: Darf App-Nutzer (`users`) sowie Rollenprofile verwalten (Schreibrecht für Rollen ist an `viewAppUsers` gekoppelt).
+  * `viewRoles`: Reines Lese-Recht für die Rollen-Matrix.
+  * `manageMitglieder`: Darf Mitglieder/Helfer (`helpers`) und Teams anlegen/bearbeiten, erhält Self-Service-Änderungsmeldungen und sieht alle Mitgliederstatus-Gruppen.
+  * `manageEvents`: Darf Sitzungen anlegen, Agenden veröffentlichen und Protokolle schließen.
+  * `manageCalendarSetup`: Darf externe ICS-Feeds abonnieren, bearbeiten und Kalender-Strukturen verwalten.
+  * `viewTeamPins` / `manageTeamPins`: Steuert Lese- und Schreibzugriff auf den Wettkampf-Tresor.
+  * `deleteAnyItem`: Darf beliebige Punkte/Aufgaben löschen bzw. den Papierkorb bereinigen.
+* **DSGVO- & Datenschutz-Firewalls:**
+  * `viewEhrungen`: Darf das Jubiläums-Radar einsehen UND fungiert (zusammen mit `manageMitglieder`) als strikte Store-Firewall für die Einsicht in Daten passiver Mitglieder (`memberStatus === 'PASSIV'`).
+  * `viewJugend`: Strikte Store-Firewall (zusammen mit `manageMitglieder`) für den DSGVO-konformen Schutz von Minderjährigen-Daten (`memberStatus === 'JUGEND'`).
+  * `viewAllReminders`: Erlaubt die Einsicht in alle Erinnerungen (ohne dieses Recht sieht ein Nutzer nur seine eigenen Erinnerungen).
 
-*Nutzer ohne diese Berechtigungen verbleiben in der Read-Only (Leser) Ansicht.*
+*Nutzer ohne entsprechende Schreibberechtigungen verbleiben in der Read-Only (Leser) Ansicht.*
 
 ---
 
@@ -228,8 +237,8 @@ Die Datenbank ist flach (flat-hierarchy) aufgebaut. Um die App-Logik (Klonen, Hi
 
 **Domain-Language (Das Lexikon der Nutzer):**
 Um Verwirrung in der UI und Logik zu vermeiden, gibt es eine strikte Trennung:
-* **App-Nutzer (Collection: `users`):** Das sind die "Macher" (Vorstand, Teamleitung). Ein Nutzer ist **nur dann** ein echter "App-Nutzer", wenn er ein offizielles `amt` hat ODER über sein Profil (`roleProfileId`) administrative Rechte (z.B. `manageEvents`, `manageTasks`) besitzt. Nur sie haben Zugriff auf ToDo-Boards, erhalten ToDo-Zuweisungen (`assigneeUserIds`) und sehen Planungs-Sitzungen in ihrem Dashboard.
-* **Mitglieder & Helfer (Collection: `helpers`):** Das ist die breite Vereins-Basis. Sie haben Felder wie `teamIds` oder `memberStatus`. Wenn sich an Helfer in die App einloggt, bleibt er für das System ein "purer Helfer". Das UI (Dashboard) blendet für diese Nutzer alle ToDo-Container und Sitzungen restlos aus, da sie weder Vorstand-ToDos abarbeiten können, noch zu internen Sitzungen geladen werden. Sie werden lediglich für Dienste via `assigneeHelperIds` eingeteilt.
+* **App-Nutzer (Collection: `users`):** Das sind die "Macher" (Vorstand, Teamleitung). Ein Nutzer ist **nur dann** ein echter "App-Nutzer", wenn er ein offizielles `amt` hat ODER über sein Profil (`roleProfileId`) administrative Rechte (z.B. `manageEvents`, `viewTasks`) besitzt. Nur sie haben Zugriff auf ToDo-Boards, erhalten ToDo-Zuweisungen (`assigneeUserIds`) und sehen Planungs-Sitzungen in ihrem Dashboard.
+* **Mitglieder & Helfer (Collection: `helpers`):** Das ist die breite Vereins-Basis. Sie haben Felder wie `teamIds` oder `memberStatus`. Wenn sich ein Helfer in die App einloggt, bleibt er für das System ein "purer Helfer" (Rolle `Mitglied`). Das UI (Dashboard) blendet für diese Nutzer alle ToDo-Container und Sitzungen restlos aus, da sie weder Vorstands-ToDos abarbeiten können, noch zu internen Sitzungen geladen werden. Sie werden lediglich für Dienste, Aufstellungen oder Umfragen via `helperIds` / `teamIds` eingeteilt.
 
 **Das Data-Dictionary (Die Beziehungs-Logik):**
 * **`eventId` (Die Sitzungs-Zuordnung):** Verbindet ein `AgendaItem` mit einem `Event`. Ist dieses Feld leer (`null`/`undefined`), handelt es sich um eine freie "Backlog"-Aufgabe ohne festen Sitzungs-Kontext. Ist es gesetzt, teilt das Item den Lebenszyklus dieser Sitzung.
@@ -237,18 +246,19 @@ Um Verwirrung in der UI und Logik zu vermeiden, gibt es eine strikte Trennung:
 * **`baseItemId` (Die Aufgaben-Blutlinie):** Der "Ghost-Scanner"-Schlüssel für Aufgaben und Routinen. Wird eine Aufgabe ins nächste Meeting geklont oder durch eine Routine neu erschaffen (Respawn), erhält sie zwingend eine neue `id`. Die `baseItemId` bleibt jedoch immer identisch zum Ursprungs-Item. Daran erkennen Zähler (wie `completedCount`) und Filter, dass es sich um dieselbe Aufgabenfamilie handelt, selbst wenn der Titel mutiert.
 * **`isSubItem` & `parentItemId` (Die Container-Hierarchie):** Steuert die Verschachtelung. Ein Unterpunkt hat `isSubItem: true`. Seine `parentItemId` MUSS zwingend auf die *aktuelle* `id` des Oberpunkts zeigen (niemals auf dessen `baseItemId`!). Beim Klonen eines Containers erhalten Boss und Kinder neue IDs, und die `parentItemId` der Kinder wird vom Code sofort auf die neue ID des geklonten Bosses aktualisiert. Waisenkinder sind streng verboten.
 
-**Die Collections:**
-* `users`: Benutzerprofile, verknüpft mit Firebase Auth-ID.
-* `role_profiles`: Berechtigungs-Matrix (Templates für Nutzerrechte).
-* `groups`: Gruppierungen (z.B. "Festausschuss").
-* `events`: Sitzungen, Meetings und Projekte (Header-Daten).
-* `agenda_items`: Jeder Punkt, jede Aufgabe, jeder Beschluss einer Sitzung. Das ist die größte Collection.
-* `calendar_events`: Interne Kalender-Einträge und Dienste (referenziert ggf. auf externe `subscriptionId`).
-* `calendar_subscriptions`: Abonnierte externe ICS-Feeds.
-* `team_pins`: Der Passwort-Tresor.
-* `templates`: Wiederverwendbare Vorlagen für Routinen.
-* `match_lineups`: Schatten-Akten (Overrides) für dynamische Aufstellungs-Matrizen an Spieltagen.
-* `event_poll_responses`: Schatten-Akten für Abstimmungen und RSVP (WhatsApp-Style).
+**Alle 12 Firestore-Collections:**
+1. `users`: App-Benutzerprofile (Vorstand/Funktionäre), verknüpft über E-Mail / Firebase Auth-ID.
+2. `helpers`: Vereinsmitglieder & Helfer inkl. DSGVO-Status, Kontaktdaten, `memberStatus` und `teamIds`.
+3. `groups`: Ämter & Arbeitsgruppen (z.B. "Festausschuss").
+4. `teams`: Mannschaften inkl. Stammkader (`defaultLineupHelperIds`), Captains (`captainHelperIds`), Logistik-Flags und Heimhalle (`homeArenaAddress`).
+5. `role_profiles`: Berechtigungs-Matrix (Templates für Nutzerrechte).
+6. `events`: Sitzungen, Meetings und Projekte (Header-Daten inkl. optionaler `pollConfig`).
+7. `agenda_items`: Jeder Punkt, jede Aufgabe, jeder Beschluss und jede Vorlage (`VORLAGE` / `isTemplate`) einer Sitzung (`templates` werden per Query aus `agenda_items` geladen).
+8. `calendar_events`: Interne Kalender-Einträge und Dienste (inkl. optionaler `pollConfig`).
+9. `calendar_subscriptions`: Abonnierte externe ICS-Feeds inkl. gecachter Events (`cachedEvents`) und Sync-Diagnose (`lastSyncedAt`, `lastSyncAttemptAt`, `lastSyncBy`, `lastSyncError`).
+10. `team_pins`: Der Passwort- & Wettkampf-Tresor.
+11. `match_lineups`: Schatten-Akten (Overrides) für dynamische Aufstellungs-Matrizen, Verfügbarkeiten und Fahrtdienste an Spieltagen.
+12. `event_poll_responses`: Schatten-Akten für Abstimmungen und RSVP (WhatsApp-Style).
 
 ---
 
@@ -256,69 +266,76 @@ Um Verwirrung in der UI und Logik zu vermeiden, gibt es eine strikte Trennung:
 
 Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der europäischen Datenschutzgrundverordnung (DSGVO) aufgebaut:
 
-*   **Digitaler Clickwrap:** Beim ersten Login (or nach einer Aktualisierung der Richtlinien) muss jeder Nutzer aktiv der App-Sichtbarkeit zustimmen oder diese ablehnen. 
-*   **Lückenloser Audit-Trail:** Jede DSGVO-Entscheidung wird mit einem präzisen Zeitstempel (`consentConfirmedAt`) und dem Akteur (`USER` oder `ADMIN`) manipulationssicher in der Datenbank protokolliert.
-*   **Opt-In Sichtbarkeit:** Lehnt ein Nutzer die Sichtbarkeit ab, wird sein Profil für andere App-Nutzer strikt geschwärzt (Read-Only Firewall im Store). Die App bleibt für ihn jedoch vollumfänglich nutzbar.
+*   **Digitaler Clickwrap:** Beim ersten Login (oder nach einer Aktualisierung der Richtlinien in `src/config/dsgvoConfig.ts`) muss jeder Nutzer aktiv der App-Sichtbarkeit zustimmen oder diese ablehnen. 
+*   **Lückenloser Audit-Trail:** Jede DSGVO-Entscheidung wird mit einem präzisen Zeitstempel (`consentConfirmedAt`), der Version (`dsgvoConsentVersion`) und dem Akteur (`USER` oder `ADMIN`) manipulationssicher in der Datenbank protokolliert. Zusätzlich können Papier-Einwilligungen (`hasWrittenDsgvoConsent`) und Jugend-Unbedenklichkeitsbescheinigungen (`hasYouthWorkClearance`) dokumentiert werden.
+*   **Opt-In Sichtbarkeit:** Lehnt ein Nutzer die Sichtbarkeit ab, werden seine Kontaktdaten für andere einfache Nutzer strikt geschwärzt (Read-Only Firewall in `createUserSlice.ts`). Die App bleibt für ihn jedoch vollumfänglich nutzbar (den eigenen Datensatz sieht man immer ungeschwärzt).
 *   **Admin-Override & Reset:** Admins können analog vorliegende (papierhafte) Zustimmungen im System erfassen oder den DSGVO-Status eines Mitglieds komplett zurücksetzen, um bei dessen nächstem Login einen neuen Clickwrap zu erzwingen.
 *   **Einfacher Widerruf:** Die DSGVO-Zustimmung kann vom Nutzer jederzeit mit einem Klick über das eigene Profil widerrufen oder nachträglich erteilt werden (Art. 7 Abs. 3 DSGVO).
-*   **Passiv-Mitglieder-Firewall:** Aus DSGVO-Gründen werden passive Mitglieder zentral und reaktiv im `useClubStore` (UserSlice) herausgefiltert, sofern der Nutzer nicht das `viewEhrungen`-Recht besitzt. Diese Filterung darf niemals in die UI-Schicht verlagert werden, um unbeabsichtigte Datenlecks in der Oberfläche oder durch direkten State-Zugriff zu verhindern.
-*   **Ehrungen & Mitgliedsdaten:** PapaToDo ist KEINE vollumfängliche Vereinsverwaltung (dafür gibt es WISO, SPG etc.). Das Tab "Mitglieder & Ehrungen" dient *nur* dem Jubiläums-Radar (z.B. "Wer hat dieses Jahr 25-jähriges?"), damit der Vorstand frühzeitig reagieren kann.
-*   **Mandantenfähigkeit (Club-ID):** PapaToDo ist mandantenfähig vorbereitet. Fast alle Dokumente besitzen ein `clubId` Feld.
+*   **Passiv- & Jugend-Mitglieder-Firewall:** Aus DSGVO- und Jugendschutz-Gründen werden im `useClubStore` (`createUserSlice.ts`) zwei harte Filterstufen reaktiv durchgesetzt:
+    1. Passive Mitglieder (`memberStatus === 'PASSIV'`) werden komplett herausgefiltert, sofern der Nutzer weder `viewEhrungen` noch `manageMitglieder` besitzt.
+    2. Jugendliche (`memberStatus === 'JUGEND'`) werden komplett herausgefiltert, sofern der Nutzer weder `viewJugend` noch `manageMitglieder` besitzt.
+    Diese Filterung darf niemals in die UI-Schicht verlagert werden, um unbeabsichtigte Datenlecks zu verhindern.
+*   **Ehrungen & Mitgliedsdaten:** PapaToDo ist KEINE vollumfängliche Vereinsverwaltung (dafür gibt es WISO, SPG etc.). Das Tab "Ehrungen" dient *nur* dem Jubiläums-Radar (z.B. "Wer hat dieses Jahr 25-jähriges?"), damit der Vorstand frühzeitig reagieren kann.
+*   **Umgebungs-Trennung (Prod vs. Staging):** Produktiv- und Testdatenbanken werden sauber über separate Firebase-Projekte (`.env.development`, `.env.local`, `.env.production`) getrennt und können über den Backup/Restore-Service (`wipe`-Modus) gespiegelt werden.
 
 ---
 
 ## 📂 TEIL 8: Vollständiges Datei-Lexikon (Orientierung)
 
 ### Root & Infrastruktur
-* `.gitignore`, `eslint.config.js`, `package.json`, `tsconfig.json`, `tsconfig.app.json`, `tsconfig.node.json`, `vercel.json`, `vite.config.ts`: Standard Vite/Node, TypeScript und Vercel Deployment-Konfigurationen.
+* `.gitignore`, `eslint.config.js`, `package.json`, `tsconfig.json`, `tsconfig.app.json`, `tsconfig.node.json`, `vercel.json`, `vite.config.ts`, `firestore.rules`: Standard Vite/Node, TypeScript, Firestore-Security und Vercel Deployment-Konfigurationen.
 * `api/calendar.ts`: Serverless Vercel Function (Backend) für das Abonnieren und Parsen externer `.ics` Kalender-Feeds.
 
-### Core, Services & State Management (Store)
-* `src/core/types/models.ts`: SSOT TypeScript Typendefinitionen für alle Modelle.
-* `src/services/firebase.ts`: Firebase Initialisierung.
-* `src/services/backupService.ts`: Backup & Restore Logik (JSON-Export, Chunked Batch-Writes).
-* `src/utils/DataProcessor.ts`: Hilfsfunktionen zur Datenverarbeitung.
-* `src/store/useClubStore.ts`: Der Master-Zustand (Zustand Store).
+### Core, Config, Services & State Management (Store)
+* `src/config/dsgvoConfig.ts`: Zentrale Konfiguration und Versionierung der DSGVO-Einwilligungstexte.
+* `src/core/types/models.ts`: SSOT TypeScript Typendefinitionen für alle Datenmodelle.
+* `src/core/types/shared.ts`: Gemeinsame Result-Wrapper-Typen (`Result<T>`, `AsyncResult<T>`).
+* `src/services/firebase.ts`: Firebase & Firestore Initialisierung.
+* `src/services/DataProcessor.ts`: Zentrale Firestore Lese-/Schreib-Engine inkl. `sanitizeForFirestore` und abwärtskompatibler Lazy-Schema-Migration.
+* `src/services/backupService.ts`: Backup & Restore Logik für alle 12 Collections (JSON-Export, Chunked Batch-Writes, 12:00-Uhr-Reminder).
+* `src/store/useClubStore.ts`: Der Master-Zustand (Zustand Store mit `persist`-Middleware).
 * `src/store/slices/*`: Modulare Store-Fragmente:
   * `createAuthSlice.ts`, `createCalendarSlice.ts`, `createEventPollSlice.ts` (Abstimmungslogik), `createEventSlice.ts`, `createMatchLineupSlice.ts` (Schatten-Akten & Optimistic Updates), `createTaskSlice.ts`, `createTeamPinsSlice.ts`, `createTeamSlice.ts`, `createTemplateSlice.ts`, `createUserSlice.ts`.
 
 ### Features & UI Components
 
-* **Admin:** `OrphanCleanupModal.tsx` (Papierkorb-Verwaltung und Soft-Delete Cleanup).
-* **Auth & Datenschutz:** `AuthGuard.tsx`, `LoginView.tsx`, `DsgvoClickwrap.tsx`.
+* **Admin (`src/features/Admin/`):** `OrphanCleanupModal.tsx` (Papierkorb-Verwaltung und Soft-Delete Cleanup).
+* **Auth & Datenschutz (`src/features/Auth/`):** `AuthGuard.tsx`, `LoginView.tsx`, `DsgvoClickwrap.tsx`.
 * **Dashboard (`src/features/Dashboard/`):** 
   * `DashboardView.tsx`, `WelcomeDashboard.tsx` (Rollenbasierte Kommandozentrale).
-  * `useDashboardData.ts` (Daten-Beschaffer).
-  * `widgets/`: `DashboardEventsWidget.tsx`, `DashboardServicesWidget.tsx`, `DashboardSessionsWidget.tsx`, `DashboardTasksWidget.tsx`.
+  * `hooks/useDashboardData.ts` (Daten-Beschaffer).
+  * `components/`: `DashboardEventsWidget.tsx`, `DashboardServicesWidget.tsx`, `DashboardSessionsWidget.tsx`, `DashboardTasksWidget.tsx`.
 * **Events & Kalender (`src/features/Events/`):** 
   * `CalendarView.tsx` (Haupt-Kalender-Hub).
-  * `CalendarListView.tsx` (Listen- & Agenda-Ansicht für Termine/Dienste inkl. Admin-Cockpit, SmartLogistics und LocalStorage-Persistenz).
-  * `CalendarAgendaView.tsx` (Eigenständiger Spielplan im Karten-Look mit Sticky-Toolbar-Filter und LocalStorage-Persistenz).
-  * `EventDetailView.tsx`, `ProtocolEditor.tsx`, `EventsView.tsx`, `EventAgendaList.tsx`, `EventDetailHeader.tsx`.
-  * `EventPollWidget.tsx` (Live-Abstimmungen in der Agenda).
-  * `EventTemplateSidebar.tsx`, `PublicCalendarEmbed.tsx`.
-  * `modals/`: `CalendarBulkEventModal.tsx`, `CalendarEventFormModal.tsx`, `CalendarExportModal.tsx`, `CalendarIcsDetailModal.tsx`, `CalendarSubscriptionModal.tsx`, `EventFormModal.tsx`.
-  * `hooks/`: `useCalendarEvents.ts`.
-* **Help:** `HelpView.tsx` (Integriertes Handbuch mit aktualisiertem Leitfaden zu Filtern und Admin-Cockpit).
-* **Layout:** `AppLayout.tsx` (Responsive Shell & Mobile-Menü).
-* **Reminders:** `RemindersView.tsx` (WhatsApp-Kommandozentrale, Snooze-Logik & Auto-Kader Generator).
+  * `components/CalendarListView.tsx` (Listen- & Agenda-Ansicht für Termine/Dienste inkl. Admin-Cockpit, SmartLogistics und LocalStorage-Persistenz).
+  * `components/CalendarAgendaView.tsx` (Eigenständiger Spielplan im Karten-Look mit Sticky-Toolbar-Filter und LocalStorage-Persistenz).
+  * `components/EventPollWidget.tsx` (Live-Abstimmungen in Terminen und Agenden).
+  * `EventDetailView.tsx`, `ProtocolEditor.tsx`, `EventsView.tsx`, `EventAgendaList.tsx`, `EventDetailHeader.tsx`, `EventTemplateSidebar.tsx`, `PublicCalendarEmbed.tsx`.
+  * Modals in `src/features/Events/`: `CalendarBulkEventModal.tsx`, `CalendarEventFormModal.tsx`, `CalendarExportModal.tsx`, `CalendarIcsDetailModal.tsx`, `CalendarSubscriptionModal.tsx`, `EventFormModal.tsx`.
+  * `hooks/useCalendarEvents.ts`.
+* **Help (`src/features/Help/`):** `HelpView.tsx` (Integriertes Handbuch mit Leitfaden zu Filtern, Rollen und Admin-Cockpit).
+* **Layout (`src/features/Layout/`):** `AppLayout.tsx` (Responsive Shell, Navigation & Backup-Reminder-Banner).
+* **Reminders (`src/features/Reminders/`):** `RemindersView.tsx` (WhatsApp-Kommandozentrale, Snooze-Logik & Auto-Kader Generator).
 * **Reports (`src/features/Reports/`):** 
-  * `ReportsView.tsx` (Statistik, Fristen-Radar & Data Explorer).
+  * `ReportsView.tsx` (Hauptansicht für Auswertungen & Datensicherung).
+  * `ReportsDashboardTab.tsx` (Statistik & Fristen-Radar).
+  * `DataExplorerTab.tsx` & `ColumnMappingPopover.tsx` (Tabellarischer Daten-Explorer & Spalten-Konfiguration).
   * `BackupRestoreTab.tsx` (UI für Datensicherung & Test-Datenbank Klonen).
 * **Tasks (`src/features/Tasks/`):** `TasksView.tsx`, `KanbanBoard.tsx`, `TasksListView.tsx`, `TaskCard.tsx`, `TasksToolbar.tsx`, `TaskHistoryModal.tsx`.
-* **TeamPins:** `TeamPinsView.tsx` (Wettkampf-Tresor & PIN-Freigabe).
-* **Templates:** `TemplatesView.tsx` (Vorlagen-Management).
+* **TeamPins (`src/features/TeamPins/`):** `TeamPinsView.tsx` (Wettkampf-Tresor & PIN-Freigabe).
+* **Templates (`src/features/Templates/`):** `TemplatesView.tsx` (Vorlagen-Management).
 * **Users & Aufstellungsplanung (`src/features/Users/`):** 
   * `UsersView.tsx`, `MyProfileModal.tsx`, `RoleMatrixModal.tsx`.
   * `tabs/`: `AppUserTab.tsx`, `EhrungenTab.tsx`, `MitgliederTab.tsx`, `RollenTab.tsx`, `TeamsTab.tsx`, `VorstandTab.tsx`.
-  * `components/`: `EditableCell.tsx`, `MatchLineupLogisticsRow.tsx` (Universelle Logistik-Kommandozentrale für Fahrer & Betreuer ohne Emoji-Clutter auf Desktop), `MatchLineupMatrixTable.tsx`, `QuickAddHelperRow.tsx`.
-  * `modals/`: `CsvImportModal.tsx`, `GroupFormModal.tsx`, `HelperFormModal.tsx`, `MatchLineupMatrixModal.tsx` (Base & Override Planungs-Matrix für Captains), `TeamFormModal.tsx`, `UserFormModal.tsx`, `UserSuccessionModal.tsx`.
-  * `hooks/`: `useMatchLineupMatrix.ts`.
+  * `components/`: `EditableCell.tsx`, `MatchLineupCardsView.tsx` (Mobile/Karten-Ansicht für Aufstellungen), `MatchLineupLogisticsRow.tsx` (Logistik-Kommandozentrale für Fahrer, Betreuer & Abfahrtszeit), `MatchLineupMatrixTable.tsx`, `QuickAddHelperRow.tsx`.
+  * Modals in `src/features/Users/`: `CsvImportModal.tsx`, `GroupFormModal.tsx`, `HelperFormModal.tsx`, `MatchLineupMatrixModal.tsx` (Base & Override Planungs-Matrix für Captains), `TeamFormModal.tsx`, `UserFormModal.tsx`, `UserSuccessionModal.tsx`.
+  * `hooks/useMatchLineupMatrix.ts`.
 * **Shared UI & Utils (`src/features/Shared/`):** 
-  * `ItemFormModal.tsx`, `AgendaItemRow.tsx`, `ItemCard.tsx`, `RichText.tsx`, `SmartEntityPicker.tsx`.
+  * `ItemFormModal.tsx`, `AgendaItemRow.tsx`, `ItemCard.tsx`, `RichText.tsx`.
+  * `components/SmartEntityPicker.tsx`.
   * `components/AgendaItem/`: `InlineEditors.tsx`, `ItemMetadata.tsx`, `ItemStatusSection.tsx`, `RowContextMenu.tsx`.
   * `components/ItemForm/`: `AssigneePicker.tsx`, `ReminderSettings.tsx`, `RoutineSettings.tsx`.
-  * `utils/`: `textUtils.tsx`.
+  * `utils/textUtils.tsx`.
 
 ---
 
@@ -326,9 +343,9 @@ Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der e
 
 1.  **Repository klonen**
 2.  `npm install` ausführen.
-3.  **Firebase konfigurieren:** Die Datei `src/services/firebase.ts` erwartet Umgebungsvariablen. Erstelle eine `.env.local` im Root mit den `VITE_FIREBASE_...` Keys.
-4.  `npm run dev` startet den lokalen Vite-Server.
+3.  **Firebase konfigurieren:** Die Datei `src/services/firebase.ts` erwartet Umgebungsvariablen. Erstelle eine `.env.local` (bzw. `.env.development` / `.env.production`) im Root mit den `VITE_FIREBASE_...` Keys.
+4.  `npm run dev` startet den lokalen Vite-Server (oder per Doppelklick auf `node starten.command`).
 5.  `npm run build` führt einen strengen TypeScript Check (`tsc -b`) aus und baut das Production-Bundle.
 
-*Stand: 17.10.2026 - Protokoll: Ghost-Data Prävention, Explicit Empty Array Rule, Dynamische Team-Referenzierung im SmartEntityPicker*
+*Stand: 18.10.2026 - Protokoll: Vollständiger Code-Sync (Tech-Stack, 4-Wege-Zuweisung, RBAC inkl. Jugend-Firewall, alle 12 Collections & aktuelles Datei-Lexikon)*
 // --- END OF FILE ---
