@@ -1,3 +1,4 @@
+// [2026-10-18] - UX-FEATURE: Abo-Namen (z.B. H1, J1) direkt mit Leerzeichen nach dem Heim-/Auswärts-Icon in den Begegnungstitel integriert (z.B. "🏠 H1 SC Maisach - ...").
 // [2026-10-18] - BUGFIX: TypeScript-Check (TS2339) in useCalendarEvents behoben – nutzt nun offiziell reminderRecipientUserIds & reminderRecipientHelperIds auf CalendarEvent.
 // [2026-10-18] - UX-FEATURE: Persönliche Einsatz-Erkennung (isMyAssignment & myAssignmentIcons: 🏓, 🚗, 📋, ☕) für den eingeloggten Nutzer in useCalendarEvents integriert.
 // [2026-10-14] - BUGFIX: Unused import 'generateStableEventId' removed to fix TS6133 build error.
@@ -139,6 +140,7 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
     const cachedExternalEvents = calendarSubscriptions.filter(sub => sub.isActive && sub.cachedEvents).flatMap(sub => {
       const teamId = sub.reminderRecipientTeamIds?.[0];
       const team = teamId ? teams.find(t => t.id === teamId) : null;
+      const subPrefix = sub.name ? `${sub.name.trim()} ` : '';
 
       return sub.cachedEvents!.map((ev, index) => {
         const isHeim = ev.location?.toLowerCase().includes('maisach');
@@ -169,7 +171,7 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
         return {
           id: `ics-${sub.id}-${ev.uid}-${index}`, 
           sourceId: sub.id, 
-          title: `${matchPrefix}${ev.title}`, 
+          title: `${matchPrefix}${subPrefix}${ev.title}`, 
           description: ev.description || '', 
           location: ev.location || '',
           start: new Date(ev.startTime), 
@@ -190,6 +192,7 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
         const teamId = sub.reminderRecipientTeamIds?.[0];
         const team = teamId ? teams.find(t => t.id === teamId) : null;
         if (!team || (!team.requiresBetreuer && !team.requiresFahrer)) return;
+        const subPrefix = sub.name ? `${sub.name.trim()} ` : '';
 
         sub.cachedEvents.forEach((ev, index) => {
             const isHeim = ev.location?.toLowerCase().includes('maisach');
@@ -207,7 +210,7 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
             logisticsEvents.push({
                 id: `logistics-${sub.id}-${ev.uid}-${index}`,
                 sourceId: sub.id, 
-                title: `${matchPrefix}${ev.title}`,
+                title: `${matchPrefix}${subPrefix}${ev.title}`,
                 description: ev.description || '',
                 location: ev.location || '',
                 start: new Date(ev.startTime),

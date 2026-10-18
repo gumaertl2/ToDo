@@ -1,3 +1,4 @@
+// [2026-10-18] - UX-FEATURE: Kompass-Zähler ("Termine", "Dienste", "fällige Aufgaben") im WelcomeDashboard als klickbare Smooth-Scroll-Sprungmarken zu den jeweiligen Kacheln ausgebaut (ideal für Mobile).
 // [2026-10-12] - REFACTOR: WelcomeDashboard massiv verschlankt. Komplette Daten-Logik (useDashboardData) und UI-Blöcke in eigenständige Dateien/Widgets ausgelagert.
 // [2026-10-11] - UX-FEATURE: Fahrer und Abfahrtszeit (departureTime) direkt in den Termin-Karten des Dashboards integriert. Bei fehlender Zeit wird bewusst keine Platzhalterzeit angezeigt.
 // [2026-10-09] - BUGFIX: Deep-Link Architektur repariert. Dashboard sendet nun saubere Datenpakete (openEventSubId, openEventUid) für Abos und Logistik an den Kalender, um Race Conditions beim String-Parsing zu vermeiden.
@@ -6,7 +7,7 @@
 // [2026-10-09] - FEATURE: Logistik-Engine im Dashboard ergänzt. Das Dashboard scannt nun alle MatchLineup-Schattenakten und blendet zugewiesene Fahrer/Betreuer-Dienste vollautomatisch unter "Meine Dienste" als Action-Card ein.
 // [2026-06-11] - ARCHITEKTUR-UPGRADE: WelcomeDashboard zur Kommandozentrale ausgebaut. "Nächste Sitzungen" und WhatsApp-Erinnerungen integriert. 
 // src/features/Dashboard/WelcomeDashboard.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MessageCircle } from 'lucide-react';
 import { useClubStore } from '../../store/useClubStore';
@@ -26,6 +27,14 @@ export const WelcomeDashboard: React.FC = () => {
 
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Task | null>(null);
+
+  const eventsSectionRef = useRef<HTMLDivElement>(null);
+  const servicesSectionRef = useRef<HTMLDivElement>(null);
+  const tasksSectionRef = useRef<HTMLDivElement>(null);
+
+  const scrollToSection = (ref: React.RefObject<HTMLDivElement | null>) => {
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   // --- DYNAMISCHE LOOKAHEAD STATES (mit LocalStorage Persistenz) ---
   const [eventsLookahead, setEventsLookahead] = useState<number>(() => {
@@ -93,14 +102,45 @@ export const WelcomeDashboard: React.FC = () => {
         <div className="mb-8">
           <h1 className="text-3xl sm:text-4xl font-black text-gray-900 tracking-tight">Hallo {user?.name.split(' ')[0] || 'Gast'}! 👋</h1>
           <p className="text-lg text-gray-600 mt-2">
-            Hier ist dein Kompass. In deinem eingestellten Zeitraum stehen <strong className="text-blue-600">{upcomingEvents.length} Termine</strong>
+            Hier ist dein Kompass. In deinem eingestellten Zeitraum stehen{' '}
+            <button
+              type="button"
+              onClick={() => scrollToSection(eventsSectionRef)}
+              className="font-bold text-blue-600 underline decoration-blue-300 underline-offset-4 hover:text-blue-800 hover:decoration-blue-600 transition-colors cursor-pointer"
+            >
+              {upcomingEvents.length} Termine
+            </button>
             {isAppUser ? (
               <>
-                , <strong className="text-purple-600">{totalServicesCount} Dienste</strong> und <strong className="text-red-600">{myTasks.length} fällige Aufgaben</strong> für dich an.
+                ,{' '}
+                <button
+                  type="button"
+                  onClick={() => scrollToSection(servicesSectionRef)}
+                  className="font-bold text-purple-600 underline decoration-purple-300 underline-offset-4 hover:text-purple-800 hover:decoration-purple-600 transition-colors cursor-pointer"
+                >
+                  {totalServicesCount} Dienste
+                </button>{' '}
+                und{' '}
+                <button
+                  type="button"
+                  onClick={() => scrollToSection(tasksSectionRef)}
+                  className="font-bold text-red-600 underline decoration-red-300 underline-offset-4 hover:text-red-800 hover:decoration-red-600 transition-colors cursor-pointer"
+                >
+                  {myTasks.length} fällige Aufgaben
+                </button>{' '}
+                für dich an.
               </>
             ) : (
               <>
-                {' '}und <strong className="text-purple-600">{totalServicesCount} Dienste</strong> für dich an.
+                {' '}und{' '}
+                <button
+                  type="button"
+                  onClick={() => scrollToSection(servicesSectionRef)}
+                  className="font-bold text-purple-600 underline decoration-purple-300 underline-offset-4 hover:text-purple-800 hover:decoration-purple-600 transition-colors cursor-pointer"
+                >
+                  {totalServicesCount} Dienste
+                </button>{' '}
+                für dich an.
               </>
             )}
           </p>
@@ -134,22 +174,26 @@ export const WelcomeDashboard: React.FC = () => {
           {/* LINKE SPALTE */}
           <div className={`${isAppUser ? 'lg:col-span-7' : 'w-full max-w-3xl'} space-y-8`}>
             
-            <DashboardEventsWidget 
-              eventsLookahead={eventsLookahead}
-              onLookaheadChange={handleLookaheadChange(setEventsLookahead)}
-              upcomingEvents={upcomingEvents}
-              formatDate={formatDate}
-            />
+            <div ref={eventsSectionRef} className="scroll-mt-4">
+              <DashboardEventsWidget 
+                eventsLookahead={eventsLookahead}
+                onLookaheadChange={handleLookaheadChange(setEventsLookahead)}
+                upcomingEvents={upcomingEvents}
+                formatDate={formatDate}
+              />
+            </div>
 
-            <DashboardServicesWidget 
-              servicesLookahead={servicesLookahead}
-              onLookaheadChange={handleLookaheadChange(setServicesLookahead)}
-              onToggleServicesLookahead={handleToggleServicesLookahead}
-              totalServicesCount={totalServicesCount}
-              upcomingServices={upcomingServices}
-              myLogisticsDuties={myLogisticsDuties}
-              formatDate={formatDate}
-            />
+            <div ref={servicesSectionRef} className="scroll-mt-4">
+              <DashboardServicesWidget 
+                servicesLookahead={servicesLookahead}
+                onLookaheadChange={handleLookaheadChange(setServicesLookahead)}
+                onToggleServicesLookahead={handleToggleServicesLookahead}
+                totalServicesCount={totalServicesCount}
+                upcomingServices={upcomingServices}
+                myLogisticsDuties={myLogisticsDuties}
+                formatDate={formatDate}
+              />
+            </div>
             
             {isAppUser && (
               <DashboardSessionsWidget 
@@ -161,7 +205,7 @@ export const WelcomeDashboard: React.FC = () => {
 
           {/* RECHTE SPALTE (ToDos) */}
           {isAppUser && (
-            <div className="lg:col-span-5">
+            <div ref={tasksSectionRef} className="lg:col-span-5 scroll-mt-4">
               <DashboardTasksWidget 
                 tasksLookahead={tasksLookahead}
                 onLookaheadChange={handleLookaheadChange(setTasksLookahead)}
