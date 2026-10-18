@@ -1,3 +1,4 @@
+// [2026-10-18] - UX-SIMPLIFICATION: Registrieren- und Passwort-vergessen-Ballast entfernt. Lässt ein Nutzer beim Klick auf "Mit E-Mail anmelden" das Passwort-Feld leer, legt die App ihn (falls neu) automatisch im Hintergrund an und sendet sofort den Link zum Passwort-Erstellen.
 // [2026-10-06] - BUGFIX: Auto-Redirect (useEffect) hinzugefügt, falls der Nutzer im Hintergrund via Magic Link eingeloggt wird, aber noch auf der Maske festhängt.
 // [2026-10-06] - FEATURE: Magic Link Modus (Passwortloser Login via E-Mail) in die Login-Maske integriert.
 // 2026-04-24 10:30 - UX-FIX: Benutzerführung für E-Mail-Verifizierung nach Registrierung optimiert
@@ -23,13 +24,11 @@ export const LoginView: React.FC = () => {
   const [isTrusted, setIsTrusted] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [isMagicLinkMode, setIsMagicLinkMode] = useState(false);
   const [resetMessage, setResetMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const navigate = useNavigate();
-  const { login, register, resetPassword, sendMagicLink, isAuthenticated } = useClubStore();
+  const { login, resetPassword, sendMagicLink, isAuthenticated } = useClubStore();
 
-  // ---> CHIRURGISCHER EINGRIFF: Auto-Redirect <---
   // Sobald der Magic Link im Hintergrund erfolgreich war, werfen wir den Nutzer sofort in die App!
   useEffect(() => {
     if (isAuthenticated) {
@@ -46,12 +45,19 @@ export const LoginView: React.FC = () => {
     e.preventDefault();
     setError(null);
     setResetMessage(null);
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setError('Bitte gib deine E-Mail-Adresse ein.');
+      return;
+    }
+
     setIsLoading(true);
     try {
       await handlePersistence();
 
       if (isMagicLinkMode) {
-        const result = await sendMagicLink(email.trim());
+        const result = await sendMagicLink(trimmedEmail);
         if (!result.success) {
           const errorMsg = result.error?.message || '';
           if (errorMsg.includes('auth/network-request-failed')) {
@@ -68,10 +74,27 @@ export const LoginView: React.FC = () => {
         return;
       }
 
-      const result = isRegisterMode 
-        ? await register(email.trim(), password)
-        : await login(email.trim(), password);
-        
+      // POKA-YOKE: Kein Passwort eingegeben (Neuer Kamerad oder Passwort vergessen) -> Automatisch Passwort-Link senden!
+      if (!password.trim()) {
+        const resetResult = await resetPassword(trimmedEmail);
+        if (resetResult.success) {
+          setResetMessage({
+            type: 'success',
+            text: 'Wir haben dir einen Link an deine E-Mail gesendet! Öffne die E-Mail und klicke auf den Link, um dein neues Passwort festzulegen.'
+          });
+        } else {
+          const errorMsg = resetResult.error?.message || '';
+          if (errorMsg.includes('auth/network-request-failed')) {
+            setError('Du bist offline! Bitte schalte dein WLAN oder mobile Daten ein.');
+          } else {
+            setError('Fehler: ' + (errorMsg || 'Passwort-Link konnte nicht gesendet werden.'));
+          }
+        }
+        return;
+      }
+
+      // Normale Anmeldung mit E-Mail + Passwort
+      const result = await login(trimmedEmail, password);
       if (!result.success) {
         const errorMsg = result.error?.message || '';
         if (errorMsg.includes('auth/network-request-failed')) {
@@ -79,13 +102,6 @@ export const LoginView: React.FC = () => {
         } else {
           setError(errorMsg || 'Ein Fehler ist aufgetreten.');
         }
-      } else if (isRegisterMode) {
-        setResetMessage({ 
-          type: 'success', 
-          text: 'Erfolgreich registriert! Wir haben dir einen Bestätigungslink gesendet. Bitte prüfe dein Postfach und klicke auf den Link, bevor du dich einloggst.' 
-        });
-        setIsRegisterMode(false);
-        setPassword('');
       } else {
         navigate('/');
       }
@@ -119,27 +135,6 @@ export const LoginView: React.FC = () => {
     }
   };
 
-  const handlePasswordReset = async () => {
-    setResetMessage(null);
-    if (!email.trim()) {
-      setResetMessage({ type: 'error', text: 'Bitte gib zuerst deine E-Mail-Adresse oben in das Feld ein.' });
-      return;
-    }
-    setIsLoading(true);
-    const result = await resetPassword(email.trim());
-    setIsLoading(false);
-    if (result.success) {
-      setResetMessage({ type: 'success', text: 'Ein Link zum Setzen des Passworts wurde an deine E-Mail gesendet!' });
-    } else {
-      const errorMsg = result.error?.message || '';
-      if (errorMsg.includes('auth/network-request-failed')) {
-        setResetMessage({ type: 'error', text: 'Du bist offline! Bitte schalte dein WLAN ein.' });
-      } else {
-        setResetMessage({ type: 'error', text: 'Fehler: ' + (errorMsg || 'Link konnte nicht gesendet werden.') });
-      }
-    }
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg">
@@ -160,6 +155,7 @@ export const LoginView: React.FC = () => {
             <input
               type="email"
               required
+              placeholder="deine.email@beispiel.de"
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500 outline-none"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -172,12 +168,15 @@ export const LoginView: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700">Passwort</label>
               <input
                 type="password"
-                required
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500 outline-none"
+                placeholder="Leer lassen, falls neu oder vergessen"
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500 outline-none placeholder:text-gray-400 placeholder:text-xs sm:placeholder:text-sm"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}
               />
+              <p className="mt-1 text-xs text-gray-500">
+                Neu hier oder Passwort vergessen? Lass das Feld einfach leer und klicke auf Anmelden.
+              </p>
             </div>
           )}
 
@@ -198,66 +197,35 @@ export const LoginView: React.FC = () => {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition"
+            className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition cursor-pointer"
           >
             {isLoading 
               ? 'Lädt...' 
-              : (isMagicLinkMode 
-                  ? '✨ Magic Link senden' 
-                  : (isRegisterMode ? 'Registrieren & E-Mail bestätigen' : 'Mit E-Mail Anmelden'))}
+              : (isMagicLinkMode ? '✨ Magic Link senden' : 'Mit E-Mail Anmelden')}
           </button>
         </form>
 
-        {isMagicLinkMode ? (
-          <div className="text-center mt-4 border-t border-gray-200 pt-4">
+        <div className="text-center mt-4 border-t border-gray-200 pt-4">
+          {isMagicLinkMode ? (
             <button 
               type="button" 
               onClick={() => { setIsMagicLinkMode(false); setError(null); setResetMessage(null); }} 
-              className="text-sm font-bold text-blue-600 hover:text-blue-800 hover:underline transition"
+              className="text-sm font-bold text-blue-600 hover:text-blue-800 hover:underline transition cursor-pointer"
               disabled={isLoading}
             >
               Doch lieber mit Passwort anmelden
             </button>
-          </div>
-        ) : (
-          <>
-            <div className="text-center mt-4 border-t border-gray-200 pt-4">
-              <p className="text-sm text-gray-600 mb-2">
-                {isRegisterMode ? 'Bereits registriert?' : 'Vom Admin neu angelegt?'}
-              </p>
-              <button 
-                type="button" 
-                onClick={() => { setIsRegisterMode(!isRegisterMode); setError(null); setResetMessage(null); }} 
-                className="text-sm font-bold text-blue-600 hover:text-blue-800 hover:underline transition"
-                disabled={isLoading}
-              >
-                {isRegisterMode ? 'Hier ganz normal Einloggen' : 'Hier mit neuer E-Mail registrieren'}
-              </button>
-            </div>
-
-            <div className="text-center mt-3 flex flex-col gap-2">
-              {!isRegisterMode && (
-                <button 
-                  type="button" 
-                  onClick={() => { setIsMagicLinkMode(true); setError(null); setResetMessage(null); }} 
-                  disabled={isLoading}
-                  className="text-sm font-bold text-indigo-600 hover:text-indigo-800 hover:underline transition"
-                >
-                  ✨ Ohne Passwort einloggen (Magic Link)
-                </button>
-              )}
-
-              <button 
-                type="button" 
-                onClick={handlePasswordReset} 
-                disabled={isLoading}
-                className="text-sm text-blue-600 hover:text-blue-800 hover:underline font-medium disabled:opacity-50"
-              >
-                Passwort vergessen / Erstes Passwort setzen?
-              </button>
-            </div>
-          </>
-        )}
+          ) : (
+            <button 
+              type="button" 
+              onClick={() => { setIsMagicLinkMode(true); setError(null); setResetMessage(null); }} 
+              disabled={isLoading}
+              className="text-sm font-bold text-indigo-600 hover:text-indigo-800 hover:underline transition cursor-pointer"
+            >
+              ✨ Ohne Passwort einloggen (Magic Link)
+            </button>
+          )}
+        </div>
 
         <div className="mt-6">
           <div className="relative">
@@ -272,7 +240,7 @@ export const LoginView: React.FC = () => {
             <button
               onClick={handleGoogleLogin}
               disabled={isLoading}
-              className="w-full flex justify-center py-2.5 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-bold text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 transition"
+              className="w-full flex justify-center py-2.5 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-bold text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 transition cursor-pointer"
             >
               Mit Google anmelden
             </button>

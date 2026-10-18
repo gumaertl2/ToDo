@@ -1,3 +1,4 @@
+// [2026-10-18] - UX-FEATURE: Auto-Account-Provisioning in resetPassword integriert. Existiert eine E-Mail noch nicht in Firebase Auth, wird der Account unsichtbar im Hintergrund angelegt und sofort der Passwort-Erstellen-Link per E-Mail versendet.
 // [2026-10-17] - BUGFIX: Alle unsub-Listener-Variablen beim Logout explizit auf null gesetzt, um Re-Login Blockaden durch Early-Return zu verhindern.
 // [2026-10-06] - UX-FIX: E-Mail als URL-Parameter im Magic Link übergeben, um das window.prompt bei leerem localStorage (z.B. Inkognito) zu umgehen.
 // [2026-10-06] - UX-FIX: Stummen Türsteher gesprächig gemacht. Schlägt der Magic Link oder die Profil-Prüfung fehl, wird nun ein sichtbares window.alert ausgegeben.
@@ -35,6 +36,9 @@ export interface AuthSlice {
   resetPassword: (email: string) => Promise<Result<void>>;
   sendMagicLink: (email: string) => Promise<Result<void>>;
 }
+
+// Blockiert während der unsichtbaren Hintergrund-Account-Anlage kurzzeitig den onAuthStateChanged-Listener
+let isSilentProvisioning = false;
 
 async function resolveUserProfile(firebaseUser: { uid: string, email: string | null }): Promise<User | null> {
   if (!firebaseUser.email) return null;
@@ -137,6 +141,10 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
     }
 
     onAuthStateChanged(auth, async (firebaseUser) => {
+      if (isSilentProvisioning) {
+        return;
+      }
+
       if (isProcessingMagicLink && !firebaseUser) {
         return;
       }
@@ -211,7 +219,13 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
 
       set({ user: userData, isAuthenticated: true });
       return { success: true, data: userData };
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.code === 'auth/invalid-credential' || e?.code === 'auth/wrong-password' || e?.code === 'auth/user-not-found') {
+        return {
+          success: false,
+          error: new Error('Passwort falsch oder noch keines vergeben. Tipp: Lass das Passwort-Feld einfach leer und klicke nochmal auf den Button, um dir einen Link für ein neues Passwort per E-Mail zu senden!')
+        };
+      }
       return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
     }
   },
@@ -277,10 +291,28 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
   },
 
   resetPassword: async (email) => {
+    const normalizedEmail = email.toLowerCase().trim();
     try {
-      await sendPasswordResetEmail(auth, email);
+      // 1. Versuchen, den Account im Hintergrund anzulegen, falls der Nutzer komplett neu ist
+      isSilentProvisioning = true;
+      const randomInitPassword = `Init!${Math.random().toString(36).slice(2)}_${Date.now()}A9#`;
+      try {
+        await createUserWithEmailAndPassword(auth, normalizedEmail, randomInitPassword);
+        await signOut(auth);
+      } catch (createErr: any) {
+        // Wenn 'auth/email-already-in-use', existiert der Account bereits -> perfekt, weiter zu Schritt 2!
+        if (createErr?.code !== 'auth/email-already-in-use') {
+          throw createErr;
+        }
+      } finally {
+        isSilentProvisioning = false;
+      }
+
+      // 2. Offiziellen Passwort-Erstellen / Passwort-Reset Link per E-Mail senden
+      await sendPasswordResetEmail(auth, normalizedEmail);
       return { success: true, data: undefined };
     } catch (e) {
+      isSilentProvisioning = false;
       return { success: false, error: e instanceof Error ? e : new Error(String(e)) };
     }
   },
