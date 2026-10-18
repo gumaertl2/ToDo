@@ -1,3 +1,4 @@
+// [2026-10-18] - SYNC: Badge-Zähler (reminderCounts) in der Seitenleiste 1:1 mit useRemindersData synchronisiert (Erledigt-Filter, Überfällig-Regel für offene Aufgaben, Strikte Mitternachtsregel für Termine & auto-Absender-Auflösung).
 // [2026-10-17] - OPTIMIZATION: visibilitychange Listener entfernt, um Firebase Lesezugriffe (Free-Tier) drastisch zu reduzieren und Offline-Hänger zu verhindern.
 // [2026-10-15] - FEATURE: Projekt-ID (Datenbank) als Mouseover beim Logo und dauerhaft im Footer (neben der Build-Version) integriert, um Test- und Prod-Umgebung sofort unterscheiden zu können.
 // [2026-10-15] - FIX: Import-Pfad für backupService auf '../../services/backupService' korrigiert.
@@ -134,7 +135,13 @@ export const AppLayout: React.FC = () => {
     const MS_PER_DAY = 1000 * 60 * 60 * 24;
     
     const userGroupIds = user.groupIds || [];
-    const myHelperId = helpers?.find(h => h.email?.toLowerCase() === user.email?.toLowerCase())?.id;
+    const myHelper = helpers?.find(h => h.email?.toLowerCase() === user.email?.toLowerCase());
+    const myHelperId = myHelper?.id;
+    const myTeamIds = myHelper?.teamIds || [];
+
+    const resolveSenderId = (rawSenderId: string, fallbackUserIds?: string[]) => {
+      return rawSenderId === 'auto' ? (fallbackUserIds?.[0] || 'auto') : rawSenderId;
+    };
 
     if (calendarEvents) {
       calendarEvents.forEach(ce => {
@@ -144,7 +151,7 @@ export const AppLayout: React.FC = () => {
           const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
           const stichtag = eventDateStart - (leadDays * MS_PER_DAY);
 
-          // FIX: Nur zählen, wenn in Zukunft
+          // Strikte Mitternachtsregel für Kalendertermine & Dienste
           if (todayStart >= stichtag && todayStart <= eventDateStart) {
             allCount++;
             
@@ -159,9 +166,16 @@ export const AppLayout: React.FC = () => {
                 );
                 if (helper && helper.id === myHelperId) isRecipient = true;
               }
+            } else {
+              const isDirectRecipient = ce.reminderRecipientUserIds?.includes(user.id);
+              const isGroupRecipient = ce.reminderRecipientGroupIds?.some(id => userGroupIds.includes(id));
+              const isTeamRecipient = ce.reminderRecipientTeamIds?.some(id => myTeamIds.includes(id));
+              const isHelperRecipient = myHelperId && ce.reminderRecipientHelperIds?.includes(myHelperId);
+              isRecipient = !!(isDirectRecipient || isGroupRecipient || isTeamRecipient || isHelperRecipient);
             }
 
-            if (ce.reminderSenderUserId === user.id || isRecipient) myCount++;
+            const effectiveSenderId = resolveSenderId(ce.reminderSenderUserId, ce.reminderRecipientUserIds);
+            if (effectiveSenderId === user.id || isRecipient) myCount++;
           }
         }
       });
@@ -169,12 +183,14 @@ export const AppLayout: React.FC = () => {
 
     if (allAgendaItems) {
       allAgendaItems.forEach(t => {
-        if (t.isTemplate || t.reminderSentAt || !t.reminderSenderUserId || !t.dueDate || t.status === 'TRASH') return;
+        if (t.isTemplate || t.reminderSentAt || !t.reminderSenderUserId || !t.dueDate) return;
+        if (t.status === 'ERLEDIGT' || t.progress === 100 || t.status === 'TRASH' || t.isHistorical) return;
 
         if (t.eventId) {
           const parentEvent = events?.find(e => e.id === t.eventId);
-          if (parentEvent && parentEvent.status === 'PLANUNG' && !parentEvent.isPublished) return;
-          if (parentEvent && (parentEvent.status === 'ABGESCHLOSSEN' || parentEvent.isArchived)) return;
+          if (!parentEvent) return;
+          if (parentEvent.status === 'PLANUNG' && !parentEvent.isPublished) return;
+          if (parentEvent.status === 'ABGESCHLOSSEN' || parentEvent.isArchived) return;
         }
 
         if (t.isSubItem && t.parentItemId) {
@@ -182,26 +198,30 @@ export const AppLayout: React.FC = () => {
           if (parentTask && parentTask.status === 'ERLEDIGT') return;
         }
 
+        const isTask = !t.type || t.type === 'AUFGABE';
         const leadDays = Number(t.reminderLeadDays) || 0;
         const taskDue = new Date(t.dueDate);
         const taskDateStart = new Date(taskDue.getFullYear(), taskDue.getMonth(), taskDue.getDate()).getTime();
         const stichtag = taskDateStart - (leadDays * MS_PER_DAY);
         
-        // FIX: Nur zählen, wenn in Zukunft
-        if (todayStart >= stichtag && todayStart <= taskDateStart) {
+        // Offene Aufgaben bleiben auch nach Fälligkeit (Überfällig) sichtbar, Nicht-Aufgaben nutzen die Mitternachtsregel
+        const isDue = isTask ? (todayStart >= stichtag) : (todayStart >= stichtag && todayStart <= taskDateStart);
+        if (isDue) {
           allCount++;
           const isDirectRecipient = t.assigneeUserIds?.includes(user.id);
           const isGroupRecipient = t.assigneeGroupIds?.some(gId => userGroupIds.includes(gId));
+          const isTeamRecipient = t.assigneeTeamIds?.some(tId => myTeamIds.includes(tId));
           const isHelperRecipient = myHelperId && t.assigneeHelperIds?.includes(myHelperId);
+          const effectiveSenderId = resolveSenderId(t.reminderSenderUserId, t.assigneeUserIds);
           
-          if (t.reminderSenderUserId === user.id || isDirectRecipient || isGroupRecipient || isHelperRecipient) myCount++;
+          if (effectiveSenderId === user.id || isDirectRecipient || isGroupRecipient || isTeamRecipient || isHelperRecipient) myCount++;
         }
       });
     }
 
     if (events) {
       events.forEach(ev => {
-        const isReadyForReminder = ev.status !== 'PLANUNG' || ev.isPublished;
+        const isReadyForReminder = ev.status !== 'PLANUNG' || ev.isPublished === true;
         
         if (isReadyForReminder && ev.status !== 'ABGESCHLOSSEN' && ev.reminderSenderUserId && !ev.reminderSentAt && ev.plannedStartTime) {
           const leadDays = Number(ev.reminderLeadDays) || 0;
@@ -209,13 +229,16 @@ export const AppLayout: React.FC = () => {
           const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
           const stichtag = eventDateStart - (leadDays * MS_PER_DAY);
           
-          // FIX: Nur zählen, wenn in Zukunft
+          // Strikte Mitternachtsregel für Sitzungen
           if (todayStart >= stichtag && todayStart <= eventDateStart) {
             allCount++;
             const isDirectRecipient = ev.participantUserIds?.includes(user.id);
             const isGroupRecipient = ev.participantGroupIds?.some(gId => userGroupIds.includes(gId));
+            const isTeamRecipient = ev.participantTeamIds?.some(tId => myTeamIds.includes(tId));
+            const isHelperRecipient = myHelperId && ev.participantHelperIds?.includes(myHelperId);
+            const effectiveSenderId = resolveSenderId(ev.reminderSenderUserId, ev.participantUserIds);
             
-            if (ev.reminderSenderUserId === user.id || isDirectRecipient || isGroupRecipient) myCount++;
+            if (effectiveSenderId === user.id || isDirectRecipient || isGroupRecipient || isTeamRecipient || isHelperRecipient) myCount++;
           }
         }
       });
@@ -231,10 +254,16 @@ export const AppLayout: React.FC = () => {
               const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
               const stichtag = eventDateStart - (leadDays * MS_PER_DAY);
               
-              // FIX: Nur zählen, wenn in Zukunft
+              // Strikte Mitternachtsregel für Abo-Termine
               if (todayStart >= stichtag && todayStart <= eventDateStart) {
                 allCount++;
-                if (sub.reminderSenderUserId === user.id) myCount++;
+                const isDirectRecipient = sub.reminderRecipientUserIds?.includes(user.id);
+                const isGroupRecipient = sub.reminderRecipientGroupIds?.some(gId => userGroupIds.includes(gId));
+                const isTeamRecipient = sub.reminderRecipientTeamIds?.some(tId => myTeamIds.includes(tId));
+                const isHelperRecipient = myHelperId && sub.reminderRecipientHelperIds?.includes(myHelperId);
+                const effectiveSenderId = resolveSenderId(sub.reminderSenderUserId, sub.reminderRecipientUserIds);
+
+                if (effectiveSenderId === user.id || isDirectRecipient || isGroupRecipient || isTeamRecipient || isHelperRecipient) myCount++;
               }
             }
           });

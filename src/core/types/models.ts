@@ -1,3 +1,4 @@
+// [2026-10-18] - SCHEMA: Optionale Audit-Felder 'reminderSentBy' und 'reminderAction' ('SENT' | 'DISMISSED') für nachvollziehbaren Erinnerungs-Verlauf ergänzt.
 // [2026-10-15] - FEATURE: Optionales Feld 'receiveBackupReminder' im User-Modell ergänzt (steuert das tägliche 12:00-Uhr Backup-Hinweisbanner).
 // [2026-10-12] - FEATURE: Feld 'homeArenaAddress' (Heimhalle / Treffpunkt) im Team-Modell hinzugefügt (für Google Maps Routing).
 // [2026-10-12] - FEATURE: Feld 'rankingUrl' zum TeamPin-Modell hinzugefügt (für Ranglisten/Tabellen-Links in der Detailansicht).
@@ -182,6 +183,8 @@ export interface ClubEvent extends BaseDocument {
   reminderSenderUserId?: string;  
   reminderLeadDays?: number;      
   reminderSentAt?: number;        
+  reminderSentBy?: string;
+  reminderAction?: 'SENT' | 'DISMISSED';
   reminderCustomText?: string;    
   isPublished: boolean; 
   isPublic?: boolean; 
@@ -243,6 +246,8 @@ export interface AgendaItem extends BaseDocument {
   reminderSenderUserId?: string;  
   reminderLeadDays?: number;      
   reminderSentAt?: number;        
+  reminderSentBy?: string;
+  reminderAction?: 'SENT' | 'DISMISSED';
   comments: ItemComment[];
   checkliste: { id: string; text: string; isDone: boolean }[];
   
@@ -281,6 +286,8 @@ export interface CachedIcsEvent {
   endTime: number;
   isAllDay: boolean;
   reminderSentAt?: number;
+  reminderSentBy?: string;
+  reminderAction?: 'SENT' | 'DISMISSED';
 }
 
 export interface CalendarSubscription extends BaseDocument {
@@ -320,6 +327,8 @@ export interface CalendarEvent extends BaseDocument {
   reminderSenderUserId?: string;  
   reminderLeadDays?: number;      
   reminderSentAt?: number;        
+  reminderSentBy?: string;
+  reminderAction?: 'SENT' | 'DISMISSED';
   reminderCustomText?: string;    
 
   reminderRecipientUserIds?: string[];
