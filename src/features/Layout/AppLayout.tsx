@@ -5,7 +5,7 @@
 // [2026-10-15] - FEATURE: Tägliches 12:00-Uhr Backup-Reminder-Banner (gesteuert über user.receiveBackupReminder) mit 1-Klick-Download und Deep-Link nach /reports?tab=backup integriert.
 // [2026-10-04] - FEATURE: Automatische Build-Versionsnummer (__APP_BUILD_DATE__) im Footer (Desktop & Mobile) der App integriert.
 // [2026-10-03] - BUGFIX: Vergangenheits-Filter (todayStart <= eventDateStart) in die Badge-Berechnung (reminderCounts) integriert, um die rote Zahl in der Navigation mit der RemindersView zu synchronisieren.
-// [2026-10-01] - BUGFIX: 'fetchTeams' zum globalen App-Init hinzugefügt, um Regression-Bug bei der Team-Zuweisung (Abo-Erinnerungen) zu beheben.
+// [2026-01-01] - BUGFIX: 'fetchTeams' zum globalen App-Init hinzugefügt, um Regression-Bug bei der Team-Zuweisung (Abo-Erinnerungen) zu beheben.
 // [2026-09-28] - BUGFIX: Globale Store-Fetches (fetchMatchLineups, fetchTeamPins) in den App-Init und Visibility-Check aufgenommen.
 // [2026-07-26] - BUGFIX: Domain-Language Fallback ('Gast' -> 'Mitglied') korrigiert, um Menü-Sichtbarkeit wiederherzustellen.
 // [2026-07-22] - FEATURE: 'Mein Profil' Button in Desktop-Sidebar und Mobile-Menu integriert (Self-Service).

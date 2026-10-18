@@ -1,3 +1,4 @@
+// [2026-10-18] - BUGFIX: Race-Condition beim Kaltstart (F5) in fetchTasks behoben. Aufgaben mit eventId werden nicht mehr voreilig als "isProjectDead" verworfen, solange events noch aus Firebase lädt.
 // [2026-10-17] - OPTIMIZATION: Firebase onSnapshot Listener-Zerstörung in fetchTasks verhindert (Early Return), um Free-Tier Lese-Quoten zu sparen und Offline-Starts zu ermöglichen.
 // [2026-06-11] - ARCHITEKTUR-FIX: Fate-Binding ('isHistorical') in fetchTasks integriert. Sanfter Fallback für Legacy-Daten (isHistorical === undefined) implementiert, damit alte Protokolle nicht explodieren. Live-Versiegelung beim Klonen in processRoutineRespawn eingebaut (Szenario B & C).
 // [2026-06-10] - BUGFIX: Routine-Klon-Engine (processRoutineRespawn) ignoriert nun strikt Unterpunkte mit dem Status 'TRASH'. Soft-gelöschte Unterpunkte werden nicht mehr in den neuen Sitzungs-Zyklus kopiert.
@@ -280,7 +281,10 @@ export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set,
             if (data.eventId) {
               const parentEvent = events.find((e: any) => e.id === data.eventId);
               if (!parentEvent) {
-                isProjectDead = true; 
+                // RACE-CONDITION SCHUTZ: Nur als verwaist/tot markieren, wenn die Events bereits fertig geladen sind!
+                if (events.length > 0 && !globalState.isEventsLoading) {
+                  isProjectDead = true;
+                }
               } else if (parentEvent.status === 'ABGESCHLOSSEN' || parentEvent.isArchived) {
                 isProjectDead = true; 
               } else if (parentEvent.status === 'PLANUNG') {
