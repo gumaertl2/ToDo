@@ -1,3 +1,4 @@
+// [2026-10-18] - UX-FEATURE: Persönliche Einteilungen in der Dienste-Ansicht visuell hervorgehoben (smaragdgrüne Datums-Kopfzeile, sanft grüne Zeilenhinterlegung und Symbol hinter dem Titel).
 // [2026-10-16] - UX-FIX: Im eingebetteten Team-Modus (ignoreYearFilter) wird der globale localStorage-Filter ignoriert, damit alle Saisonspiele des Teams garantiert sichtbar bleiben.
 // [2026-10-15] - BUGFIX: Filter-Bleed behoben. 'dienstFilters' (aus localStorage) wird nun strikt nur noch angewendet, wenn currentView === 'dienste' ist, damit normale Termine nicht ausgeblendet werden.
 // [2026-10-15] - FEATURE: 'ignoreYearFilter' Prop hinzugefügt, damit die Listen-Ansicht nahtlos als Child-Komponente im Saison-Modal (MatchLineupMatrix) verwendet werden kann.
@@ -317,6 +318,7 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
   if (isDienste) {
     groupedDienste.forEach((group, gIndex) => {
        const { dateStr, date, events } = group;
+       const hasMyAssignmentToday = events.some(e => e.isMyAssignment);
        
        if (showDateHeaders && gIndex > 0) {
           tableRows.push(
@@ -330,7 +332,13 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
           const isToday = date.getTime() === startOfDay(new Date()).getTime();
           tableRows.push(
              <tr key={`header-${dateStr}`} className="bg-gray-50">
-                <td colSpan={5} className={`py-2.5 px-4 text-[13px] font-bold rounded-t-xl border-t border-l border-r ${isToday ? 'bg-blue-50 border-blue-200 text-blue-800' : 'border-gray-200 text-gray-700'}`}>
+                <td colSpan={5} className={`py-2.5 px-4 text-[13px] font-bold rounded-t-xl border-t border-l border-r ${
+                  isToday 
+                    ? 'bg-blue-50 border-blue-200 text-blue-800' 
+                    : hasMyAssignmentToday 
+                      ? 'bg-emerald-100/80 border-emerald-200 text-emerald-900' 
+                      : 'border-gray-200 text-gray-700'
+                }`}>
                    {format(date, 'EEEE, dd. MMMM yyyy', { locale: de })}
                    {isToday && <span className="ml-2 text-[10px] uppercase tracking-wider font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full">Heute</span>}
                 </td>
@@ -348,7 +356,11 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
           let timeStr = 'Ganztägig';
           if (!e.allDay) timeStr = format(startD, 'HH:mm');
           
-          let rowClasses = `cursor-pointer transition-colors group ${!isFutureRow ? 'opacity-60 bg-white/60 hover:bg-gray-50/50' : 'bg-white hover:bg-blue-50/50'}`;
+          let rowClasses = `cursor-pointer transition-colors group ${
+            !isFutureRow 
+              ? (e.isMyAssignment ? 'opacity-70 bg-emerald-50/40 hover:bg-emerald-50/60' : 'opacity-60 bg-white/60 hover:bg-gray-50/50') 
+              : (e.isMyAssignment ? 'bg-emerald-50/70 hover:bg-emerald-100/70' : 'bg-white hover:bg-blue-50/50')
+          }`;
           let firstTdClass = "";
           let lastTdClass = "";
           let tdBorder = "border-b border-gray-100";
@@ -357,13 +369,13 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
           if (showDateHeaders) {
              firstTdClass = "border-l-[4px] ";
              leftBorderStyle = { borderLeftColor: e.color || '#3b82f6' };
-             lastTdClass = "border-r border-gray-200";
+             lastTdClass = hasMyAssignmentToday ? "border-r border-emerald-200" : "border-r border-gray-200";
              
              if (isLast) {
                 rowClasses += " shadow-[0_2px_4px_rgba(0,0,0,0.03)]";
                 firstTdClass += " rounded-bl-xl";
                 lastTdClass += " rounded-br-xl";
-                tdBorder = "border-b border-gray-200"; 
+                tdBorder = hasMyAssignmentToday ? "border-b border-emerald-200" : "border-b border-gray-200"; 
              }
           }
 
@@ -375,10 +387,10 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
                 
                 <td className={`py-3 px-4 text-gray-600 whitespace-nowrap align-top lg:align-middle w-20 ${tdBorder}`}>
                    {showDateHeaders ? (
-                      <span className="font-bold text-gray-700">{timeStr === 'Ganztägig' ? timeStr : `${timeStr} Uhr`}</span>
+                      <span className={`font-bold ${e.isMyAssignment ? 'text-emerald-800' : 'text-gray-700'}`}>{timeStr === 'Ganztägig' ? timeStr : `${timeStr} Uhr`}</span>
                    ) : (
                       <div className="flex flex-col">
-                         <span className="font-bold text-gray-800">{format(startD, 'E, dd.MM.', { locale: de })}</span>
+                         <span className={`font-bold ${e.isMyAssignment ? 'text-emerald-800' : 'text-gray-800'}`}>{format(startD, 'E, dd.MM.', { locale: de })}</span>
                          <span className="text-xs text-gray-500">{timeStr === 'Ganztägig' ? timeStr : `${timeStr} Uhr`}</span>
                       </div>
                    )}
@@ -391,6 +403,11 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
                             <span className="inline-block w-3 h-3 rounded-full mr-2 shrink-0 mt-1 lg:mt-0" style={{ backgroundColor: e.color || '#3b82f6' }}></span>
                          )}
                          <span className="truncate block flex-1" title={typeof e.title === 'string' ? e.title : undefined}>{e.title}</span>
+                         {e.myAssignmentIcons && (
+                            <span className="ml-2 shrink-0" title="Du bist eingeteilt">
+                              {e.myAssignmentIcons}
+                            </span>
+                         )}
                       </div>
                       
                       {e.sourceEvent?.pollConfig?.isActive && (
@@ -439,7 +456,11 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
        }
        
        tableRows.push(
-          <tr key={e.id} data-is-future-row={dataIsFutureRow} className={`hover:bg-blue-50 cursor-pointer transition-colors group ${!isFutureRow ? 'opacity-60 bg-white/50' : 'bg-white'}`} onClick={() => onSelectEvent(e)}>
+          <tr key={e.id} data-is-future-row={dataIsFutureRow} className={`cursor-pointer transition-colors group ${
+            !isFutureRow 
+              ? 'opacity-60 bg-white/50 hover:bg-blue-50' 
+              : (e.isMyAssignment ? 'bg-emerald-50/70 hover:bg-emerald-100/70' : 'bg-white hover:bg-blue-50')
+          }`} onClick={() => onSelectEvent(e)}>
              <td className={`py-3 px-4 text-gray-900 font-medium whitespace-nowrap align-top lg:align-middle ${tdBorder}`}>{dateStr}</td>
              <td className={`py-3 px-4 text-gray-600 whitespace-nowrap align-top lg:align-middle ${tdBorder}`}>{timeStr}</td>
              <td className={`py-3 px-4 align-top lg:align-middle min-w-[200px] w-auto ${tdBorder}`}>
@@ -447,6 +468,11 @@ export const CalendarListView: React.FC<CalendarListViewProps> = ({
                    <div className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors flex items-start lg:items-center min-w-0 shrink">
                       <span className="inline-block w-3 h-3 rounded-full mr-2 shrink-0 mt-1 lg:mt-0" style={{ backgroundColor: e.color || '#3b82f6' }}></span>
                       <span className="truncate block flex-1" title={typeof e.title === 'string' ? e.title : undefined}>{e.title}</span>
+                      {e.myAssignmentIcons && (
+                        <span className="ml-2 shrink-0" title="Du bist eingeteilt">
+                          {e.myAssignmentIcons}
+                        </span>
+                      )}
                    </div>
                    {e.sourceEvent?.pollConfig?.isActive && (
                       <div className="ml-5 lg:ml-0 shrink-0">

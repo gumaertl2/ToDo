@@ -1,3 +1,5 @@
+// [2026-10-18] - BUGFIX: TypeScript-Check (TS2339) in useCalendarEvents behoben – nutzt nun offiziell reminderRecipientUserIds & reminderRecipientHelperIds auf CalendarEvent.
+// [2026-10-18] - UX-FEATURE: Persönliche Einsatz-Erkennung (isMyAssignment & myAssignmentIcons: 🏓, 🚗, 📋, ☕) für den eingeloggten Nutzer in useCalendarEvents integriert.
 // [2026-10-14] - BUGFIX: Unused import 'generateStableEventId' removed to fix TS6133 build error.
 // [2026-10-14] - UX-REFACTOR: Statische Logistik-Badges aus dem Event-Titel entfernt. Die App nutzt nun interaktive Inline-Komponenten direkt in der Kalender-Listenansicht.
 // [2026-10-13] - FEATURE: pollSummary zum AdaptedEvent hinzugefügt.
@@ -9,6 +11,7 @@ import type { Event as RBCEvent } from 'react-big-calendar';
 import { startOfDay } from 'date-fns/startOfDay';
 import { useClubStore } from '../../../store/useClubStore';
 import type { CalendarEvent, Event } from '../../../core/types/models';
+import { generateStableEventId } from '../../Users/hooks/useMatchLineupMatrix';
 
 export interface AdaptedEvent extends RBCEvent {
   id: string; 
@@ -23,6 +26,8 @@ export interface AdaptedEvent extends RBCEvent {
   isLogisticsDuty?: boolean; 
   teamName?: string;
   pollSummary?: string; 
+  isMyAssignment?: boolean;
+  myAssignmentIcons?: string;
 }
 
 interface UseCalendarEventsProps {
@@ -33,6 +38,7 @@ interface UseCalendarEventsProps {
 
 export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }: UseCalendarEventsProps) => {
   const { 
+    user,
     calendarEvents, 
     events, 
     calendarSubscriptions, 
@@ -42,7 +48,14 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
     pollResponsesByEvent
   } = useClubStore();
 
+  const myHelper = useMemo(() => {
+    if (!user?.email || !helpers) return undefined;
+    return helpers.find(h => h.email?.toLowerCase() === user.email?.toLowerCase());
+  }, [user, helpers]);
+
   const rbcEvents: AdaptedEvent[] = useMemo(() => {
+    const myHelperId = myHelper?.id;
+
     const internalEvents = calendarEvents.map(ev => {
       const isHeim = ev.location?.toLowerCase().includes('maisach');
       const isAuswaerts = ev.location && !isHeim;
@@ -65,6 +78,30 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
         }
       }
 
+      // Prüfen, ob der eingeloggte Nutzer diesem Termin/Dienst direkt zugewiesen ist
+      let isMyAssignment = false;
+      let myAssignmentIcons = '';
+
+      const isDirectUser = !!(user && (ev.reminderRecipientUserIds?.includes(user.id) || (ev as any).participantUserIds?.includes(user.id)));
+      const isDirectHelper = !!(myHelperId && (ev.reminderRecipientHelperIds?.includes(myHelperId) || (ev as any).participantHelperIds?.includes(myHelperId)));
+      let isAliasDuty = false;
+
+      if (ev.eventType === 'DIENST' && ev.title.includes(':') && myHelper) {
+        const parts = ev.title.split(':');
+        const alias = parts[parts.length - 1].trim().toLowerCase();
+        if (alias && (alias === (myHelper.alias || '').toLowerCase() || alias === myHelper.name.toLowerCase())) {
+          isAliasDuty = true;
+        }
+      }
+
+      if (ev.eventType === 'DIENST' && (isDirectUser || isDirectHelper || isAliasDuty)) {
+        isMyAssignment = true;
+        myAssignmentIcons = '☕';
+      } else if (ev.showInMatchPlan && (isDirectUser || isDirectHelper)) {
+        isMyAssignment = true;
+        myAssignmentIcons = '🏓';
+      }
+
       return {
         id: ev.id, 
         sourceId: 'manual', 
@@ -78,7 +115,9 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
         sourceEvent: ev, 
         color: ev.color || '#3b82f6',
         showInMatchPlan: ev.showInMatchPlan,
-        pollSummary
+        pollSummary,
+        isMyAssignment,
+        myAssignmentIcons: myAssignmentIcons || undefined
       };
     });
     
@@ -97,27 +136,53 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
       showInMatchPlan: false
     }));
 
-    const cachedExternalEvents = calendarSubscriptions.filter(sub => sub.isActive && sub.cachedEvents).flatMap(sub => 
-        sub.cachedEvents!.map((ev, index) => {
-          const isHeim = ev.location?.toLowerCase().includes('maisach');
-          const isAuswaerts = ev.location && !isHeim;
-          const matchPrefix = sub.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
+    const cachedExternalEvents = calendarSubscriptions.filter(sub => sub.isActive && sub.cachedEvents).flatMap(sub => {
+      const teamId = sub.reminderRecipientTeamIds?.[0];
+      const team = teamId ? teams.find(t => t.id === teamId) : null;
 
-          return {
-            id: `ics-${sub.id}-${ev.uid}-${index}`, 
-            sourceId: sub.id, 
-            title: `${matchPrefix}${ev.title}`, 
-            description: ev.description || '', 
-            location: ev.location || '',
-            start: new Date(ev.startTime), 
-            end: new Date(ev.endTime), 
-            allDay: ev.isAllDay, 
-            color: sub.color,
-            showInMatchPlan: sub.showInMatchPlan,
-            sourceEvent: ev 
-          };
-        })
-      );
+      return sub.cachedEvents!.map((ev, index) => {
+        const isHeim = ev.location?.toLowerCase().includes('maisach');
+        const isAuswaerts = ev.location && !isHeim;
+        const matchPrefix = sub.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
+
+        // Prüfen, ob der eingeloggte Nutzer für dieses Spiel eingeteilt ist (Spieler, Fahrer, Betreuer)
+        const icons: string[] = [];
+        if (myHelperId && team) {
+          const safeEventId = generateStableEventId(team.id, ev);
+          const lineup = (matchLineups || []).find(m => m.id === safeEventId);
+          const activePlayerIds = lineup ? lineup.lineupHelperIds : (team.defaultLineupHelperIds || []);
+
+          if (activePlayerIds.includes(myHelperId)) {
+            icons.push('🏓');
+          }
+          if (lineup?.fahrerHelperIds?.includes(myHelperId)) {
+            icons.push('🚗');
+          }
+          if (lineup?.betreuerHelperIds?.includes(myHelperId)) {
+            icons.push('📋');
+          }
+        }
+
+        const isMyAssignment = icons.length > 0;
+        const myAssignmentIcons = icons.join(' ');
+
+        return {
+          id: `ics-${sub.id}-${ev.uid}-${index}`, 
+          sourceId: sub.id, 
+          title: `${matchPrefix}${ev.title}`, 
+          description: ev.description || '', 
+          location: ev.location || '',
+          start: new Date(ev.startTime), 
+          end: new Date(ev.endTime), 
+          allDay: ev.isAllDay, 
+          color: sub.color,
+          showInMatchPlan: sub.showInMatchPlan,
+          sourceEvent: ev,
+          isMyAssignment,
+          myAssignmentIcons: myAssignmentIcons || undefined
+        };
+      });
+    });
       
     const logisticsEvents: AdaptedEvent[] = [];
     calendarSubscriptions.forEach(sub => {
@@ -131,6 +196,14 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
             const isAuswaerts = ev.location && !isHeim;
             const matchPrefix = sub.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
 
+            const icons: string[] = [];
+            if (myHelperId) {
+              const safeEventId = generateStableEventId(team.id, ev);
+              const lineup = (matchLineups || []).find(m => m.id === safeEventId);
+              if (lineup?.fahrerHelperIds?.includes(myHelperId)) icons.push('🚗');
+              if (lineup?.betreuerHelperIds?.includes(myHelperId)) icons.push('📋');
+            }
+
             logisticsEvents.push({
                 id: `logistics-${sub.id}-${ev.uid}-${index}`,
                 sourceId: sub.id, 
@@ -143,13 +216,15 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
                 color: '#9333ea', 
                 sourceEvent: ev, 
                 isLogisticsDuty: true,
-                teamName: team.name
+                teamName: team.name,
+                isMyAssignment: icons.length > 0,
+                myAssignmentIcons: icons.length > 0 ? icons.join(' ') : undefined
             });
         });
     });
 
     return [...internalEvents, ...internalSitzungen, ...cachedExternalEvents, ...logisticsEvents];
-  }, [calendarEvents, events, calendarSubscriptions, teams, helpers, matchLineups, pollResponsesByEvent]);
+  }, [user, myHelper, calendarEvents, events, calendarSubscriptions, teams, helpers, matchLineups, pollResponsesByEvent]);
 
   const filteredEvents = useMemo(() => {
     const todayStart = startOfDay(new Date()).getTime();

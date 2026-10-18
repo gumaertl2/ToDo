@@ -1,3 +1,4 @@
+// [2026-10-18] - UX-FEATURE: Persönliche Einteilungen in der Monats-/Wochen-/Tagesansicht hervorgehoben (dezente grüne Tageskachel via dayPropGetter, Symbol hinter dem Titel via titleAccessor und kräftigerer Rahmen via eventPropGetter).
 // [2026-10-13] - ARCHITECTURE-FIX: Spielplan (Agenda View) vollständig aus dem react-big-calendar Plugin befreit! Wird nun wie "Termine" und "Dienste" als eigenständige Komponente direkt im DOM verankert, um Mobile-Scroll-Bugs restlos zu beseitigen.
 // [2026-10-12] - REFACTOR: Hauptkomponente drastisch vereinfacht. Daten-Logik (useCalendarEvents) und komplexe Ansichten (CalendarListView, CalendarAgendaView) in eigene Dateien ausgelagert.
 // [2026-10-12] - BUGFIX: TS6133 'idx' is declared but its value is never read behoben.
@@ -126,6 +127,16 @@ export const CalendarView: React.FC = () => {
 
   // --- HOOKS FÜR LOGIK UND ANSICHTEN ---
   const { rbcEvents, displayEvents } = useCalendarEvents({ currentView, activeFilters, showPastEvents });
+
+  const myAssignedDayKeys = useMemo(() => {
+    const set = new Set<string>();
+    displayEvents.forEach(e => {
+      if (e.isMyAssignment && e.start) {
+        set.add(format(e.start, 'yyyy-MM-dd'));
+      }
+    });
+    return set;
+  }, [displayEvents]);
   
   const handleSelectEvent = (event: AdaptedEvent) => {
     if (event.id.startsWith('ics-') || event.id.startsWith('logistics-')) { 
@@ -427,13 +438,29 @@ export const CalendarView: React.FC = () => {
         ) : (
           <Calendar
             culture="de" localizer={localizer} events={displayEvents} startAccessor="start" endAccessor="end"
+            titleAccessor={(event: AdaptedEvent) => event.myAssignmentIcons ? `${event.title} ${event.myAssignmentIcons}` : (event.title as string)}
             view={currentView as any} toolbar={false} onView={handleViewChange}
             views={{ month: true, week: true, day: true }} // agenda entfernt, da es nun extern gerendert wird
             date={currentDate} onNavigate={(date) => setCurrentDate(date)}
+            dayPropGetter={(date: Date) => {
+              const dateKey = format(date, 'yyyy-MM-dd');
+              const todayKey = format(new Date(), 'yyyy-MM-dd');
+              if (myAssignedDayKeys.has(dateKey) && dateKey !== todayKey) {
+                return { style: { backgroundColor: '#ecfdf5' } };
+              }
+              return {};
+            }}
             eventPropGetter={(event: AdaptedEvent) => ({ 
               style: { 
-                backgroundColor: event.color || '#3b82f6', borderRadius: '6px', opacity: 0.9, 
-                color: getContrastYIQ(event.color || '#3b82f6'), border: 'none', display: 'block', cursor: 'pointer' 
+                backgroundColor: event.color || '#3b82f6', 
+                borderRadius: '6px', 
+                opacity: event.isMyAssignment ? 1 : 0.88, 
+                color: getContrastYIQ(event.color || '#3b82f6'), 
+                border: event.isMyAssignment ? '2px solid #065f46' : 'none', 
+                fontWeight: event.isMyAssignment ? 700 : 500,
+                boxShadow: event.isMyAssignment ? '0 1px 3px rgba(0,0,0,0.2)' : 'none',
+                display: 'block', 
+                cursor: 'pointer' 
               } 
             })} 
             onSelectEvent={handleSelectEvent} 

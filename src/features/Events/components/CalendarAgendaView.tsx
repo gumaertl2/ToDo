@@ -1,3 +1,4 @@
+// [2026-10-18] - UX-FEATURE: Persönliche Einteilungen (Spieler, Fahrer, Betreuer, Dienst) im Spielplan visuell hervorgehoben (kräftigere Datumszeile in Smaragdgrün + Symbol hinter dem Titel ohne Layout-Verschiebung).
 // [2026-10-14] - UX-FEATURE: Langzeitgedächtnis für den Spielplan-Filter! Die ausgewählten Mannschaften (teamFilters) werden nun via localStorage dauerhaft auf dem Gerät gespeichert.
 // [2026-10-14] - UX-FEATURE: Multi-Select Filter (Sticky Toolbar) in den Spielplan (Agenda View) integriert. Erlaubt gezieltes Filtern nach einzelnen oder mehreren Mannschaften, ohne endloses Scrollen.
 // [2026-10-13] - ARCHITECTURE-FIX: Spielplan (Agenda View) vollständig aus dem react-big-calendar Plugin befreit! Komponente ist nun eine eigenständige React-Komponente, um den Safari-Touch/Scroll-Bug auf iPhones final zu beheben.
@@ -188,16 +189,35 @@ export const CalendarAgendaView: React.FC<CalendarAgendaViewProps> = ({
             
             const isToday = day.getTime() === today.getTime();
             const isFutureOrToday = day >= today;
+            const hasMyAssignmentToday = dayEvents.some(e => e.isMyAssignment);
 
             return (
               <div 
                 key={day.toISOString()} 
                 data-date-ms={day.getTime()}
                 data-is-future={isFutureOrToday ? "true" : "false"}
-                className={`bg-white rounded-lg shadow-sm border ${isToday ? 'border-blue-300 ring-2 ring-blue-100' : 'border-gray-200'} overflow-hidden print:border-b print:shadow-none print:rounded-none`}
+                className={`bg-white rounded-lg shadow-sm border ${
+                  isToday 
+                    ? 'border-blue-300 ring-2 ring-blue-100' 
+                    : hasMyAssignmentToday 
+                      ? 'border-emerald-300 ring-1 ring-emerald-100' 
+                      : 'border-gray-200'
+                } overflow-hidden print:border-b print:shadow-none print:rounded-none`}
               >
-                <div className={`px-4 py-2 border-b ${isToday ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'} print:bg-transparent print:border-black`}>
-                  <h3 className={`text-sm font-bold ${isToday ? 'text-blue-800 print:text-black' : 'text-gray-700 print:text-black'}`}>
+                <div className={`px-4 py-2 border-b ${
+                  isToday 
+                    ? 'bg-blue-50 border-blue-100' 
+                    : hasMyAssignmentToday 
+                      ? 'bg-emerald-100/80 border-emerald-200' 
+                      : 'bg-gray-50 border-gray-100'
+                } print:bg-transparent print:border-black`}>
+                  <h3 className={`text-sm font-bold ${
+                    isToday 
+                      ? 'text-blue-800 print:text-black' 
+                      : hasMyAssignmentToday 
+                        ? 'text-emerald-900 print:text-black' 
+                        : 'text-gray-700 print:text-black'
+                  }`}>
                     {format(day, 'EEEE, dd. MMMM yyyy', { locale: de })}
                     {isToday && <span className="ml-2 text-[10px] uppercase tracking-wider font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full print:hidden">Heute</span>}
                   </h3>
@@ -206,9 +226,30 @@ export const CalendarAgendaView: React.FC<CalendarAgendaViewProps> = ({
                   {dayEvents.length === 0 ? <p className="p-2 text-xs text-gray-400 italic text-center print:hidden">Keine Termine</p> : (
                     <div className="space-y-1">
                       {dayEvents.map(e => (
-                        <div key={`${e.id}-${day.toISOString()}`} onClick={() => onSelectEvent(e)} className="flex flex-col sm:flex-row sm:items-center p-2 rounded hover:bg-gray-50 cursor-pointer transition print:border-l-[4px]" style={{ borderLeftWidth: '4px', borderLeftColor: e.color || '#3b82f6' }}>
-                          <div className="w-20 shrink-0 text-xs font-bold text-gray-500 mb-1 sm:mb-0 print:text-black">{e.allDay ? 'Ganztägig' : `${format(e.start!, 'HH:mm')} Uhr`}</div>
-                          <div className="flex-1"><div className="font-bold text-gray-900 text-sm print:text-black">{e.title}</div>{e.location && <div className="text-xs text-gray-500 mt-0.5 flex items-center print:text-black">📍 {e.location}</div>}</div>
+                        <div 
+                          key={`${e.id}-${day.toISOString()}`} 
+                          onClick={() => onSelectEvent(e)} 
+                          className={`flex flex-col sm:flex-row sm:items-center p-2 rounded cursor-pointer transition print:border-l-[4px] ${
+                            e.isMyAssignment 
+                              ? 'bg-emerald-50/70 hover:bg-emerald-100/70' 
+                              : 'hover:bg-gray-50'
+                          }`} 
+                          style={{ borderLeftWidth: '4px', borderLeftColor: e.color || '#3b82f6' }}
+                        >
+                          <div className={`w-20 shrink-0 text-xs font-bold mb-1 sm:mb-0 print:text-black ${e.isMyAssignment ? 'text-emerald-800' : 'text-gray-500'}`}>
+                            {e.allDay ? 'Ganztägig' : `${format(e.start!, 'HH:mm')} Uhr`}
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-bold text-gray-900 text-sm print:text-black">
+                              {e.title}
+                              {e.myAssignmentIcons && (
+                                <span className="ml-2 shrink-0" title="Du bist eingeteilt">
+                                  {e.myAssignmentIcons}
+                                </span>
+                              )}
+                            </div>
+                            {e.location && <div className="text-xs text-gray-500 mt-0.5 flex items-center print:text-black">📍 {e.location}</div>}
+                          </div>
                         </div>
                       ))}
                     </div>
