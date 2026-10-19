@@ -1,3 +1,5 @@
+// [2026-10-19] - BUGFIX: Gegner-Extraktion für calendarTitle unterstützt nun neben Bindestrichen (" - ") auch " vs. " und " vs ", damit der eigene Vereinsname in der Kalenderansicht zuverlässig ausgeblendet wird.
+// [2026-10-19] - UX-FEATURE: Abgestufte Kalender-Titel (calendarTitle ohne eigenen Vereinsnamen & mobileShortTitle für Handy-Hochformat) in useCalendarEvents integriert.
 // [2026-10-18] - UX-FEATURE: Abo-Namen (z.B. H1, J1) direkt mit Leerzeichen nach dem Heim-/Auswärts-Icon in den Begegnungstitel integriert (z.B. "🏠 H1 SC Maisach - ...").
 // [2026-10-18] - BUGFIX: TypeScript-Check (TS2339) in useCalendarEvents behoben – nutzt nun offiziell reminderRecipientUserIds & reminderRecipientHelperIds auf CalendarEvent.
 // [2026-10-18] - UX-FEATURE: Persönliche Einsatz-Erkennung (isMyAssignment & myAssignmentIcons: 🏓, 🚗, 📋, ☕) für den eingeloggten Nutzer in useCalendarEvents integriert.
@@ -29,12 +31,25 @@ export interface AdaptedEvent extends RBCEvent {
   pollSummary?: string; 
   isMyAssignment?: boolean;
   myAssignmentIcons?: string;
+  calendarTitle?: string;
+  mobileShortTitle?: string;
 }
 
 interface UseCalendarEventsProps {
   currentView: 'month' | 'week' | 'day' | 'agenda' | 'termine' | 'dienste';
   activeFilters: string[];
   showPastEvents: boolean;
+}
+
+// Extrahiert aus einer Paarung ("[Heim] vs. [Gast]" oder "[Heim] - [Gast]") gezielt den Gegnernamen
+function extractOpponentName(rawTitle: string, isHeim: boolean): string {
+  const separatorRegex = /\s+(?:vs\.?|-|–|:)\s+/i;
+  if (!separatorRegex.test(rawTitle)) return rawTitle;
+
+  const parts = rawTitle.split(separatorRegex);
+  if (parts.length < 2) return rawTitle;
+
+  return isHeim ? parts.slice(1).join(' - ').trim() : parts[0].trim();
 }
 
 export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }: UseCalendarEventsProps) => {
@@ -58,8 +73,8 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
     const myHelperId = myHelper?.id;
 
     const internalEvents = calendarEvents.map(ev => {
-      const isHeim = ev.location?.toLowerCase().includes('maisach');
-      const isAuswaerts = ev.location && !isHeim;
+      const isHeim = !!ev.location?.toLowerCase().includes('maisach');
+      const isAuswaerts = !!(ev.location && !isHeim);
       const matchPrefix = ev.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
       const baseTitle = `${matchPrefix}${ev.title}`;
 
@@ -103,11 +118,18 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
         myAssignmentIcons = '🏓';
       }
 
+      const fullTitle = ev.isPublic ? baseTitle : `🔒 ${baseTitle}`;
+      const calendarClean = ev.showInMatchPlan
+        ? `${matchPrefix}${extractOpponentName(ev.title, isHeim)}`
+        : fullTitle;
+
       return {
         id: ev.id, 
         sourceId: 'manual', 
         seriesId: ev.seriesId, 
-        title: ev.isPublic ? baseTitle : `🔒 ${baseTitle}`,
+        title: fullTitle,
+        calendarTitle: ev.isPublic ? calendarClean : `🔒 ${calendarClean}`,
+        mobileShortTitle: ev.isPublic ? calendarClean : `🔒 ${calendarClean}`,
         description: ev.description || '', 
         location: ev.location || '',
         start: new Date(ev.startTime), 
@@ -122,20 +144,25 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
       };
     });
     
-    const internalSitzungen = events.filter(ev => ev.plannedStartTime && ev.status !== 'ABGESCHLOSSEN').map(ev => ({
-      id: ev.id, 
-      sourceId: 'manual', 
-      seriesId: undefined, 
-      title: ev.isPublic ? `Sitzung: ${ev.title}` : `🔒 Sitzung: ${ev.title}`,
-      description: ev.description || '', 
-      location: ev.location || '',
-      start: new Date(ev.plannedStartTime!), 
-      end: ev.plannedEndTime ? new Date(ev.plannedEndTime) : new Date(ev.plannedStartTime! + (1000 * 60 * 60 * 2)), 
-      allDay: false, 
-      rawSitzung: ev, 
-      color: '#8b5cf6',
-      showInMatchPlan: false
-    }));
+    const internalSitzungen = events.filter(ev => ev.plannedStartTime && ev.status !== 'ABGESCHLOSSEN').map(ev => {
+      const sitzungTitle = ev.isPublic ? `Sitzung: ${ev.title}` : `🔒 Sitzung: ${ev.title}`;
+      return {
+        id: ev.id, 
+        sourceId: 'manual', 
+        seriesId: undefined, 
+        title: sitzungTitle,
+        calendarTitle: sitzungTitle,
+        mobileShortTitle: sitzungTitle,
+        description: ev.description || '', 
+        location: ev.location || '',
+        start: new Date(ev.plannedStartTime!), 
+        end: ev.plannedEndTime ? new Date(ev.plannedEndTime) : new Date(ev.plannedStartTime! + (1000 * 60 * 60 * 2)), 
+        allDay: false, 
+        rawSitzung: ev, 
+        color: '#8b5cf6',
+        showInMatchPlan: false
+      };
+    });
 
     const cachedExternalEvents = calendarSubscriptions.filter(sub => sub.isActive && sub.cachedEvents).flatMap(sub => {
       const teamId = sub.reminderRecipientTeamIds?.[0];
@@ -143,8 +170,8 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
       const subPrefix = sub.name ? `${sub.name.trim()} ` : '';
 
       return sub.cachedEvents!.map((ev, index) => {
-        const isHeim = ev.location?.toLowerCase().includes('maisach');
-        const isAuswaerts = ev.location && !isHeim;
+        const isHeim = !!ev.location?.toLowerCase().includes('maisach');
+        const isAuswaerts = !!(ev.location && !isHeim);
         const matchPrefix = sub.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
 
         // Prüfen, ob der eingeloggte Nutzer für dieses Spiel eingeteilt ist (Spieler, Fahrer, Betreuer)
@@ -168,10 +195,23 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
         const isMyAssignment = icons.length > 0;
         const myAssignmentIcons = icons.join(' ');
 
+        // Für die Kalenderansicht: Eigenen Verein aus "[Heim] vs. [Gast]" bzw. "[Heim] - [Gast]" weglassen -> nur Gegner anzeigen
+        const opponentOnlyTitle = sub.showInMatchPlan
+          ? extractOpponentName(ev.title, isHeim)
+          : ev.title;
+
+        const fullTitle = `${matchPrefix}${subPrefix}${ev.title}`;
+        const calendarTitle = `${matchPrefix}${subPrefix}${opponentOnlyTitle}`;
+        const mobileShortTitle = sub.showInMatchPlan && sub.name
+          ? `${matchPrefix}${sub.name.trim()}`
+          : calendarTitle;
+
         return {
           id: `ics-${sub.id}-${ev.uid}-${index}`, 
           sourceId: sub.id, 
-          title: `${matchPrefix}${subPrefix}${ev.title}`, 
+          title: fullTitle, 
+          calendarTitle,
+          mobileShortTitle,
           description: ev.description || '', 
           location: ev.location || '',
           start: new Date(ev.startTime), 
@@ -195,8 +235,8 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
         const subPrefix = sub.name ? `${sub.name.trim()} ` : '';
 
         sub.cachedEvents.forEach((ev, index) => {
-            const isHeim = ev.location?.toLowerCase().includes('maisach');
-            const isAuswaerts = ev.location && !isHeim;
+            const isHeim = !!ev.location?.toLowerCase().includes('maisach');
+            const isAuswaerts = !!(ev.location && !isHeim);
             const matchPrefix = sub.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
 
             const icons: string[] = [];
@@ -207,10 +247,14 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
               if (lineup?.betreuerHelperIds?.includes(myHelperId)) icons.push('📋');
             }
 
+            const fullTitle = `${matchPrefix}${subPrefix}${ev.title}`;
+
             logisticsEvents.push({
                 id: `logistics-${sub.id}-${ev.uid}-${index}`,
                 sourceId: sub.id, 
-                title: `${matchPrefix}${subPrefix}${ev.title}`,
+                title: fullTitle,
+                calendarTitle: fullTitle,
+                mobileShortTitle: fullTitle,
                 description: ev.description || '',
                 location: ev.location || '',
                 start: new Date(ev.startTime),

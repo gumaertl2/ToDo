@@ -1,3 +1,5 @@
+// [2026-10-19] - UX-OPTIMIZATION: In der Monatsansicht wird der gesamte Platz im Balken für "[Heim/Auswärts] [Team] [Gegner]" reserviert (Markierung eigener Spiele erfolgt über grüne Tageskachel + kräftigen Rahmen).
+// [2026-10-19] - UX-FEATURE: Kalenderansicht nutzt nun den kompakten Gegner-Titel (calendarTitle ohne eigenen Vereinsnamen) und schaltet im Handy-Hochformat (Monatsansicht) automatisch auf mobileShortTitle (z.B. "🏠 H1") um.
 // [2026-10-18] - UX-FEATURE: Persönliche Einteilungen in der Monats-/Wochen-/Tagesansicht hervorgehoben (dezente grüne Tageskachel via dayPropGetter, Symbol hinter dem Titel via titleAccessor und kräftigerer Rahmen via eventPropGetter).
 // [2026-10-13] - ARCHITECTURE-FIX: Spielplan (Agenda View) vollständig aus dem react-big-calendar Plugin befreit! Wird nun wie "Termine" und "Dienste" als eigenständige Komponente direkt im DOM verankert, um Mobile-Scroll-Bugs restlos zu beseitigen.
 // [2026-10-12] - REFACTOR: Hauptkomponente drastisch vereinfacht. Daten-Logik (useCalendarEvents) und komplexe Ansichten (CalendarListView, CalendarAgendaView) in eigene Dateien ausgelagert.
@@ -90,6 +92,13 @@ export const CalendarView: React.FC = () => {
 
   const [currentView, setCurrentView] = useState<'month' | 'week' | 'day' | 'agenda' | 'termine' | 'dienste'>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [isMobilePortrait, setIsMobilePortrait] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 640 : false);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobilePortrait(window.innerWidth < 640);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [selectedEventToEdit, setSelectedEventToEdit] = useState<any>(undefined);
@@ -438,7 +447,15 @@ export const CalendarView: React.FC = () => {
         ) : (
           <Calendar
             culture="de" localizer={localizer} events={displayEvents} startAccessor="start" endAccessor="end"
-            titleAccessor={(event: AdaptedEvent) => event.myAssignmentIcons ? `${event.title} ${event.myAssignmentIcons}` : (event.title as string)}
+            titleAccessor={(event: AdaptedEvent) => {
+              if (currentView === 'month') {
+                return isMobilePortrait
+                  ? (event.mobileShortTitle || event.calendarTitle || (event.title as string))
+                  : (event.calendarTitle || (event.title as string));
+              }
+              const base = event.calendarTitle || (event.title as string);
+              return event.myAssignmentIcons ? `${base} ${event.myAssignmentIcons}` : base;
+            }}
             view={currentView as any} toolbar={false} onView={handleViewChange}
             views={{ month: true, week: true, day: true }} // agenda entfernt, da es nun extern gerendert wird
             date={currentDate} onNavigate={(date) => setCurrentDate(date)}
@@ -459,6 +476,8 @@ export const CalendarView: React.FC = () => {
                 border: event.isMyAssignment ? '2px solid #065f46' : 'none', 
                 fontWeight: event.isMyAssignment ? 700 : 500,
                 boxShadow: event.isMyAssignment ? '0 1px 3px rgba(0,0,0,0.2)' : 'none',
+                padding: (isMobilePortrait && currentView === 'month') ? '1px 2px' : undefined,
+                fontSize: (isMobilePortrait && currentView === 'month') ? '11px' : undefined,
                 display: 'block', 
                 cursor: 'pointer' 
               } 
