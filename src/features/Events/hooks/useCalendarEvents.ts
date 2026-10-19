@@ -1,3 +1,5 @@
+// [2026-10-19] - BUGFIX: Virtuelle Obergruppen (vgroup-all, vgroup-aktiv, vgroup-passiv, vgroup-jugend) werden nun in useCalendarEvents analog zum Dashboard gegen myHelper.memberStatus aufgelöst.
+// [2026-10-19] - UX-FEATURE: isMyAssignment in useCalendarEvents auf Sitzungen und reguläre Vereinstermine (inkl. Gruppen-/Team-Zuweisungen) erweitert, damit der globale Master-Stern in allen 6 Kalender-Reitern greift.
 // [2026-10-19] - BUGFIX: Gegner-Extraktion für calendarTitle unterstützt nun neben Bindestrichen (" - ") auch " vs. " und " vs ", damit der eigene Vereinsname in der Kalenderansicht zuverlässig ausgeblendet wird.
 // [2026-10-19] - UX-FEATURE: Abgestufte Kalender-Titel (calendarTitle ohne eigenen Vereinsnamen & mobileShortTitle für Handy-Hochformat) in useCalendarEvents integriert.
 // [2026-10-18] - UX-FEATURE: Abo-Namen (z.B. H1, J1) direkt mit Leerzeichen nach dem Heim-/Auswärts-Icon in den Begegnungstitel integriert (z.B. "🏠 H1 SC Maisach - ...").
@@ -71,6 +73,20 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
 
   const rbcEvents: AdaptedEvent[] = useMemo(() => {
     const myHelperId = myHelper?.id;
+    const myStatus = myHelper?.memberStatus?.toLowerCase();
+    const userGroupIds = user?.groupIds || [];
+    const myTeamIds = myHelper?.teamIds || [];
+
+    // Prüft sowohl direkte Team-Mitgliedschaften als auch virtuelle Obergruppen (vgroup-all, vgroup-aktiv, vgroup-passiv, vgroup-jugend)
+    const matchesTeamOrVirtualGroup = (targetTeamIds?: string[]): boolean => {
+      if (!targetTeamIds || targetTeamIds.length === 0 || !myHelper) return false;
+      if (targetTeamIds.some(tId => myTeamIds.includes(tId))) return true;
+      if (targetTeamIds.includes('vgroup-all')) return true;
+      if (myStatus === 'aktiv' && targetTeamIds.includes('vgroup-aktiv')) return true;
+      if (myStatus === 'passiv' && targetTeamIds.includes('vgroup-passiv')) return true;
+      if (myStatus === 'jugend' && targetTeamIds.includes('vgroup-jugend')) return true;
+      return false;
+    };
 
     const internalEvents = calendarEvents.map(ev => {
       const isHeim = !!ev.location?.toLowerCase().includes('maisach');
@@ -94,12 +110,19 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
         }
       }
 
-      // Prüfen, ob der eingeloggte Nutzer diesem Termin/Dienst direkt zugewiesen ist
+      // Prüfen, ob der eingeloggte Nutzer diesem Termin/Dienst zugewiesen ist
       let isMyAssignment = false;
       let myAssignmentIcons = '';
 
       const isDirectUser = !!(user && (ev.reminderRecipientUserIds?.includes(user.id) || (ev as any).participantUserIds?.includes(user.id)));
       const isDirectHelper = !!(myHelperId && (ev.reminderRecipientHelperIds?.includes(myHelperId) || (ev as any).participantHelperIds?.includes(myHelperId)));
+      const isGroupAssigned = !!(
+        (ev.reminderRecipientGroupIds || []).some(gId => userGroupIds.includes(gId)) ||
+        ((ev as any).participantGroupIds || []).some((gId: string) => userGroupIds.includes(gId))
+      );
+      const isTeamAssigned =
+        matchesTeamOrVirtualGroup(ev.reminderRecipientTeamIds) ||
+        matchesTeamOrVirtualGroup((ev as any).participantTeamIds);
       let isAliasDuty = false;
 
       if (ev.eventType === 'DIENST' && ev.title.includes(':') && myHelper) {
@@ -113,9 +136,11 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
       if (ev.eventType === 'DIENST' && (isDirectUser || isDirectHelper || isAliasDuty)) {
         isMyAssignment = true;
         myAssignmentIcons = '☕';
-      } else if (ev.showInMatchPlan && (isDirectUser || isDirectHelper)) {
+      } else if (ev.showInMatchPlan && (isDirectUser || isDirectHelper || isGroupAssigned || isTeamAssigned)) {
         isMyAssignment = true;
         myAssignmentIcons = '🏓';
+      } else if (ev.eventType !== 'DIENST' && (isDirectUser || isDirectHelper || isGroupAssigned || isTeamAssigned)) {
+        isMyAssignment = true;
       }
 
       const fullTitle = ev.isPublic ? baseTitle : `🔒 ${baseTitle}`;
@@ -146,6 +171,13 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
     
     const internalSitzungen = events.filter(ev => ev.plannedStartTime && ev.status !== 'ABGESCHLOSSEN').map(ev => {
       const sitzungTitle = ev.isPublic ? `Sitzung: ${ev.title}` : `🔒 Sitzung: ${ev.title}`;
+      const isParticipant = !!(
+        (user && (ev.participantUserIds || []).includes(user.id)) ||
+        (ev.participantGroupIds || []).some(gId => userGroupIds.includes(gId)) ||
+        (myHelperId && (ev.participantHelperIds || []).includes(myHelperId)) ||
+        matchesTeamOrVirtualGroup(ev.participantTeamIds)
+      );
+
       return {
         id: ev.id, 
         sourceId: 'manual', 
@@ -160,7 +192,8 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
         allDay: false, 
         rawSitzung: ev, 
         color: '#8b5cf6',
-        showInMatchPlan: false
+        showInMatchPlan: false,
+        isMyAssignment: isParticipant
       };
     });
 

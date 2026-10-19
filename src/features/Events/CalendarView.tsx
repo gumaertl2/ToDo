@@ -1,3 +1,4 @@
+// [2026-10-19] - UX-FEATURE: Globaler Master-Stern ("Meine Einsätze"-Filter) in der oberen Kalender-Navigationsleiste eingebaut (wirkt auf alle 6 Reiter, speichert Status im localStorage, leuchtet im aktiven Zustand als gold-gelber Pill-Button mit goldenem Kalender-Rahmen).
 // [2026-10-19] - UX-FEATURE: Rollierendes 5-Wochen-Monatsgitter (CalendarMonthGridView) für den Reiter "Monat" eingebunden (Heute startet immer in Zeile 1, nahtloser Übergang in den Folgemonat).
 // [2026-10-19] - UX-OPTIMIZATION: In der Monatsansicht wird der gesamte Platz im Balken für "[Heim/Auswärts] [Team] [Gegner]" reserviert (Markierung eigener Spiele erfolgt über grüne Tageskachel + kräftigen Rahmen).
 // [2026-10-19] - UX-FEATURE: Kalenderansicht nutzt nun den kompakten Gegner-Titel (calendarTitle ohne eigenen Vereinsnamen) und schaltet im Handy-Hochformat (Monatsansicht) automatisch auf mobileShortTitle (z.B. "🏠 H1") um.
@@ -25,7 +26,7 @@ import { addWeeks, subWeeks, addDays, subDays, addYears, subYears } from 'date-f
 import { de } from 'date-fns/locale/de';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { useClubStore } from '../../store/useClubStore';
-import { Plus, DownloadCloud, Globe, Settings, Edit3, Printer, ChevronLeft, ChevronRight, Home, List as ListIcon, Filter, CalendarPlus, Copy, Check, X } from 'lucide-react';
+import { Plus, DownloadCloud, Globe, Settings, Edit3, Printer, ChevronLeft, ChevronRight, Home, List as ListIcon, Filter, CalendarPlus, Copy, Check, X, Star } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 import { CalendarEventFormModal } from './CalendarEventFormModal';
@@ -91,6 +92,7 @@ export const CalendarView: React.FC = () => {
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [showEmptyDays, setShowEmptyDays] = useState(() => localStorage.getItem('papatodo_show_empty_days') === 'true');
   const [showPastEvents, setShowPastEvents] = useState(() => localStorage.getItem('papatodo_show_past_events') === 'true');
+  const [onlyMyEvents, setOnlyMyEvents] = useState(() => localStorage.getItem('papatodo_calendar_only_my_events') === 'true');
 
   const [currentView, setCurrentView] = useState<'month' | 'week' | 'day' | 'agenda' | 'termine' | 'dienste'>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -108,6 +110,14 @@ export const CalendarView: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showAboModal, setShowAboModal] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
+
+  const toggleOnlyMyEvents = () => {
+    setOnlyMyEvents(prev => {
+      const next = !prev;
+      localStorage.setItem('papatodo_calendar_only_my_events', String(next));
+      return next;
+    });
+  };
 
   useEffect(() => { 
     fetchCalendarData(); 
@@ -132,15 +142,20 @@ export const CalendarView: React.FC = () => {
   // --- HOOKS FÜR LOGIK UND ANSICHTEN ---
   const { rbcEvents, displayEvents } = useCalendarEvents({ currentView, activeFilters, showPastEvents });
 
+  const filteredDisplayEvents = useMemo(() => {
+    if (!onlyMyEvents) return displayEvents;
+    return displayEvents.filter(e => e.isMyAssignment);
+  }, [displayEvents, onlyMyEvents]);
+
   const myAssignedDayKeys = useMemo(() => {
     const set = new Set<string>();
-    displayEvents.forEach(e => {
+    filteredDisplayEvents.forEach(e => {
       if (e.isMyAssignment && e.start) {
         set.add(format(e.start, 'yyyy-MM-dd'));
       }
     });
     return set;
-  }, [displayEvents]);
+  }, [filteredDisplayEvents]);
   
   const handleSelectEvent = (event: AdaptedEvent) => {
     if (event.id.startsWith('ics-') || event.id.startsWith('logistics-')) { 
@@ -365,11 +380,36 @@ export const CalendarView: React.FC = () => {
       {/* HEADER & NAV */}
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between bg-white p-2 rounded-xl shadow-sm border border-gray-200 gap-3 z-20 relative">
         <div className="flex items-center justify-between lg:justify-start gap-1 flex-1">
-          <button onClick={handleNavPrev} className="p-2 bg-gray-50 rounded-lg text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors"><ChevronLeft className="w-5 h-5"/></button>
-          <button onClick={() => setCurrentDate(new Date())} className="p-2 bg-blue-50 rounded-lg text-blue-700 border border-blue-100 hover:bg-blue-100 transition-colors" title="Heute"><Home className="w-5 h-5"/></button>
-          <button onClick={handleNavNext} className="p-2 bg-gray-50 rounded-lg text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors"><ChevronRight className="w-5 h-5"/></button>
-          <div className="relative ml-2 lg:ml-4 flex-1 lg:flex-none">
-            <span className="font-bold text-gray-800 text-lg capitalize w-full lg:w-48 text-center block whitespace-nowrap">{getNavLabel()}</span>
+          <button onClick={handleNavPrev} className="p-2 bg-gray-50 rounded-lg text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors shrink-0"><ChevronLeft className="w-5 h-5"/></button>
+          <button onClick={() => setCurrentDate(new Date())} className="p-2 bg-blue-50 rounded-lg text-blue-700 border border-blue-100 hover:bg-blue-100 transition-colors shrink-0" title="Heute"><Home className="w-5 h-5"/></button>
+          <button onClick={handleNavNext} className="p-2 bg-gray-50 rounded-lg text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors shrink-0"><ChevronRight className="w-5 h-5"/></button>
+          
+          {/* GLOBALER MASTER-STERN FILTER ("Nur meine Einsätze") */}
+          {onlyMyEvents ? (
+            <button
+              type="button"
+              onClick={toggleOnlyMyEvents}
+              className="px-2.5 sm:px-3 py-2 bg-amber-400 text-amber-950 font-extrabold text-xs sm:text-sm rounded-lg border border-amber-500 ring-2 ring-amber-200 hover:bg-amber-300 transition-all flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0 ml-0.5"
+              title="Filter aktiv: Nur meine Einsätze & Termine (Klicken, um wieder alle Termine zu sehen)"
+            >
+              <Star className="w-4 h-4 fill-amber-950 text-amber-950 shrink-0" />
+              <span className="hidden sm:inline">Meine Einsätze</span>
+              <span className="sm:hidden">Meine</span>
+              <X className="w-3.5 h-3.5 ml-0.5 opacity-80" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={toggleOnlyMyEvents}
+              className="p-2 bg-gray-50 rounded-lg text-gray-400 border border-gray-200 hover:text-amber-500 hover:bg-amber-50 hover:border-amber-200 transition-colors cursor-pointer shrink-0 ml-0.5"
+              title="Nur meine Einsätze & Termine anzeigen"
+            >
+              <Star className="w-5 h-5" />
+            </button>
+          )}
+
+          <div className="relative ml-1 sm:ml-3 flex-1 lg:flex-none min-w-0">
+            <span className="font-bold text-gray-800 text-base sm:text-lg capitalize w-full lg:w-48 text-center block truncate">{getNavLabel()}</span>
             <input type="date" value={format(currentDate, 'yyyy-MM-dd')} onChange={(e) => { if (e.target.value) setCurrentDate(new Date(e.target.value)); }} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
           </div>
         </div>
@@ -425,7 +465,9 @@ export const CalendarView: React.FC = () => {
       
       {/* HAUPT-ANSICHT (RBC oder Listen) */}
       <div 
-        className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 p-2 sm:p-3 overflow-hidden flex flex-col min-h-[700px] lg:min-h-[850px] xl:min-h-[1000px]"
+        className={`flex-1 bg-white rounded-xl shadow-sm p-2 sm:p-3 overflow-hidden flex flex-col min-h-[700px] lg:min-h-[850px] xl:min-h-[1000px] transition-all ${
+          onlyMyEvents ? 'border-2 border-amber-400 ring-2 ring-amber-100' : 'border border-gray-200'
+        }`}
         onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}
       >
         {isCalendarLoading ? ( 
@@ -433,26 +475,26 @@ export const CalendarView: React.FC = () => {
         ) : ['termine', 'dienste'].includes(currentView) ? (
           <CalendarListView 
              currentView={currentView as 'termine' | 'dienste'} 
-             displayEvents={displayEvents} 
+             displayEvents={filteredDisplayEvents} 
              currentDate={currentDate} 
              onSelectEvent={handleSelectEvent} 
           />
         ) : currentView === 'agenda' ? (
           <CalendarAgendaView 
             currentDate={currentDate}
-            events={displayEvents}
+            events={filteredDisplayEvents}
             showEmptyDays={showEmptyDays}
             onSelectEvent={handleSelectEvent}
           />
         ) : currentView === 'month' ? (
           <CalendarMonthGridView
             currentDate={currentDate}
-            events={displayEvents}
+            events={filteredDisplayEvents}
             onSelectEvent={handleSelectEvent}
           />
         ) : (
           <Calendar
-            culture="de" localizer={localizer} events={displayEvents} startAccessor="start" endAccessor="end"
+            culture="de" localizer={localizer} events={filteredDisplayEvents} startAccessor="start" endAccessor="end"
             titleAccessor={(event: AdaptedEvent) => {
               const base = event.calendarTitle || (event.title as string);
               return event.myAssignmentIcons ? `${base} ${event.myAssignmentIcons}` : base;
