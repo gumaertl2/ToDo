@@ -1,3 +1,5 @@
+// [2026-10-19] - UX-FEATURE: Favoriten-Stern in der "Mo."-Spaltenüberschrift ergänzt (mit localStorage-Persistenz). Filtert das Monatsgitter per 1-Klick auf alle Termine/Spiele/Dienste/Sitzungen, an denen der eingeloggte Nutzer beteiligt ist.
+// [2026-10-19] - UX-FEATURE: Auswärts-Symbol im Monatskalender auf 🚗 (statt 🚌) umgestellt und führende Heim-/Auswärts-Symbole (🏠 / 🚗) auf ein weißes Mini-Badge gesetzt, damit sie sich auf allen Teamfarben (insb. Rot/Pink) scharf abheben.
 // [2026-10-19] - FEATURE: Eigenständiges, rollierendes 5-Wochen-Monatsgitter (CalendarMonthGridView) erstellt. Startet mit der aktuellen Woche in Zeile 1, zeigt nahtlos die Folgewochen (inkl. Monatswechsel) und ermöglicht freies Scrollen in Vergangenheit & Zukunft.
 // src/features/Events/components/CalendarMonthGridView.tsx
 import React, { useRef, useEffect, useMemo, useState } from 'react';
@@ -8,7 +10,9 @@ import { eachDayOfInterval } from 'date-fns/eachDayOfInterval';
 import { addWeeks, subWeeks } from 'date-fns';
 import { format } from 'date-fns/format';
 import { de } from 'date-fns/locale/de';
+import { Star } from 'lucide-react';
 import type { AdaptedEvent } from '../hooks/useCalendarEvents';
+import { useClubStore } from '../../../store/useClubStore';
 
 interface CalendarMonthGridViewProps {
   currentDate: Date;
@@ -45,6 +49,21 @@ export const CalendarMonthGridView: React.FC<CalendarMonthGridViewProps> = ({
   const today = startOfDay(new Date());
   const todayMs = today.getTime();
 
+  const { user, helpers } = useClubStore();
+
+  const myHelper = useMemo(() => {
+    if (!user?.email || !helpers) return undefined;
+    return helpers.find(h => h.email?.toLowerCase() === user.email?.toLowerCase());
+  }, [user, helpers]);
+
+  const [onlyMyEvents, setOnlyMyEvents] = useState<boolean>(() => {
+    return localStorage.getItem('papatodo_month_only_my_events') === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('papatodo_month_only_my_events', String(onlyMyEvents));
+  }, [onlyMyEvents]);
+
   const [isMobilePortrait, setIsMobilePortrait] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < 640 : false
   );
@@ -54,6 +73,35 @@ export const CalendarMonthGridView: React.FC<CalendarMonthGridViewProps> = ({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Prüft, ob der eingeloggte Nutzer an einem Event beteiligt ist (Spiele, Dienste, Sitzungen, Termine)
+  const isUserInvolved = (ev: AdaptedEvent): boolean => {
+    if (ev.isMyAssignment) return true;
+
+    const userGroupIds = user?.groupIds || [];
+    const myHelperId = myHelper?.id;
+    const myTeamIds = myHelper?.teamIds || [];
+
+    // Interne Sitzungen (Events)
+    if (ev.rawSitzung) {
+      const s = ev.rawSitzung;
+      if (user && (s.participantUserIds || []).includes(user.id)) return true;
+      if ((s.participantGroupIds || []).some(gId => userGroupIds.includes(gId))) return true;
+      if (myHelperId && (s.participantHelperIds || []).includes(myHelperId)) return true;
+      if ((s.participantTeamIds || []).some(tId => myTeamIds.includes(tId))) return true;
+    }
+
+    // Manuelle Kalender-Termine / Dienste
+    if (ev.sourceId === 'manual' && ev.sourceEvent) {
+      const ce = ev.sourceEvent;
+      if (user && (ce.reminderRecipientUserIds || []).includes(user.id)) return true;
+      if ((ce.reminderRecipientGroupIds || []).some((gId: string) => userGroupIds.includes(gId))) return true;
+      if (myHelperId && (ce.reminderRecipientHelperIds || []).includes(myHelperId)) return true;
+      if ((ce.reminderRecipientTeamIds || []).some((tId: string) => myTeamIds.includes(tId))) return true;
+    }
+
+    return false;
+  };
 
   // Wir spannen ein großzügiges, scrollbares Wochenfenster um das gewählte Datum auf
   // (26 Wochen zurück in die Vergangenheit bis 52 Wochen in die Zukunft)
@@ -103,11 +151,25 @@ export const CalendarMonthGridView: React.FC<CalendarMonthGridViewProps> = ({
           {WEEKDAYS.map((dayName, idx) => (
             <div
               key={dayName}
-              className={`py-1.5 text-center text-xs font-bold text-gray-600 ${
+              className={`py-1.5 px-1 flex items-center justify-center relative text-xs font-bold text-gray-600 ${
                 idx < 6 ? 'border-r border-gray-200/70' : ''
               }`}
             >
-              {dayName}
+              {idx === 0 && (
+                <button
+                  type="button"
+                  onClick={() => setOnlyMyEvents(prev => !prev)}
+                  title={onlyMyEvents ? 'Alle Vereinstermine zeigen' : 'Nur Termine zeigen, an denen ich beteiligt bin'}
+                  className={`mr-1 sm:mr-1.5 p-0.5 rounded transition-colors cursor-pointer ${
+                    onlyMyEvents
+                      ? 'text-amber-500 hover:text-amber-600'
+                      : 'text-gray-400 hover:text-amber-500'
+                  }`}
+                >
+                  <Star className={`w-3.5 h-3.5 ${onlyMyEvents ? 'fill-amber-400 text-amber-500' : ''}`} />
+                </button>
+              )}
+              <span>{dayName}</span>
             </div>
           ))}
         </div>
@@ -131,6 +193,8 @@ export const CalendarMonthGridView: React.FC<CalendarMonthGridViewProps> = ({
 
                   const dayEvents = events.filter(e => {
                     if (!e.start) return false;
+                    if (onlyMyEvents && !isUserInvolved(e)) return false;
+
                     const eStart = startOfDay(e.start).getTime();
                     let exclusiveEnd = e.end || e.start;
                     if (e.allDay && exclusiveEnd.getTime() > e.start.getTime()) {
@@ -203,16 +267,27 @@ export const CalendarMonthGridView: React.FC<CalendarMonthGridViewProps> = ({
                         {dayEvents.map((ev) => {
                           const bgColor = ev.color || '#3b82f6';
                           const textColor = getContrastYIQ(bgColor);
-                          const displayTitle = isMobilePortrait
+                          const rawDisplay = isMobilePortrait
                             ? (ev.mobileShortTitle || ev.calendarTitle || String(ev.title || ''))
                             : (ev.calendarTitle || String(ev.title || ''));
+
+                          // Führendes Heim-/Auswärts-Symbol extrahieren (🚌 -> 🚗) und auf weißem Badge rendern
+                          let leadIcon: string | null = null;
+                          let restText = rawDisplay;
+                          if (rawDisplay.startsWith('🏠')) {
+                            leadIcon = '🏠';
+                            restText = rawDisplay.replace(/^🏠\s*/, '');
+                          } else if (rawDisplay.startsWith('🚌')) {
+                            leadIcon = '🚗';
+                            restText = rawDisplay.replace(/^🚌\s*/, '');
+                          }
 
                           return (
                             <div
                               key={`${ev.id}-${dayMs}`}
                               onClick={() => onSelectEvent(ev)}
                               title={typeof ev.title === 'string' ? ev.title : undefined}
-                              className="rounded-[5px] px-1 sm:px-1.5 py-0.5 text-[10px] sm:text-xs leading-tight truncate cursor-pointer transition-transform hover:brightness-95 shrink-0"
+                              className="flex items-center rounded-[5px] px-1 sm:px-1.5 py-0.5 text-[10px] sm:text-xs leading-tight overflow-hidden cursor-pointer transition-transform hover:brightness-95 shrink-0"
                               style={{
                                 backgroundColor: bgColor,
                                 color: textColor,
@@ -221,7 +296,12 @@ export const CalendarMonthGridView: React.FC<CalendarMonthGridViewProps> = ({
                                 boxShadow: ev.isMyAssignment ? '0 1px 2px rgba(0,0,0,0.18)' : 'none'
                               }}
                             >
-                              {displayTitle}
+                              {leadIcon && (
+                                <span className="inline-flex items-center justify-center bg-white/95 rounded-[3px] px-0.5 py-px mr-1 text-[10px] sm:text-[11px] leading-none shadow-2xs shrink-0">
+                                  {leadIcon}
+                                </span>
+                              )}
+                              <span className="truncate">{restText}</span>
                             </div>
                           );
                         })}
