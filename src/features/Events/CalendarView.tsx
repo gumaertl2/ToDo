@@ -1,3 +1,4 @@
+// [2026-10-19] - UX-FEATURE: Rollierendes 5-Wochen-Monatsgitter (CalendarMonthGridView) für den Reiter "Monat" eingebunden (Heute startet immer in Zeile 1, nahtloser Übergang in den Folgemonat).
 // [2026-10-19] - UX-OPTIMIZATION: In der Monatsansicht wird der gesamte Platz im Balken für "[Heim/Auswärts] [Team] [Gegner]" reserviert (Markierung eigener Spiele erfolgt über grüne Tageskachel + kräftigen Rahmen).
 // [2026-10-19] - UX-FEATURE: Kalenderansicht nutzt nun den kompakten Gegner-Titel (calendarTitle ohne eigenen Vereinsnamen) und schaltet im Handy-Hochformat (Monatsansicht) automatisch auf mobileShortTitle (z.B. "🏠 H1") um.
 // [2026-10-18] - UX-FEATURE: Persönliche Einteilungen in der Monats-/Wochen-/Tagesansicht hervorgehoben (dezente grüne Tageskachel via dayPropGetter, Symbol hinter dem Titel via titleAccessor und kräftigerer Rahmen via eventPropGetter).
@@ -20,7 +21,7 @@ import { parse } from 'date-fns/parse';
 import { startOfWeek } from 'date-fns/startOfWeek';
 import { endOfWeek } from 'date-fns/endOfWeek';
 import { getDay } from 'date-fns/getDay';
-import { addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, addYears, subYears } from 'date-fns';
+import { addWeeks, subWeeks, addDays, subDays, addYears, subYears } from 'date-fns';
 import { de } from 'date-fns/locale/de';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { useClubStore } from '../../store/useClubStore';
@@ -36,7 +37,8 @@ import { CalendarExportModal } from './CalendarExportModal';
 import { useCalendarEvents } from './hooks/useCalendarEvents';
 import type { AdaptedEvent } from './hooks/useCalendarEvents';
 import { CalendarListView } from './components/CalendarListView';
-import { CalendarAgendaView } from './components/CalendarAgendaView'; // HIER: Kein Hook mehr, sondern normale Komponente!
+import { CalendarAgendaView } from './components/CalendarAgendaView';
+import { CalendarMonthGridView } from './components/CalendarMonthGridView';
 
 const locales = { 'de': de };
 
@@ -92,13 +94,6 @@ export const CalendarView: React.FC = () => {
 
   const [currentView, setCurrentView] = useState<'month' | 'week' | 'day' | 'agenda' | 'termine' | 'dienste'>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [isMobilePortrait, setIsMobilePortrait] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 640 : false);
-
-  useEffect(() => {
-    const handleResize = () => setIsMobilePortrait(window.innerWidth < 640);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
   
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [selectedEventToEdit, setSelectedEventToEdit] = useState<any>(undefined);
@@ -234,14 +229,14 @@ export const CalendarView: React.FC = () => {
 
   const handleNavPrev = () => {
     if (['termine', 'dienste', 'agenda'].includes(currentView)) setCurrentDate(subYears(currentDate, 1));
-    else if (currentView === 'month') setCurrentDate(subMonths(currentDate, 1));
+    else if (currentView === 'month') setCurrentDate(subWeeks(currentDate, 4));
     else if (currentView === 'week') setCurrentDate(subWeeks(currentDate, 1));
     else setCurrentDate(subDays(currentDate, 1));
   };
 
   const handleNavNext = () => {
     if (['termine', 'dienste', 'agenda'].includes(currentView)) setCurrentDate(addYears(currentDate, 1));
-    else if (currentView === 'month') setCurrentDate(addMonths(currentDate, 1));
+    else if (currentView === 'month') setCurrentDate(addWeeks(currentDate, 4));
     else if (currentView === 'week') setCurrentDate(addWeeks(currentDate, 1));
     else setCurrentDate(addDays(currentDate, 1));
   };
@@ -270,6 +265,12 @@ export const CalendarView: React.FC = () => {
       const wStart = startOfWeek(currentDate, { weekStartsOn: 1 });
       const wEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
       return `${format(wStart, 'dd.MM.')} - ${format(wEnd, 'dd.MM.yyyy', { locale: de })}`;
+    }
+    // In der rollierenden 5-Wochen-Monatsansicht prüfen wir, ob sich das 5-Wochen-Fenster über 2 Monate erstreckt
+    const firstWeekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
+    const fifthWeekEnd = endOfWeek(addWeeks(firstWeekStart, 4), { weekStartsOn: 1 });
+    if (firstWeekStart.getMonth() !== fifthWeekEnd.getMonth()) {
+      return `${format(firstWeekStart, 'MMM', { locale: de })} – ${format(fifthWeekEnd, 'MMM yyyy', { locale: de })}`;
     }
     return format(currentDate, 'MMMM yyyy', { locale: de });
   };
@@ -437,27 +438,27 @@ export const CalendarView: React.FC = () => {
              onSelectEvent={handleSelectEvent} 
           />
         ) : currentView === 'agenda' ? (
-          // HIER IST DER FIX: Die AgendaView ist nun komplett eigenständig und befreit vom RBC Plugin!
           <CalendarAgendaView 
             currentDate={currentDate}
             events={displayEvents}
             showEmptyDays={showEmptyDays}
             onSelectEvent={handleSelectEvent}
           />
+        ) : currentView === 'month' ? (
+          <CalendarMonthGridView
+            currentDate={currentDate}
+            events={displayEvents}
+            onSelectEvent={handleSelectEvent}
+          />
         ) : (
           <Calendar
             culture="de" localizer={localizer} events={displayEvents} startAccessor="start" endAccessor="end"
             titleAccessor={(event: AdaptedEvent) => {
-              if (currentView === 'month') {
-                return isMobilePortrait
-                  ? (event.mobileShortTitle || event.calendarTitle || (event.title as string))
-                  : (event.calendarTitle || (event.title as string));
-              }
               const base = event.calendarTitle || (event.title as string);
               return event.myAssignmentIcons ? `${base} ${event.myAssignmentIcons}` : base;
             }}
             view={currentView as any} toolbar={false} onView={handleViewChange}
-            views={{ month: true, week: true, day: true }} // agenda entfernt, da es nun extern gerendert wird
+            views={{ week: true, day: true }}
             date={currentDate} onNavigate={(date) => setCurrentDate(date)}
             dayPropGetter={(date: Date) => {
               const dateKey = format(date, 'yyyy-MM-dd');
@@ -476,8 +477,6 @@ export const CalendarView: React.FC = () => {
                 border: event.isMyAssignment ? '2px solid #065f46' : 'none', 
                 fontWeight: event.isMyAssignment ? 700 : 500,
                 boxShadow: event.isMyAssignment ? '0 1px 3px rgba(0,0,0,0.2)' : 'none',
-                padding: (isMobilePortrait && currentView === 'month') ? '1px 2px' : undefined,
-                fontSize: (isMobilePortrait && currentView === 'month') ? '11px' : undefined,
                 display: 'block', 
                 cursor: 'pointer' 
               } 
