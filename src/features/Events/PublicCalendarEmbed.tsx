@@ -1,3 +1,4 @@
+// [2026-10-19] - UX-FEATURE: Öffentlichen Kalender (PublicCalendarEmbed) auf rollierendes 5-Wochen-Monatsgitter (CalendarMonthGridView), Team-Kürzel (z.B. H1, J1), kompakte Gegner-Anzeige (calendarTitle / mobileShortTitle) und direkten mobilen Spielplan ohne RBC-Wrapper aktualisiert.
 // [2026-06-10] - BUGFIX: Bulletproof-Loading für den öffentlichen Kalender. Lade-Vorgänge für Termine, Sitzungen und Abos in separate try/catch Blöcke isoliert. Verhindert, dass ein Berechtigungs-Fehler (Firebase Rules) bei den Abos den kompletten Kalender für anonyme Gäste lahmlegt. Filter (Termine/Dienste) sind nun standardmäßig immer aktiv.
 // [2026-05-28] - BUGFIX: Homepage-Leak geschlossen. Sitzungen werden im öffentlichen Kalender nun strikt nach 'isPublic' (Auf Homepage zeigen) statt nach 'isPublished' (Agenda veröffentlicht) gefiltert.
 // 2026-04-15 21:40 - FEATURE: Automatische Heim (🏠) / Auswärts (🚌) Kennzeichnung + Google Maps Link
@@ -8,7 +9,6 @@
 // src/features/Events/PublicCalendarEmbed.tsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
-import type { Event as RBCEvent } from 'react-big-calendar';
 import { format } from 'date-fns/format';
 import { parse } from 'date-fns/parse';
 import { startOfWeek } from 'date-fns/startOfWeek';
@@ -16,13 +16,15 @@ import { endOfWeek } from 'date-fns/endOfWeek';
 import { getDay } from 'date-fns/getDay';
 import { eachDayOfInterval } from 'date-fns/eachDayOfInterval';
 import { startOfDay } from 'date-fns/startOfDay';
-import { addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, addYears, subYears, getISOWeek } from 'date-fns';
+import { addWeeks, subWeeks, addDays, subDays, addYears, subYears, getISOWeek } from 'date-fns';
 import { de } from 'date-fns/locale/de';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Printer, ChevronLeft, ChevronRight, Home, List as ListIcon, CalendarDays, MapPin, Clock, Info, X, Filter, CalendarPlus, Copy, Check } from 'lucide-react';
 import type { CalendarEvent, CalendarSubscription, Event } from '../../core/types/models';
+import type { AdaptedEvent } from './hooks/useCalendarEvents';
+import { CalendarMonthGridView } from './components/CalendarMonthGridView';
 
 const locales = { 'de': de };
 
@@ -48,8 +50,15 @@ const getContrastYIQ = (hexcolor?: string) => {
   return (yiq >= 128) ? '#1f2937' : 'white';
 };
 
-interface AdaptedEvent extends RBCEvent {
-  id: string; sourceId: string; sourceEvent?: CalendarEvent; rawSitzung?: Event; color?: string; description?: string; location?: string; seriesId?: string; showInMatchPlan?: boolean;
+// Extrahiert aus einer Paarung ("[Heim] vs. [Gast]" oder "[Heim] - [Gast]") gezielt den Gegnernamen
+function extractOpponentName(rawTitle: string, isHeim: boolean): string {
+  const separatorRegex = /\s+(?:vs\.?|-|–|:)\s+/i;
+  if (!separatorRegex.test(rawTitle)) return rawTitle;
+
+  const parts = rawTitle.split(separatorRegex);
+  if (parts.length < 2) return rawTitle;
+
+  return isHeim ? parts.slice(1).join(' - ').trim() : parts[0].trim();
 }
 
 export const PublicCalendarEmbed: React.FC = () => {
@@ -74,6 +83,7 @@ export const PublicCalendarEmbed: React.FC = () => {
   const [showAboModal, setShowAboModal] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [touchStart, setTouchStart] = useState<number | null>(null);
+  const agendaScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchPublicData = async () => {
@@ -134,14 +144,14 @@ export const PublicCalendarEmbed: React.FC = () => {
 
   const handleNavPrev = () => {
     if (['termine', 'dienste', 'agenda'].includes(currentView)) setCurrentDate(subYears(currentDate, 1));
-    else if (currentView === 'month') setCurrentDate(subMonths(currentDate, 1));
+    else if (currentView === 'month') setCurrentDate(subWeeks(currentDate, 4));
     else if (currentView === 'week') setCurrentDate(subWeeks(currentDate, 1));
     else setCurrentDate(subDays(currentDate, 1));
   };
 
   const handleNavNext = () => {
     if (['termine', 'dienste', 'agenda'].includes(currentView)) setCurrentDate(addYears(currentDate, 1));
-    else if (currentView === 'month') setCurrentDate(addMonths(currentDate, 1));
+    else if (currentView === 'month') setCurrentDate(addWeeks(currentDate, 4));
     else if (currentView === 'week') setCurrentDate(addWeeks(currentDate, 1));
     else setCurrentDate(addDays(currentDate, 1));
   };
@@ -158,41 +168,85 @@ export const PublicCalendarEmbed: React.FC = () => {
 
   const rbcEvents: AdaptedEvent[] = useMemo(() => {
     const internalEvents = calendarEvents.map(ev => {
-      const isHeim = ev.location?.toLowerCase().includes('maisach');
-      const isAuswaerts = ev.location && !isHeim;
+      const isHeim = !!ev.location?.toLowerCase().includes('maisach');
+      const isAuswaerts = !!(ev.location && !isHeim);
       const matchPrefix = ev.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
+      const fullTitle = `${matchPrefix}${ev.title}`;
+      const calendarClean = ev.showInMatchPlan
+        ? `${matchPrefix}${extractOpponentName(ev.title, isHeim)}`
+        : fullTitle;
 
       return {
-        id: ev.id, sourceId: 'manual', seriesId: ev.seriesId, 
-        title: `${matchPrefix}${ev.title}`, description: ev.description || '', location: ev.location || '',
-        start: new Date(ev.startTime), end: ev.endTime ? new Date(ev.endTime) : new Date(ev.startTime + (1000 * 60 * 60)), 
-        allDay: ev.isAllDay, sourceEvent: ev, color: ev.color || '#3b82f6',
+        id: ev.id,
+        sourceId: 'manual',
+        seriesId: ev.seriesId, 
+        title: fullTitle,
+        calendarTitle: calendarClean,
+        mobileShortTitle: calendarClean,
+        description: ev.description || '',
+        location: ev.location || '',
+        start: new Date(ev.startTime),
+        end: ev.endTime ? new Date(ev.endTime) : new Date(ev.startTime + (1000 * 60 * 60)), 
+        allDay: ev.isAllDay,
+        sourceEvent: ev,
+        color: ev.color || '#3b82f6',
         showInMatchPlan: ev.showInMatchPlan
       };
     });
     
-    const publicSitzungen = sitzungen.filter(ev => ev.plannedStartTime && ev.status !== 'ABGESCHLOSSEN').map(ev => ({
-      id: ev.id, sourceId: 'manual', seriesId: undefined, 
-      title: `Sitzung: ${ev.title}`, description: ev.description || '', location: ev.location || '',
-      start: new Date(ev.plannedStartTime!), end: ev.plannedEndTime ? new Date(ev.plannedEndTime) : new Date(ev.plannedStartTime! + (1000 * 60 * 60 * 2)), 
-      allDay: false, rawSitzung: ev, color: '#8b5cf6',
-      showInMatchPlan: false
-    }));
+    const publicSitzungen = sitzungen.filter(ev => ev.plannedStartTime && ev.status !== 'ABGESCHLOSSEN').map(ev => {
+      const sitzungTitle = `Sitzung: ${ev.title}`;
+      return {
+        id: ev.id,
+        sourceId: 'manual',
+        seriesId: undefined, 
+        title: sitzungTitle,
+        calendarTitle: sitzungTitle,
+        mobileShortTitle: sitzungTitle,
+        description: ev.description || '',
+        location: ev.location || '',
+        start: new Date(ev.plannedStartTime!),
+        end: ev.plannedEndTime ? new Date(ev.plannedEndTime) : new Date(ev.plannedStartTime! + (1000 * 60 * 60 * 2)), 
+        allDay: false,
+        rawSitzung: ev,
+        color: '#8b5cf6',
+        showInMatchPlan: false
+      };
+    });
 
-    const cachedExternalEvents = calendarSubscriptions.filter(sub => sub.isActive && sub.cachedEvents).flatMap(sub => 
-        sub.cachedEvents!.map((ev, index) => {
-          const isHeim = ev.location?.toLowerCase().includes('maisach');
-          const isAuswaerts = ev.location && !isHeim;
-          const matchPrefix = sub.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
+    const cachedExternalEvents = calendarSubscriptions.filter(sub => sub.isActive && sub.cachedEvents).flatMap(sub => {
+      const subPrefix = sub.name ? `${sub.name.trim()} ` : '';
+      return sub.cachedEvents!.map((ev, index) => {
+        const isHeim = !!ev.location?.toLowerCase().includes('maisach');
+        const isAuswaerts = !!(ev.location && !isHeim);
+        const matchPrefix = sub.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
 
-          return {
-            id: `ics-${sub.id}-${ev.uid}-${index}`, sourceId: sub.id, 
-            title: `${matchPrefix}${ev.title}`, description: ev.description || '', location: ev.location || '',
-            start: new Date(ev.startTime), end: new Date(ev.endTime), allDay: ev.isAllDay, color: sub.color,
-            showInMatchPlan: sub.showInMatchPlan
-          };
-        })
-      );
+        const opponentOnlyTitle = sub.showInMatchPlan
+          ? extractOpponentName(ev.title, isHeim)
+          : ev.title;
+
+        const fullTitle = `${matchPrefix}${subPrefix}${ev.title}`;
+        const calendarTitle = `${matchPrefix}${subPrefix}${opponentOnlyTitle}`;
+        const mobileShortTitle = sub.showInMatchPlan && sub.name
+          ? `${matchPrefix}${sub.name.trim()}`
+          : calendarTitle;
+
+        return {
+          id: `ics-${sub.id}-${ev.uid}-${index}`,
+          sourceId: sub.id, 
+          title: fullTitle,
+          calendarTitle,
+          mobileShortTitle,
+          description: ev.description || '',
+          location: ev.location || '',
+          start: new Date(ev.startTime),
+          end: new Date(ev.endTime),
+          allDay: ev.isAllDay,
+          color: sub.color,
+          showInMatchPlan: sub.showInMatchPlan
+        };
+      });
+    });
     return [...internalEvents, ...publicSitzungen, ...cachedExternalEvents];
   }, [calendarEvents, sitzungen, calendarSubscriptions]);
 
@@ -257,7 +311,83 @@ export const PublicCalendarEmbed: React.FC = () => {
       const wEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
       return `${format(wStart, 'dd.MM.')} - ${format(wEnd, 'dd.MM.yyyy', { locale: de })}`;
     }
+    const firstWeekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
+    const fifthWeekEnd = endOfWeek(addWeeks(firstWeekStart, 4), { weekStartsOn: 1 });
+    if (firstWeekStart.getMonth() !== fifthWeekEnd.getMonth()) {
+      return `${format(firstWeekStart, 'MMM', { locale: de })} – ${format(fifthWeekEnd, 'MMM yyyy', { locale: de })}`;
+    }
     return format(currentDate, 'MMMM yyyy', { locale: de });
+  };
+
+  // Auto-Scroll zum heutigen Tag im Spielplan (Agenda)
+  useEffect(() => {
+    if (currentView === 'agenda' && agendaScrollRef.current) {
+      setTimeout(() => {
+        const container = agendaScrollRef.current;
+        if (!container) return;
+        const todayEl = container.querySelector('[data-is-future="true"]') as HTMLElement | null;
+        if (todayEl) {
+          container.scrollTop = Math.max(0, todayEl.offsetTop - 8);
+        }
+      }, 50);
+    }
+  }, [currentView, currentDate, displayEvents, showEmptyDays]);
+
+  const renderAgendaView = () => {
+    const today = startOfDay(new Date());
+    const month = currentDate.getMonth();
+    const startYear = month < 4 ? currentDate.getFullYear() - 1 : currentDate.getFullYear();
+    const rangeStart = new Date(startYear, 4, 1);
+    const rangeEnd = new Date(startYear + 1, 4, 31);
+    const daysInInterval = eachDayOfInterval({ start: rangeStart, end: rangeEnd });
+
+    return (
+      <div ref={agendaScrollRef} className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-4 bg-white rounded-xl border border-gray-200 shadow-sm h-full relative print:bg-white print:overflow-visible">
+        {daysInInterval.map(day => {
+          const dayEvents = displayEvents.filter(e => {
+            const eStart = startOfDay(e.start!);
+            let exclusiveEnd = e.end || e.start!;
+            if (e.allDay && exclusiveEnd.getTime() > e.start!.getTime()) exclusiveEnd = new Date(exclusiveEnd.getTime() - 1000); 
+            return day >= eStart && day <= startOfDay(exclusiveEnd);
+          });
+          
+          if (!showEmptyDays && dayEvents.length === 0) return null;
+          
+          dayEvents.sort((a, b) => { if (a.allDay && !b.allDay) return -1; if (!a.allDay && b.allDay) return 1; return a.start!.getTime() - b.start!.getTime(); });
+          
+          const isToday = day.getTime() === today.getTime();
+          const isFutureOrToday = day >= today;
+
+          return (
+            <div 
+              key={day.toISOString()} 
+              data-is-future={isFutureOrToday ? "true" : "false"}
+              className={`bg-white rounded-lg shadow-sm border ${isToday ? 'border-blue-300 ring-2 ring-blue-100' : 'border-gray-200'} overflow-hidden print:border-b print:shadow-none print:rounded-none`}
+            >
+              <div className={`px-4 py-2 border-b ${isToday ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'} print:bg-transparent print:border-black`}>
+                <h3 className={`text-sm font-bold ${isToday ? 'text-blue-800 print:text-black' : 'text-gray-700 print:text-black'}`}>
+                  {format(day, 'EEEE, dd. MMMM yyyy', { locale: de })}
+                  {isToday && <span className="ml-2 text-[10px] uppercase tracking-wider font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full print:hidden">Heute</span>}
+                </h3>
+              </div>
+              <div className="p-1.5">
+                {dayEvents.length === 0 ? <p className="p-2 text-xs text-gray-400 italic text-center print:hidden">Keine Termine</p> : (
+                  <div className="space-y-1">
+                    {dayEvents.map(e => (
+                      <div key={`${e.id}-${day.toISOString()}`} onClick={() => handleSelectEvent(e)} className="flex flex-col sm:flex-row sm:items-center p-2 rounded hover:bg-gray-50 cursor-pointer transition print:border-l-[4px]" style={{ borderLeftWidth: '4px', borderLeftColor: e.color || '#3b82f6' }}>
+                        <div className="w-20 shrink-0 text-xs font-bold text-gray-500 mb-1 sm:mb-0 print:text-black">{e.allDay ? 'Ganztägig' : `${format(e.start!, 'HH:mm')} Uhr`}</div>
+                        <div className="flex-1"><div className="font-bold text-gray-900 text-sm print:text-black">{e.title}</div>{e.location && <div className="text-xs text-gray-500 mt-0.5 flex items-center print:text-black">📍 {e.location}</div>}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        <div className="h-[80vh] print:hidden" aria-hidden="true" />
+      </div>
+    );
   };
 
   const renderYearlyList = () => {
@@ -281,7 +411,7 @@ export const PublicCalendarEmbed: React.FC = () => {
     const isDienste = currentView === 'dienste';
 
     return (
-      <div className="flex flex-col w-full h-full">
+      <div className="flex flex-col w-full h-full bg-white rounded-xl border border-gray-200 shadow-sm p-2 sm:p-3">
         <div className="flex justify-end mb-3 shrink-0 px-1 pt-1 print:hidden">
           <button onClick={() => window.print()} className="flex items-center px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-50 transition shadow-sm">
             <Printer className="w-4 h-4 mr-2 text-gray-600" /> Liste drucken
@@ -366,83 +496,6 @@ export const PublicCalendarEmbed: React.FC = () => {
     );
   };
 
-  const CustomAgendaView = useMemo(() => {
-    const View = ({ date, events }: { date: Date, events: AdaptedEvent[] }) => {
-      const scrollRef = useRef<HTMLDivElement>(null);
-      const today = startOfDay(new Date());
-
-      const { start: rangeStart, end: rangeEnd } = useMemo(() => {
-        const month = date.getMonth();
-        const startYear = month < 4 ? date.getFullYear() - 1 : date.getFullYear();
-        return { start: new Date(startYear, 4, 1), end: new Date(startYear + 1, 4, 31) };
-      }, [date]);
-
-      const daysInInterval = eachDayOfInterval({ start: rangeStart, end: rangeEnd });
-      
-      useEffect(() => {
-        if (scrollRef.current) {
-          setTimeout(() => {
-            const container = scrollRef.current;
-            if (!container) return;
-            const todayEl = container.querySelector('[data-is-future="true"]') as HTMLElement;
-            if (todayEl) {
-              container.scrollTop = Math.max(0, todayEl.offsetTop - 8);
-            }
-          }, 50);
-        }
-      }, [date, events, showEmptyDays]); 
-
-      return (
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-4 bg-gray-50/30 h-full relative print:bg-white print:overflow-visible">
-          {daysInInterval.map(day => {
-            const dayEvents = events.filter(e => {
-              const eStart = startOfDay(e.start!);
-              let exclusiveEnd = e.end || e.start!;
-              if (e.allDay && exclusiveEnd.getTime() > e.start!.getTime()) exclusiveEnd = new Date(exclusiveEnd.getTime() - 1000); 
-              return day >= eStart && day <= startOfDay(exclusiveEnd);
-            });
-            
-            if (!showEmptyDays && dayEvents.length === 0) return null;
-            
-            dayEvents.sort((a, b) => { if (a.allDay && !b.allDay) return -1; if (!a.allDay && b.allDay) return 1; return a.start!.getTime() - b.start!.getTime(); });
-            
-            const isToday = day.getTime() === today.getTime();
-            const isFutureOrToday = day >= today;
-
-            return (
-              <div 
-                key={day.toISOString()} 
-                data-is-future={isFutureOrToday ? "true" : "false"}
-                className={`bg-white rounded-lg shadow-sm border ${isToday ? 'border-blue-300 ring-2 ring-blue-100' : 'border-gray-200'} overflow-hidden print:border-b print:shadow-none print:rounded-none`}
-              >
-                <div className={`px-4 py-2 border-b ${isToday ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'} print:bg-transparent print:border-black`}>
-                  <h3 className={`text-sm font-bold ${isToday ? 'text-blue-800 print:text-black' : 'text-gray-700 print:text-black'}`}>
-                    {format(day, 'EEEE, dd. MMMM yyyy', { locale: de })}
-                    {isToday && <span className="ml-2 text-[10px] uppercase tracking-wider font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full print:hidden">Heute</span>}
-                  </h3>
-                </div>
-                <div className="p-1.5">
-                  {dayEvents.length === 0 ? <p className="p-2 text-xs text-gray-400 italic text-center print:hidden">Keine Termine</p> : (
-                    <div className="space-y-1">
-                      {dayEvents.map(e => (
-                        <div key={`${e.id}-${day.toISOString()}`} onClick={() => handleSelectEvent(e)} className="flex flex-col sm:flex-row sm:items-center p-2 rounded hover:bg-gray-50 cursor-pointer transition print:border-l-[4px]" style={{ borderLeftWidth: '4px', borderLeftColor: e.color || '#3b82f6' }}>
-                          <div className="w-20 shrink-0 text-xs font-bold text-gray-500 mb-1 sm:mb-0 print:text-black">{e.allDay ? 'Ganztägig' : `${format(e.start!, 'HH:mm')} Uhr`}</div>
-                          <div className="flex-1"><div className="font-bold text-gray-900 text-sm print:text-black">{e.title}</div>{e.location && <div className="text-xs text-gray-500 mt-0.5 flex items-center print:text-black">📍 {e.location}</div>}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-          <div className="h-[80vh] print:hidden" aria-hidden="true" />
-        </div>
-      );
-    };
-    View.title = () => ''; View.navigate = () => new Date(); return View;
-  }, [showEmptyDays]);
-
   const renderFiltersPanel = () => (
     <div className="space-y-4">
       <div>
@@ -499,7 +552,7 @@ export const PublicCalendarEmbed: React.FC = () => {
       <div className="flex items-center justify-between p-1.5 sm:p-2 border-b border-gray-200 bg-white z-20 print:hidden shadow-sm">
         <div className="flex items-center gap-1 sm:gap-2 flex-1">
           <button onClick={handleNavPrev} className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-md text-gray-600 border border-transparent hover:border-gray-200 transition-colors"><ChevronLeft className="w-5 h-5"/></button>
-          <button onClick={() => setCurrentDate(new Date())} className="p-1.5 sm:p-2 hover:bg-blue-50 rounded-md text-blue-600 border border-transparent hover:border-blue-100 transition-colors"><Home className="w-5 h-5"/></button>
+          <button onClick={() => setCurrentDate(new Date())} className="p-1.5 sm:p-2 hover:bg-blue-50 rounded-md text-blue-600 border border-transparent hover:border-blue-100 transition-colors" title="Heute"><Home className="w-5 h-5"/></button>
           <button onClick={handleNavNext} className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-md text-gray-600 border border-transparent hover:border-gray-200 transition-colors"><ChevronRight className="w-5 h-5"/></button>
           <div className="relative flex items-center ml-1 sm:ml-2">
             <span className="font-bold text-gray-800 text-sm sm:text-base capitalize whitespace-nowrap">{getNavLabel()}</span>
@@ -546,11 +599,22 @@ export const PublicCalendarEmbed: React.FC = () => {
       )}
 
       <div className="flex-1 p-1 sm:p-2 overflow-hidden flex flex-col bg-gray-50 print:p-0 print:border-none print:shadow-none print:bg-white" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-        {['termine', 'dienste'].includes(currentView) ? renderYearlyList() : (
+        {['termine', 'dienste'].includes(currentView) ? (
+          renderYearlyList()
+        ) : currentView === 'agenda' ? (
+          renderAgendaView()
+        ) : currentView === 'month' ? (
+          <CalendarMonthGridView
+            currentDate={currentDate}
+            events={displayEvents}
+            onSelectEvent={handleSelectEvent}
+          />
+        ) : (
           <Calendar
             culture="de" localizer={localizer} events={displayEvents} startAccessor="start" endAccessor="end"
+            titleAccessor={(event: AdaptedEvent) => event.calendarTitle || (event.title as string)}
             view={currentView as any} toolbar={false} onView={(v) => setCurrentView(v as any)}
-            views={{ month: true, week: true, day: true, agenda: CustomAgendaView }}
+            views={{ week: true, day: true }}
             date={currentDate} onNavigate={setCurrentDate}
             eventPropGetter={eventStyleGetter} onSelectEvent={handleSelectEvent} popup 
             messages={{ showMore: (total) => `+${total} weitere` }}
@@ -636,7 +700,7 @@ export const PublicCalendarEmbed: React.FC = () => {
                     <p className="font-bold text-xs uppercase tracking-wider text-gray-400 mb-0.5">Ort</p>
                     <p className="font-medium whitespace-pre-wrap">{selectedEventToView.location}</p>
                     <a 
-                      href={`https://www.google.com/maps/search/?api=1&query=$${encodeURIComponent(selectedEventToView.location)}`}
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedEventToView.location)}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="mt-2 inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg hover:bg-blue-100 transition-colors print:hidden shadow-sm"
