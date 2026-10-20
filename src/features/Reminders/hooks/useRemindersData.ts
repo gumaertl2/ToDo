@@ -1,9 +1,11 @@
+// [2026-10-20] - BUGFIX: WhatsApp-Kader Vorschau nutzt nun 'generateStableEventId' statt veralteter 'sanitizeId', um korrekte Spieler-Overrides aus der DB zu laden.
 // [2026-10-18] - FEAT: Konfigurierbarer Rückblick-Zeitraum (historyLookbackDays, Standard 30 Tage mit localStorage-Persistenz) für die Erinnerungs-Historie ergänzt.
 // [2026-10-18] - FEAT: Audit-Trail & Verlauf (Gesendet/Verworfen von wem & wann), Wiederherstellen-Funktion sowie Differenzierung zwischen Terminen (strikte Mitternachtsregel) und offenen Aufgaben (bleiben nach Fälligkeit als Überfällig sichtbar, bis sie erledigt sind).
 // [2026-10-18] - REFACTOR: Berechnungs-, Formatierungs- und Aktionslogik (WhatsApp-Versand, Snooze, Verwerfen, Auto-Kader) aus der überladenen RemindersView.tsx in einen dedizierten Custom Hook ausgelagert (Separation of Concerns).
 // src/features/Reminders/hooks/useRemindersData.ts
 import { useMemo, useState, useEffect } from 'react';
 import { useClubStore } from '../../../store/useClubStore';
+import { generateStableEventId } from '../../Users/hooks/useMatchLineupMatrix';
 
 export type ReminderModelType = 'calendarEvent' | 'task' | 'event' | 'subscription';
 
@@ -26,9 +28,6 @@ export interface PendingReminderItem {
   sentBy?: string;
   action?: 'SENT' | 'DISMISSED';
 }
-
-// Hilfsfunktion: Macht iCal-UIDs sicher für Firestore Dokument-Pfade
-const sanitizeId = (id: string) => id.replace(/[\/\\.#$\[\]]/g, '_');
 
 export const formatReminderText = (type: string, item: any, customText?: string): string => {
   const baseText = customText ? customText : 'Hallo, hier ist eine kurze Erinnerung für dich:';
@@ -461,7 +460,7 @@ export const useRemindersData = () => {
             
             let lineupText = '';
             if (teamContext) {
-              const safeEventId = sanitizeId(cachedEv.uid);
+              const safeEventId = generateStableEventId(teamContext.id, cachedEv);
               const storeLineup = (matchLineups || []).find(m => m.id === safeEventId);
               const activePlayerIds = storeLineup ? storeLineup.lineupHelperIds : (teamContext.defaultLineupHelperIds || []);
               const activePlayers = helpers
