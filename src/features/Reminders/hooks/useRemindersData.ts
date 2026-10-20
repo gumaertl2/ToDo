@@ -1,3 +1,4 @@
+// [2026-10-20] - FEATURE: Logistik-Informationen (Betreuer, Fahrer, Abfahrtszeit) aus dem Lineup werden nun automatisch in den WhatsApp-Erinnerungstext inkludiert.
 // [2026-10-20] - BUGFIX: WhatsApp-Kader Vorschau nutzt nun 'generateStableEventId' statt veralteter 'sanitizeId', um korrekte Spieler-Overrides aus der DB zu laden.
 // [2026-10-18] - FEAT: Konfigurierbarer Rückblick-Zeitraum (historyLookbackDays, Standard 30 Tage mit localStorage-Persistenz) für die Erinnerungs-Historie ergänzt.
 // [2026-10-18] - FEAT: Audit-Trail & Verlauf (Gesendet/Verworfen von wem & wann), Wiederherstellen-Funktion sowie Differenzierung zwischen Terminen (strikte Mitternachtsregel) und offenen Aufgaben (bleiben nach Fälligkeit als Überfällig sichtbar, bis sie erledigt sind).
@@ -467,10 +468,34 @@ export const useRemindersData = () => {
                 .filter(h => activePlayerIds.includes(h.id))
                 .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
+              // --- LOGISTIK (Betreuer, Fahrer, Abfahrt) ---
+              const betreuerIds = storeLineup?.betreuerHelperIds || [];
+              const fahrerIds = storeLineup?.fahrerHelperIds || [];
+              const departureTime = storeLineup?.departureTime || '';
+
+              const betreuerNames = helpers.filter(h => betreuerIds.includes(h.id)).map(h => h.alias || h.name.split(' ')[0]).join(', ');
+              const fahrerNames = helpers.filter(h => fahrerIds.includes(h.id)).map(h => h.alias || h.name.split(' ')[0]).join(', ');
+
+              const logisticsLines: string[] = [];
+              if (betreuerNames) {
+                logisticsLines.push(`🧑‍🏫 *Betreuer:* ${betreuerNames}`);
+              }
+              if (departureTime || fahrerNames) {
+                let carLine = '🚗 *Abfahrt:* ';
+                if (departureTime) carLine += `${departureTime} Uhr`;
+                if (fahrerNames) {
+                  if (departureTime) carLine += ` (Fahrer: ${fahrerNames})`;
+                  else carLine += `Fahrer: ${fahrerNames}`;
+                }
+                logisticsLines.push(carLine.trim());
+              }
+              const logisticsString = logisticsLines.length > 0 ? `\n\n${logisticsLines.join('\n')}` : '';
+              // ---------------------------------------------
+
               if (activePlayers.length > 0) {
-                lineupText = `\n\n👟 *Kader (${activePlayers.length}):*\n${activePlayers.map(p => p.alias || p.name.split(' ')[0]).join(', ')}\n\n(Bitte sagt rechtzeitig ab, falls sich etwas ändert!)`;
+                lineupText = `\n\n👟 *Kader (${activePlayers.length}):*\n${activePlayers.map(p => p.alias || p.name.split(' ')[0]).join(', ')}${logisticsString}\n\n(Bitte sagt rechtzeitig ab, falls sich etwas ändert!)`;
               } else {
-                lineupText = `\n\n👟 *Kader (0):*\nKeine Spieler eingeteilt.\n\n(Bitte sagt rechtzeitig ab, falls sich etwas ändert!)`;
+                lineupText = `\n\n👟 *Kader (0):*\nKeine Spieler eingeteilt.${logisticsString}\n\n(Bitte sagt rechtzeitig ab, falls sich etwas ändert!)`;
               }
             }
 
