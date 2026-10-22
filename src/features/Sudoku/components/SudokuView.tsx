@@ -1,5 +1,5 @@
 // src/features/Sudoku/components/SudokuView.tsx
-// [2026-10-22] - FIX: Entfernung von 'evil' aus der UI, korrekte Übergabe der 4 unterstützten Schwierigkeitsgrade.
+// [2026-10-22] - UI-FIX: Deutlicher "Zurück zur App"-Button statt des unauffälligen X in der Lobby.
 import React, { useState, useEffect } from 'react';
 import { useSudokuGame } from '../hooks/useSudokuGame';
 import type { SudokuDifficulty } from '../hooks/useSudokuGame';
@@ -17,6 +17,11 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
   const [lobbyDifficulty, setLobbyDifficulty] = useState<SudokuDifficulty>('medium');
   const [gameMode, setGameMode] = useState<'ranked' | 'practice'>('ranked');
   const [showPracticeTime, setShowPracticeTime] = useState<boolean>(false);
+  const [sessionTitle, setSessionTitle] = useState<string>(() => {
+    return localStorage.getItem('sudoku_session_title') || 'Pausen-Spiele: Erste Runde';
+  });
+  const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false);
+  const [tempTitle, setTempTitle] = useState<string>(sessionTitle);
   
   const { user, roleProfiles } = useClubStore();
   
@@ -27,7 +32,12 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
   const game = useSudokuGame();
 
   const userRoleProfile = roleProfiles?.find(p => p.id === user?.roleProfileId);
-  const isAdmin = !!userRoleProfile?.permissions?.admin || !!user?.permissions?.admin;
+  const isAdmin = 
+    user?.role === 'ADMIN' || 
+    user?.role === 'admin' || 
+    userRoleProfile?.name === 'ADMIN' || 
+    (useClubStore.getState() as any).isAdmin?.() || 
+    false;
 
   useEffect(() => {
     if (game.status === 'won') {
@@ -53,6 +63,14 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
     setView('playing');
   };
 
+  const handleSaveTitle = () => {
+    if (tempTitle.trim()) {
+      setSessionTitle(tempTitle.trim());
+      localStorage.setItem('sudoku_session_title', tempTitle.trim());
+    }
+    setIsEditingTitle(false);
+  };
+
   const filteredScores = sudokuScores.filter((s: any) => s.difficulty === lobbyDifficulty);
 
   return (
@@ -60,11 +78,50 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
       {view === 'lobby' && (
         <div className="flex-1 flex flex-col overflow-y-auto pb-10">
           <div className="bg-slate-900 text-white p-4 flex items-center justify-between shadow-md sticky top-0 z-10">
-            <h1 className="text-xl font-bold tracking-wide">☕ Pausen-Spiele</h1>
-            <button onClick={onClose} className="p-2 bg-slate-800 rounded-full hover:bg-slate-700 transition-colors">
-              ✕
+            <div className="flex items-center gap-3">
+              <h1 className="text-xl font-bold tracking-wide">☕ {sessionTitle}</h1>
+              {isAdmin && !isEditingTitle && (
+                <button 
+                  onClick={() => { setTempTitle(sessionTitle); setIsEditingTitle(true); }}
+                  className="text-xs bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-slate-300 transition-colors"
+                >
+                  ✏️ Titel bearbeiten
+                </button>
+              )}
+            </div>
+            {/* DEUTLICHER ZURÜCK-BUTTON STATT X */}
+            <button 
+              onClick={onClose} 
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold rounded-lg transition-colors shadow-sm"
+            >
+              <span>◀</span>
+              <span>Zurück zur App</span>
             </button>
           </div>
+
+          {isAdmin && isEditingTitle && (
+            <div className="bg-blue-900 text-white p-3 px-4 flex items-center gap-2 shadow-inner">
+              <input 
+                type="text" 
+                value={tempTitle} 
+                onChange={(e) => setTempTitle(e.target.value)}
+                className="flex-1 px-3 py-1.5 rounded text-slate-900 font-medium text-sm bg-white"
+                placeholder="Titel der Runde eingeben..."
+              />
+              <button 
+                onClick={handleSaveTitle}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 rounded text-sm font-bold shadow"
+              >
+                Speichern
+              </button>
+              <button 
+                onClick={() => setIsEditingTitle(false)}
+                className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-sm font-medium"
+              >
+                Abbrechen
+              </button>
+            </div>
+          )}
 
           <div className="p-4 flex-1">
             <div className="flex gap-2 mb-6">
@@ -98,7 +155,6 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
                 </button>
               </div>
 
-              {/* SCHWIERIGKEITEN: 4 unterstützte Stufen */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 bg-slate-100 p-1 rounded-xl mb-6">
                 {[
                   { id: 'easy', label: 'Leicht' },

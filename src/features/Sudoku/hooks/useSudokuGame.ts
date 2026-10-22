@@ -1,4 +1,5 @@
-// [2026-10-22] - FIX: Entfernung von 'evil', da von sudoku-gen nur bis 'expert' unterstützt.
+// src/features/Sudoku/hooks/useSudokuGame.ts
+// [2026-10-22] - FIX: ReturnType anstelle von NodeJS.Timeout zur Behebung von Build-Fehlern.
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getSudoku } from 'sudoku-gen';
 
@@ -34,7 +35,7 @@ export const useSudokuGame = () => {
 
   // Timer Effect
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     if (status === 'playing') {
       interval = setInterval(() => {
         setTimer((prev) => prev + 1);
