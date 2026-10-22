@@ -1,5 +1,5 @@
 // src/features/Sudoku/components/SudokuView.tsx
-// [2026-10-22] - FIX: Ersetzung von user?.role durch user?.rolle gemäß User-Modell.
+// [2026-10-22] - FIX & FEATURE: Session-Titel, Admin-Bleistift, Zurück-Button und korrekte Admin-Rolle wiederhergestellt.
 import React, { useState, useEffect } from 'react';
 import { useSudokuGame } from '../hooks/useSudokuGame';
 import type { SudokuDifficulty } from '../hooks/useSudokuGame';
@@ -74,18 +74,19 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
   const filteredScores = sudokuScores.filter((s: any) => s.difficulty === lobbyDifficulty);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-slate-100 overflow-hidden">
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-slate-100 overflow-hidden isolate">
       {view === 'lobby' && (
         <div className="flex-1 flex flex-col overflow-y-auto pb-10">
-          <div className="bg-slate-900 text-white p-4 flex items-center justify-between shadow-md sticky top-0 z-10">
+          <div className="bg-slate-900 text-white p-4 flex items-center justify-between shadow-md sticky top-0 z-20">
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-bold tracking-wide">☕ {sessionTitle}</h1>
               {isAdmin && !isEditingTitle && (
                 <button 
                   onClick={() => { setTempTitle(sessionTitle); setIsEditingTitle(true); }}
-                  className="text-xs bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-slate-300 transition-colors"
+                  className="text-xs bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded-lg text-slate-300 transition-colors shadow-sm flex items-center gap-1"
                 >
-                  ✏️ Titel bearbeiten
+                  <span>✏️</span>
+                  <span>Titel bearbeiten</span>
                 </button>
               )}
             </div>

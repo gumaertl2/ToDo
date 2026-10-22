@@ -1,4 +1,5 @@
-// [2026-10-22] - FEATURE: SudokuBoard UI. Ergänzt um interaktive Papier-Style Rand-Notizen für Zeilen und Spalten.
+// src/features/Sudoku/components/SudokuBoard.tsx
+// [2026-10-22] - FEATURE: Originales SudokuBoard UI mit Papier-Style Rand-Notizen für Zeilen und Spalten wiederhergestellt.
 import React from 'react';
 import type { CellData } from '../hooks/useSudokuGame';
 
@@ -34,9 +35,9 @@ export const SudokuBoard: React.FC<SudokuBoardProps> = ({
   const selectedBlock = selectedCell !== null ? Math.floor(selectedRow! / 3) * 3 + Math.floor(selectedCol! / 3) : null;
 
   return (
-    <div className="w-full max-w-lg mx-auto flex flex-col items-center">
-      {/* OBERER RAND: Spalten-Memos (0 bis 8) */}
-      <div className="w-full grid grid-cols-9 gap-px px-6 mb-1">
+    <div className="w-full max-w-lg mx-auto flex flex-col items-center select-none">
+      {/* OBERER RAND: Spalten-Memos (0 bis 8) - Exakt über dem Spielfeld ausgerichtet */}
+      <div className="w-full grid grid-cols-9 gap-px pl-12 pr-12 sm:pr-12 mb-1">
         {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((colIndex) => {
           const isActive = activeColMemos.includes(colIndex);
           const missing = missingInCols[colIndex] || [];
@@ -152,7 +153,7 @@ export const SudokuBoard: React.FC<SudokuBoardProps> = ({
           })}
         </div>
 
-        {/* RECHTER RAND: Zeilen-Memos (alternativ für größere Displays) */}
+        {/* RECHTER RAND: Zeilen-Memos (für größere Displays) */}
         <div className="w-12 hidden sm:flex flex-col gap-px">
           {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((rowIndex) => {
             const isActive = activeRowMemos.includes(rowIndex);
