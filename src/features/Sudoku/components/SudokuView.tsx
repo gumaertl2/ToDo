@@ -1,5 +1,5 @@
 // src/features/Sudoku/components/SudokuView.tsx
-// [2026-10-22] - UI-FIX: Deutlicher "Zurück zur App"-Button statt des unauffälligen X in der Lobby.
+// [2026-10-22] - FIX: Ersetzung von user?.role durch user?.rolle gemäß User-Modell.
 import React, { useState, useEffect } from 'react';
 import { useSudokuGame } from '../hooks/useSudokuGame';
 import type { SudokuDifficulty } from '../hooks/useSudokuGame';
@@ -33,8 +33,8 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
 
   const userRoleProfile = roleProfiles?.find(p => p.id === user?.roleProfileId);
   const isAdmin = 
-    user?.role === 'ADMIN' || 
-    user?.role === 'admin' || 
+    user?.rolle === 'ADMIN' || 
+    user?.rolle === 'admin' || 
     userRoleProfile?.name === 'ADMIN' || 
     (useClubStore.getState() as any).isAdmin?.() || 
     false;
@@ -89,7 +89,6 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
                 </button>
               )}
             </div>
-            {/* DEUTLICHER ZURÜCK-BUTTON STATT X */}
             <button 
               onClick={onClose} 
               className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold rounded-lg transition-colors shadow-sm"
