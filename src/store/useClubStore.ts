@@ -1,3 +1,4 @@
+// [2026-10-22] - ARCHITECTURE: ArcadeSlice in den globalen Store eingehängt, um Sudoku-Highscores und Seasons zu verwalten.
 // [2026-10-08] - ARCHITECTURE: EventPollSlice in den globalen Store eingehängt, um die neue RSVP/Umfragen-Logik verfügbar zu machen.
 // [2026-09-28] - ARCHITECTURE: MatchLineupSlice in den globalen Store (useClubStore) eingehängt, um die neue Aufstellungs-Logik (Base & Override) verfügbar zu machen.
 // [2026-05-15] - FIX: Vercel Build Error TS2551 (Korrektur Singular/Plural von roleProfiles in partialize)
@@ -16,6 +17,7 @@ import { createTeamPinsSlice } from './slices/createTeamPinsSlice';
 import { createTeamSlice } from './slices/createTeamSlice';
 import { createMatchLineupSlice } from './slices/createMatchLineupSlice';
 import { createEventPollSlice } from './slices/createEventPollSlice';
+import { createArcadeSlice } from './slices/createArcadeSlice';
 
 // Slice Imports (Typen/Interfaces)
 import type { AuthSlice } from './slices/createAuthSlice';
@@ -28,6 +30,7 @@ import type { TeamPinsSlice } from './slices/createTeamPinsSlice';
 import type { TeamSlice } from './slices/createTeamSlice';
 import type { MatchLineupSlice } from './slices/createMatchLineupSlice';
 import type { EventPollSlice } from './slices/createEventPollSlice';
+import type { ArcadeSlice } from './slices/createArcadeSlice';
 
 export interface StoreState 
   extends AuthSlice, 
@@ -39,7 +42,8 @@ export interface StoreState
           TeamPinsSlice,
           TeamSlice,
           MatchLineupSlice,
-          EventPollSlice {}
+          EventPollSlice,
+          ArcadeSlice {}
 
 export const useClubStore = create<StoreState>()(
   persist(
@@ -54,6 +58,7 @@ export const useClubStore = create<StoreState>()(
       ...createTeamSlice(...a),
       ...createMatchLineupSlice(...a),
       ...createEventPollSlice(...a),
+      ...createArcadeSlice(...a),
     }),
     {
       name: 'club-management-storage',
@@ -67,6 +72,8 @@ export const useClubStore = create<StoreState>()(
         // können aber für Offline-Fähigkeit hier drin bleiben:
         teams: state.teams,
         groups: state.groups,
+        // Highscores lokal vorhalten für schnelles Rendering
+        sudokuScores: state.sudokuScores,
       }),
     }
   )

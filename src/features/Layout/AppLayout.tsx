@@ -1,3 +1,4 @@
+// [2026-10-22] - FEATURE: Easter-Egg Arcade-Hub integriert (Doppelklick auf Desktop-Logo oder Mobile-Home-Button öffnet das Vereins-Sudoku).
 // [2026-10-18] - FIX: TypeScript Type-Narrowing für sub.reminderSenderUserId in verschachtelter forEach-Schleife (TS2345 bei Vercel Build) behoben.
 // [2026-10-18] - SYNC: Badge-Zähler (reminderCounts) in der Seitenleiste 1:1 mit useRemindersData synchronisiert (Erledigt-Filter, Überfällig-Regel für offene Aufgaben, Strikte Mitternachtsregel für Termine & auto-Absender-Auflösung).
 // [2026-10-17] - OPTIMIZATION: visibilitychange Listener entfernt, um Firebase Lesezugriffe (Free-Tier) drastisch zu reduzieren und Offline-Hänger zu verhindern.
@@ -30,6 +31,7 @@ import {
 import { useClubStore } from '../../store/useClubStore';
 import { DsgvoClickwrap } from '../Auth/DsgvoClickwrap';
 import { MyProfileModal } from '../Users/MyProfileModal';
+import { SudokuView } from '../Sudoku/components/SudokuView';
 import { 
   shouldShowBackupReminder, 
   exportFullDatabaseBackup, 
@@ -58,6 +60,7 @@ export const AppLayout: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isArcadeOpen, setIsArcadeOpen] = useState(false);
 
   // Backup-Reminder State
   const [showBackupBanner, setShowBackupBanner] = useState(false);
@@ -428,6 +431,8 @@ export const AppLayout: React.FC = () => {
       
       <DsgvoClickwrap />
       
+      {isArcadeOpen && <SudokuView onClose={() => setIsArcadeOpen(false)} />}
+      
       {isProfileModalOpen && <MyProfileModal onClose={() => setIsProfileModalOpen(false)} />}
 
       <aside 
@@ -441,9 +446,14 @@ export const AppLayout: React.FC = () => {
       >
         <div className="p-4 border-b border-gray-200 flex items-center justify-between h-[73px] overflow-hidden shrink-0">
           <div className={`transition-all duration-300 whitespace-nowrap overflow-hidden ${isExpanded ? 'opacity-100 w-full' : 'opacity-0 w-0'}`}>
-            <NavLink to="/" className="flex items-center hover:opacity-80 transition-opacity group" title={`Verbundene DB: ${projectId}`}>
+            <NavLink 
+              to="/" 
+              onDoubleClick={(e) => { e.preventDefault(); setIsArcadeOpen(true); }}
+              className="flex items-center hover:opacity-80 transition-opacity group cursor-pointer" 
+              title={`Verbundene DB: ${projectId} (Doppelklick für Arcade)`}
+            >
               <Home className="w-5 h-5 text-blue-600 mr-2 group-hover:text-blue-700 transition-colors" strokeWidth={2.5} />
-              <h1 className="text-xl font-bold text-blue-600 group-hover:text-blue-700 transition-colors">PapaToDo</h1>
+              <h1 className="text-xl font-bold text-blue-600 group-hover:text-blue-700 transition-colors select-none">PapaToDo</h1>
             </NavLink>
             <div className="text-sm text-gray-500 mt-0.5 truncate">Hallo {user?.name || 'Mitglied'}</div>
           </div>
@@ -510,10 +520,16 @@ export const AppLayout: React.FC = () => {
           <NavLink
             key={item.to}
             to={item.to}
+            onDoubleClick={(e) => {
+              if (item.to === '/') {
+                e.preventDefault();
+                setIsArcadeOpen(true);
+              }
+            }}
             className={({ isActive }) =>
               `flex items-center justify-center p-3 rounded-xl transition-colors shrink-0 ${
                 isActive ? 'text-blue-600 bg-blue-50' : 'text-gray-500 hover:bg-gray-50'
-              }`
+              } ${item.to === '/' ? 'select-none' : ''}`
             }
             title={item.label}
           >

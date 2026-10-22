@@ -1,3 +1,4 @@
+// [2026-10-22] - FEATURE: 'ArcadeScore' Modell für das Vereins-Sudoku (inkl. Hall of Fame Archivierung) hinzugefügt.
 // [2026-10-18] - SCHEMA: Optionale Audit-Felder 'reminderSentBy' und 'reminderAction' ('SENT' | 'DISMISSED') für nachvollziehbaren Erinnerungs-Verlauf ergänzt.
 // [2026-10-15] - FEATURE: Optionales Feld 'receiveBackupReminder' im User-Modell ergänzt (steuert das tägliche 12:00-Uhr Backup-Hinweisbanner).
 // [2026-10-12] - FEATURE: Feld 'homeArenaAddress' (Heimhalle / Treffpunkt) im Team-Modell hinzugefügt (für Google Maps Routing).
@@ -373,5 +374,18 @@ export interface EventPollResponse extends BaseDocument {
   helperId: string;
   selectedOptionIds: string[];
   comment?: string;
+}
+
+export interface ArcadeScore extends BaseDocument {
+  game: 'SUDOKU' | 'TETRIS';
+  difficulty: 'easy' | 'medium' | 'hard';
+  userId: string;
+  userName: string;
+  timeInSeconds: number;
+  score?: number;
+  date: number;
+  isArchived?: boolean; 
+  archivedAt?: number;
+  archivedBy?: string;
 }
 // --- END OF FILE ---
