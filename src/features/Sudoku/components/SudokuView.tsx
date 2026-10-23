@@ -1,4 +1,5 @@
 // src/features/Sudoku/components/SudokuView.tsx
+// [2026-10-23] - TWEAK: Layout-Paddings und Abstände extrem komprimiert, um Platz auf mobilen Geräten zu sparen.
 // [2026-10-23] - FEATURE: "Papa-Blocks" in "MaxBlock" umbenannt und aktiviert. Absprung in die MaxBlockView eingebaut.
 // [2026-10-23] - BUGFIX & FEATURE: Fehlenden 'fetchSudokuScores'-Trigger hinzugefügt und 'sessionTitle' von localStorage auf globale Firebase-Live-Synchronisation (settings/arcade) umgestellt.
 import React, { useState, useEffect } from 'react';
@@ -13,7 +14,7 @@ import { SudokuWinScreen } from './SudokuWinScreen';
 import { evaluateScore } from '../utils/scoreEvaluator';
 import type { EvaluationResult } from '../utils/scoreEvaluator';
 import { useClubStore } from '../../../store/useClubStore';
-import { MaxBlockView } from '../../MaxBlock/components/MaxBlockView'; // NEU: Import der MaxBlockView
+import { MaxBlockView } from '../../MaxBlock/components/MaxBlockView';
 
 interface SudokuViewProps {
   onClose: () => void;
@@ -21,7 +22,7 @@ interface SudokuViewProps {
 
 export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
   const [view, setView] = useState<'lobby' | 'playing'>('lobby');
-  const [showMaxBlock, setShowMaxBlock] = useState(false); // NEU: State für den Wechsel zu MaxBlock
+  const [showMaxBlock, setShowMaxBlock] = useState(false);
   const [lobbyDifficulty, setLobbyDifficulty] = useState<SudokuDifficulty>('medium');
   const [gameMode, setGameMode] = useState<'ranked' | 'practice'>('ranked');
   const [showPracticeTime, setShowPracticeTime] = useState<boolean>(false);
@@ -30,7 +31,6 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
   const [tempTitle, setTempTitle] = useState<string>('');
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
   
-  // CHIRURGISCHER EINGRIFF: Den kompletten Store reaktiv anbinden, damit Firebase-Updates sofort ein Re-Render auslösen!
   const clubStore = useClubStore() as any;
   const user = clubStore.user;
   const roleProfiles = clubStore.roleProfiles;
@@ -49,19 +49,16 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
     clubStore.isAdmin?.() || 
     false;
 
-  // 1. Live-Daten aus Firebase abonnieren (Scores laden)
   useEffect(() => {
     fetchSudokuScores();
   }, [fetchSudokuScores]);
 
-  // 2. Globalen Turnier-Titel aus Firebase synchronisieren
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'settings', 'arcade'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         if (data.sudokuTitle) {
           setSessionTitle(data.sudokuTitle);
-          // Setze den tempTitle nur, wenn wir nicht gerade am Tippen sind (verhindert Überschreiben durch den Live-Sync)
           setTempTitle(prev => (prev === '' ? data.sudokuTitle : prev));
         }
       }
@@ -121,7 +118,7 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
   const handleSaveTitle = async () => {
     if (tempTitle.trim()) {
       const newTitle = tempTitle.trim();
-      setSessionTitle(newTitle); // Optimistic UI
+      setSessionTitle(newTitle);
       setIsEditingTitle(false);
       
       try {
@@ -134,7 +131,6 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
     }
   };
 
-  // NEU: Wenn MaxBlock aktiv ist, rendern wir die View direkt als Overlay
   if (showMaxBlock) {
     return <MaxBlockView onClose={() => setShowMaxBlock(false)} />;
   }
@@ -142,92 +138,84 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
   const filteredScores = sudokuScores.filter((s: any) => s.difficulty === lobbyDifficulty);
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col bg-slate-100 overflow-hidden isolate">
+    <div className="fixed inset-0 h-[100dvh] z-[9999] flex flex-col bg-slate-100 overflow-hidden isolate">
       {view === 'lobby' && (
-        <div className="flex-1 flex flex-col overflow-y-auto pb-10">
-          <div className="bg-slate-900 text-white p-4 pt-[max(env(safe-area-inset-top),1rem)] flex items-center justify-between shadow-md sticky top-0 z-20">
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold tracking-wide">☕ {sessionTitle}</h1>
+        <div className="flex-1 flex flex-col overflow-y-auto">
+          {/* Header */}
+          <div className="bg-slate-900 text-white px-3 py-2.5 pt-[max(env(safe-area-inset-top),0.5rem)] flex items-center justify-between shadow-md sticky top-0 z-20">
+            <div className="flex items-center gap-2">
+              <h1 className="text-base sm:text-lg font-bold tracking-wide">☕ {sessionTitle}</h1>
               {isAdmin && !isEditingTitle && (
                 <button 
                   onClick={() => { setTempTitle(sessionTitle); setIsEditingTitle(true); }}
-                  className="text-xs bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded-lg text-slate-300 transition-colors shadow-sm flex items-center gap-1"
+                  className="text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-slate-300 transition-colors shadow-sm"
                 >
-                  <span>✏️</span>
-                  <span>Titel bearbeiten</span>
+                  ✏️ Edit
                 </button>
               )}
             </div>
             <button 
               onClick={onClose} 
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold rounded-lg transition-colors shadow-sm"
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg transition-colors shadow-sm"
             >
-              <span>◀</span>
-              <span className="hidden sm:inline">Zurück zur App</span>
+              ◀ Zurück
             </button>
           </div>
 
           {isAdmin && isEditingTitle && (
-            <div className="bg-blue-900 text-white p-3 px-4 flex items-center gap-2 shadow-inner">
+            <div className="bg-blue-900 text-white p-2 px-3 flex items-center gap-2 shadow-inner text-xs">
               <input 
                 type="text" 
                 value={tempTitle} 
                 onChange={(e) => setTempTitle(e.target.value)}
-                className="flex-1 px-3 py-1.5 rounded text-slate-900 font-medium text-sm bg-white"
-                placeholder="Titel der Runde eingeben..."
+                className="flex-1 px-2 py-1 rounded text-slate-900 font-medium bg-white"
+                placeholder="Turniertitel..."
               />
-              <button 
-                onClick={handleSaveTitle}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 rounded text-sm font-bold shadow"
-              >
-                Speichern
-              </button>
-              <button 
-                onClick={() => setIsEditingTitle(false)}
-                className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-sm font-medium"
-              >
-                Abbrechen
-              </button>
+              <button onClick={handleSaveTitle} className="bg-emerald-600 hover:bg-emerald-500 px-3 py-1 rounded font-bold">OK</button>
+              <button onClick={() => setIsEditingTitle(false)} className="bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded font-medium">Abbruch</button>
             </div>
           )}
 
-          <div className="p-4 flex-1">
-            <div className="flex gap-2 mb-6">
-              <button className="flex-1 py-3 px-4 bg-blue-600 text-white font-bold rounded-xl shadow-md cursor-default">
+          {/* Extrem komprimierter Main-Bereich */}
+          <div className="p-3 sm:p-4 flex-1 w-full max-w-md mx-auto flex flex-col">
+            
+            {/* Game Tabs */}
+            <div className="flex gap-2 mb-3">
+              <button className="flex-1 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl shadow-sm cursor-default">
                 📝 Sudoku
               </button>
-              {/* NEU: Der MaxBlock Button ist jetzt voll funktionsfähig */}
               <button 
                 onClick={() => setShowMaxBlock(true)}
-                className="flex-1 py-3 px-4 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl shadow-md transition-colors active:scale-95"
+                className="flex-1 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-bold rounded-xl transition-colors active:scale-95"
               >
                 🧱 MaxBlock
               </button>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl shadow-sm mb-6 border border-slate-100">
-              <h2 className="text-lg font-bold text-slate-800 mb-4 text-center">Neues Spiel</h2>
+            {/* Config Box */}
+            <div className="bg-white p-3 sm:p-4 rounded-2xl shadow-sm mb-3 border border-slate-200">
+              <h2 className="text-base font-bold text-slate-800 mb-3 text-center">Neues Spiel</h2>
               
-              <div className="flex bg-slate-100 p-1 rounded-xl mb-4">
+              <div className="flex bg-slate-100 p-1 rounded-xl mb-3">
                 <button
                   onClick={() => setGameMode('ranked')}
-                  className={`flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all ${
-                    gameMode === 'ranked' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600'
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                    gameMode === 'ranked' ? 'bg-white text-blue-700 shadow-sm border border-slate-200/50' : 'text-slate-500'
                   }`}
                 >
                   🏆 Rangliste
                 </button>
                 <button
                   onClick={() => setGameMode('practice')}
-                  className={`flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all ${
-                    gameMode === 'practice' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600'
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                    gameMode === 'practice' ? 'bg-white text-emerald-700 shadow-sm border border-slate-200/50' : 'text-slate-500'
                   }`}
                 >
-                  🧘 Üben (Ohne Druck)
+                  🧘 Üben
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 bg-slate-100 p-1 rounded-xl mb-6">
+              <div className="flex bg-slate-100 p-1 rounded-xl mb-3 gap-1">
                 {[
                   { id: 'easy', label: 'Leicht' },
                   { id: 'medium', label: 'Mittel' },
@@ -237,8 +225,8 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
                   <button
                     key={diff.id}
                     onClick={() => setLobbyDifficulty(diff.id as SudokuDifficulty)}
-                    className={`py-2 px-1 text-xs sm:text-sm font-semibold rounded-lg transition-all ${
-                      lobbyDifficulty === diff.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                      lobbyDifficulty === diff.id ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50' : 'text-slate-500'
                     }`}
                   >
                     {diff.label}
@@ -248,9 +236,9 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
 
               <button 
                 onClick={handleStartGame}
-                className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-lg rounded-xl shadow-md transition-colors active:scale-95"
+                className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-base rounded-xl shadow-sm transition-colors active:scale-95"
               >
-                ▶ Spiel Starten {gameMode === 'practice' ? '(Entspannt)' : '(Wertung)'}
+                ▶ Starten {gameMode === 'practice' ? '(Entspannt)' : ''}
               </button>
             </div>
 
@@ -266,10 +254,10 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
         </div>
       )}
 
-      {/* Die Playing-Ansicht für Sudoku bleibt hier unberührt */}
+      {/* Spielen-Ansicht bleibt unberührt */}
       {view === 'playing' && (
         <div className="flex-1 flex flex-col">
-          <div className="bg-slate-900 text-white p-3 sm:p-4 pt-[max(env(safe-area-inset-top),1rem)] flex items-center justify-between shadow-md">
+          <div className="bg-slate-900 text-white p-3 pt-[max(env(safe-area-inset-top),0.5rem)] flex items-center justify-between shadow-md">
             <button 
               onClick={() => {
                 if(window.confirm('Spiel wirklich abbrechen?')) setView('lobby');
@@ -292,8 +280,8 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
                   )}
                   {!game.hasUsedPause && game.penaltySeconds > 0 && (
                     <div className="text-[10px] font-mono text-red-400 font-semibold flex gap-2">
-                      {game.errorCount > 0 && <span>❌ {game.errorCount} Fehler (+{game.errorCount * 60}s)</span>}
-                      {game.hintCount > 0 && <span>💡 {game.hintCount} Tipps (+{game.hintCount * 60}s)</span>}
+                      {game.errorCount > 0 && <span>❌ {game.errorCount} (+{game.errorCount * 60}s)</span>}
+                      {game.hintCount > 0 && <span>💡 {game.hintCount} (+{game.hintCount * 60}s)</span>}
                     </div>
                   )}
                 </>
@@ -303,16 +291,15 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
                     <div 
                       onClick={() => setShowPracticeTime(false)}
                       className="font-mono text-lg font-bold tracking-wider text-emerald-300 cursor-pointer"
-                      title="Klick zum Verstecken"
                     >
                       {formatTime(game.timer)} 👁️
                     </div>
                   ) : (
                     <button
                       onClick={() => setShowPracticeTime(true)}
-                      className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1 rounded-lg transition-colors font-medium"
+                      className="text-xs bg-slate-800 text-slate-300 px-3 py-1 rounded-lg font-medium"
                     >
-                      ⏱️ Zeit anzeigen
+                      ⏱️ Zeit
                     </button>
                   )}
                 </div>
@@ -321,14 +308,13 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
 
             <button 
               onClick={() => game.status === 'paused' ? game.resumeGame() : game.pauseGame()}
-              className="text-xl p-2 bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors"
+              className="text-xl p-2 bg-slate-800 rounded-lg hover:bg-slate-700"
             >
               {game.status === 'paused' ? '▶️' : '⏸️'}
             </button>
           </div>
 
-          <div className="flex-1 relative flex flex-col p-2 sm:p-4 justify-center bg-slate-50 overflow-y-auto">
-            
+          <div className="flex-1 relative flex flex-col p-2 justify-center bg-slate-50 overflow-y-auto">
             {game.status === 'won' && evaluation && (
               <SudokuWinScreen 
                 timer={game.timer}
@@ -345,12 +331,6 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
             {game.status === 'paused' && (
               <div className="absolute inset-0 z-10 bg-slate-100/95 backdrop-blur-sm flex flex-col items-center justify-center p-4">
                 <h2 className="text-2xl font-bold text-slate-800 mb-6">Spiel pausiert</h2>
-                {gameMode === 'ranked' && (
-                  <div className="bg-amber-100 text-amber-900 p-4 rounded-xl max-w-sm text-center mb-8 border border-amber-300">
-                    <p className="font-bold mb-1">Hinweis für die Rangliste:</p>
-                    <p className="text-sm">Pausierte Spiele werden nicht im Leaderboard gespeichert, um Schummeln zu verhindern.</p>
-                  </div>
-                )}
                 <button 
                   onClick={game.resumeGame}
                   className="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-md text-lg active:scale-95 transition-transform"

@@ -1,10 +1,15 @@
 // src/features/MaxBlock/components/MaxBlockLeaderboard.tsx
+// [2026-10-23] - REFACTOR: Light Theme adaptiert (100% identisch zur Sudoku Hall of Fame), kompakteres Layout und Du-Highlighting.
 // [2026-10-23] - FEATURE: Leaderboard (Hall of Fame) für MaxBlock. Sortiert nach Score > Level > Lines.
 import React from 'react';
 import { useClubStore } from '../../../store/useClubStore';
 
-export const MaxBlockLeaderboard: React.FC = () => {
-  const maxBlockScores = useClubStore(state => state.maxBlockScores);
+interface MaxBlockLeaderboardProps {
+  currentUserId?: string;
+}
+
+export const MaxBlockLeaderboard: React.FC<MaxBlockLeaderboardProps> = ({ currentUserId }) => {
+  const maxBlockScores = useClubStore(state => state.maxBlockScores || []);
 
   // Sortierung: 1. Score (absteigend), 2. Level (absteigend), 3. Lines (absteigend)
   const sortedScores = [...maxBlockScores].sort((a, b) => {
@@ -12,66 +17,63 @@ export const MaxBlockLeaderboard: React.FC = () => {
     if ((b.level || 0) !== (a.level || 0)) return (b.level || 0) - (a.level || 0);
     return (b.lines || 0) - (a.lines || 0);
   });
+  
+  const top10 = sortedScores.slice(0, 10);
 
-  if (sortedScores.length === 0) {
-    return (
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center shadow-xl w-full max-w-sm">
-        <p className="text-slate-400 font-medium">Noch keine Einträge in der Hall of Fame.</p>
-        <p className="text-sm text-slate-500 mt-2">Werde der erste Vereinsmeister!</p>
-      </div>
-    );
-  }
+  const renderRank = (index: number) => {
+    if (index === 0) return '🥇';
+    if (index === 1) return '🥈';
+    if (index === 2) return '🥉';
+    return <span className="text-slate-500 font-semibold text-base">{index + 1}.</span>;
+  };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl w-full max-w-sm">
-      <div className="bg-slate-800/50 p-4 border-b border-slate-700/50">
-        <h2 className="font-black text-lg text-white flex items-center justify-between">
-          <span>🏆 Hall of Fame</span>
-          <span className="text-xs font-bold bg-slate-700 text-slate-300 px-2 py-1 rounded-full uppercase tracking-wider">
-            Top {sortedScores.length}
-          </span>
-        </h2>
-      </div>
+    <div className="w-full bg-slate-50 rounded-2xl p-4 shadow-inner border border-slate-100">
+      <h3 className="text-base font-bold text-slate-800 text-center mb-4 flex items-center justify-center gap-2">
+        <span>🏆 Hall of Fame</span>
+        <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full uppercase tracking-wider">Top {top10.length || 10}</span>
+      </h3>
       
-      <div className="max-h-[300px] overflow-y-auto">
-        {sortedScores.map((score, index) => {
-          let medal = '';
-          if (index === 0) medal = '🥇';
-          else if (index === 1) medal = '🥈';
-          else if (index === 2) medal = '🥉';
+      {top10.length === 0 ? (
+        <div className="text-center py-6 text-slate-400 text-sm">
+          Noch keine Einträge in der Hall of Fame.<br/>Werde der erste Vereinsmeister!
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {top10.map((score, index) => {
+            const isMe = score.userId === currentUserId;
+            const dateStr = new Date(score.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
 
-          const dateStr = new Date(score.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
+            return (
+              <div 
+                key={score.id} 
+                className={`flex items-center justify-between p-3 rounded-lg ${isMe ? 'bg-blue-50 border border-blue-200' : 'bg-white border border-slate-100 shadow-sm'}`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-6 text-center text-lg">{renderRank(index)}</div>
+                  <div className="flex flex-col">
+                    <div className={`font-medium text-sm leading-tight ${isMe ? 'text-blue-800' : 'text-slate-700'}`}>
+                      {score.userName} {isMe && <span className="text-[10px] text-blue-500 ml-1">(Du)</span>}
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-medium">
+                      {dateStr}
+                    </div>
+                  </div>
+                </div>
 
-          return (
-            <div 
-              key={score.id} 
-              className={`flex items-center p-4 border-b border-slate-800/50 last:border-b-0 transition-colors hover:bg-slate-800/30 ${index === 0 ? 'bg-amber-900/10' : ''}`}
-            >
-              <div className="w-8 text-center font-black text-xl mr-3">
-                {medal ? medal : <span className="text-slate-500 text-base">{index + 1}.</span>}
-              </div>
-              
-              <div className="flex-1 min-w-0">
-                <div className="font-bold text-slate-200 truncate text-base leading-tight">
-                  {score.userName}
-                </div>
-                <div className="text-[11px] text-slate-500 font-medium mt-0.5">
-                  {dateStr}
+                <div className="text-right flex flex-col items-end">
+                  <div className={`font-mono font-black text-base leading-tight ${isMe ? 'text-blue-700' : 'text-slate-900'}`}>
+                    {score.score}
+                  </div>
+                  <div className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">
+                    Lvl {score.level} • {score.lines} L
+                  </div>
                 </div>
               </div>
-
-              <div className="text-right flex flex-col items-end pl-3">
-                <div className="font-mono font-black text-emerald-400 text-lg leading-tight">
-                  {score.score}
-                </div>
-                <div className="text-[11px] text-slate-400 font-medium uppercase tracking-wider mt-0.5">
-                  Lvl {score.level} • {score.lines} L
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
