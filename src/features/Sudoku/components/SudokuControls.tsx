@@ -1,3 +1,5 @@
+// src/features/Sudoku/components/SudokuControls.tsx
+// [2026-10-23] - FEATURE: '🛟 Retten' (Rescue) Button in die Werkzeugleiste integriert.
 // [2026-10-22] - FEATURE: SudokuControls UI. Ziffernblock in kompakter 9er-Reihe.
 import React from 'react';
 
@@ -7,6 +9,7 @@ interface SudokuControlsProps {
   onNumberInput: (num: number) => void;
   onClearCell: () => void;
   onHint: () => void;
+  onRescue: () => void;
   completedNumbers: number[];
   activeHighlightNumber: number | null;
   onToggleHighlight: (num: number) => void;
@@ -20,6 +23,7 @@ export const SudokuControls: React.FC<SudokuControlsProps> = ({
   onNumberInput,
   onClearCell,
   onHint,
+  onRescue,
   completedNumbers,
   activeHighlightNumber,
   onToggleHighlight,
@@ -41,7 +45,7 @@ export const SudokuControls: React.FC<SudokuControlsProps> = ({
 
   return (
     <div className="w-full max-w-md mx-auto mt-4 sm:mt-6 flex flex-col gap-3">
-      {/* WERKZEUG-LEISTE (Löschen, Joker, Bleistift) */}
+      {/* WERKZEUG-LEISTE (Löschen, Retten, Joker, Bleistift) */}
       <div className="flex justify-between gap-2 px-1">
         <button
           onClick={onClearCell}
@@ -51,6 +55,16 @@ export const SudokuControls: React.FC<SudokuControlsProps> = ({
         >
           <span className="text-lg sm:text-xl mb-0.5">🗑️</span>
           <span className="text-[11px] font-semibold text-slate-600">Löschen</span>
+        </button>
+
+        <button
+          onClick={onRescue}
+          disabled={disabled}
+          className="flex-1 flex flex-col items-center justify-center py-2 bg-slate-100 rounded-xl active:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ touchAction: 'manipulation' }}
+        >
+          <span className="text-lg sm:text-xl mb-0.5">🛟</span>
+          <span className="text-[11px] font-semibold text-slate-600">Retten</span>
         </button>
 
         <button

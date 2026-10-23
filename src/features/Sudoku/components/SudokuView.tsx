@@ -1,4 +1,5 @@
 // src/features/Sudoku/components/SudokuView.tsx
+// [2026-10-23] - FEATURE: 'handleRescue' integriert. Prüft Fehler auf dem Brett und fragt vor dem Löschen per Confirm nach (inkl. Kosten-Vorschau).
 // [2026-10-23] - BUGFIX: Gast-Abstürze behoben. Firebase onSnapshot und fetch-Calls fangen nun Permission-Errors (fehlender Login) sanft ab, ohne die React-Komponente zu crashen.
 // [2026-10-23] - TWEAK: Layout-Paddings und Abstände extrem komprimiert, um Platz auf mobilen Geräten zu sparen.
 // [2026-10-23] - FEATURE: "Papa-Blocks" in "MaxBlock" umbenannt und aktiviert. Absprung in die MaxBlockView eingebaut.
@@ -136,6 +137,23 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
       }
     } else {
       setIsEditingTitle(false);
+    }
+  };
+
+  const handleRescue = () => {
+    if (game.status !== 'playing') return;
+    
+    // Prüfen, ob überhaupt Fehler vorliegen
+    const errorCount = game.board.filter(c => !c.isFixed && c.value !== null && c.value !== c.solution).length;
+    
+    if (errorCount === 0) {
+      window.alert('Keine Fehler gefunden! Alle bisher gesetzten Zahlen sind korrekt.');
+      return;
+    }
+
+    const confirmMsg = `Du hast ${errorCount} fehlerhafte Zahl(en) gesetzt. Soll ich sie vom Brett wischen?\n\n(Kosten: ${errorCount} Fehler / +${errorCount * 60}s Strafe)`;
+    if (window.confirm(confirmMsg)) {
+      game.rescueGame();
     }
   };
 
@@ -368,6 +386,7 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
               onNumberInput={game.setNumber}
               onClearCell={game.clearCell}
               onHint={game.useHint}
+              onRescue={handleRescue}
               completedNumbers={game.completedNumbers}
               activeHighlightNumber={game.activeHighlightNumber}
               onToggleHighlight={game.toggleHighlightNumber}

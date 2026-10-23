@@ -1,4 +1,5 @@
 // src/features/Sudoku/hooks/useSudokuGame.ts
+// [2026-10-23] - FEATURE: 'rescueGame' Funktion hinzugefügt. Löscht falsche Eingaben, bestraft diese aber mit +60s pro Fehler.
 // [2026-10-23] - UX-FEATURE: Auto-Deselect nach Zahleneingabe für flüssigen Gelb-Modus & Toggle-Löschen deaktiviert.
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getSudoku } from 'sudoku-gen';
@@ -175,7 +176,6 @@ export const useSudokuGame = () => {
       const evaluated = calculateConflicts(newBoard);
       newBoard = evaluated.newBoard;
     } else {
-      // CHIRURGISCHER EINGRIFF: Kein Toggle-to-Null mehr. 
       if (cell.value !== num) {
         newBoard[selectedCell] = { ...cell, value: num, notes: [] };
         
@@ -206,7 +206,6 @@ export const useSudokuGame = () => {
       setErrorCount(e => e + 1);
     }
 
-    // CHIRURGISCHER EINGRIFF: Auto-Deselect nach Zahleneingabe im normalen Modus
     if (!isNotesMode) {
       setSelectedCell(null);
       setActiveHighlightNumber(null);
@@ -252,6 +251,37 @@ export const useSudokuGame = () => {
     setSelectedCell(null);
     setActiveHighlightNumber(null);
   }, [status, selectedCell, board, checkWinCondition]);
+
+  // CHIRURGISCHER EINGRIFF: Die neue Rescue-Funktion
+  const rescueGame = useCallback((): number => {
+    if (status !== 'playing') return 0;
+    
+    let localErrorCount = 0;
+    let changed = false;
+    
+    const nextBoard = board.map(c => {
+      if (!c.isFixed && c.value !== null && c.value !== c.solution) {
+        localErrorCount++;
+        changed = true;
+        return { ...c, value: null, isConflict: false };
+      }
+      return c;
+    });
+
+    if (changed) {
+      const evaluated = calculateConflicts(nextBoard);
+      setBoard(evaluated.newBoard);
+      
+      setTimer(prev => prev + (localErrorCount * 60));
+      setPenaltySeconds(prev => prev + (localErrorCount * 60));
+      setErrorCount(prev => prev + localErrorCount);
+      
+      setSelectedCell(null);
+      setActiveHighlightNumber(null);
+    }
+    
+    return localErrorCount;
+  }, [board, status]);
 
   const toggleRowMemo = (rowIndex: number) => {
     setActiveRowMemos(prev => 
@@ -338,6 +368,7 @@ export const useSudokuGame = () => {
     setNumber,
     clearCell,
     useHint,
+    rescueGame, // NEU exportiert
     toggleHighlightNumber,
     toggleRowMemo,
     toggleColMemo,
