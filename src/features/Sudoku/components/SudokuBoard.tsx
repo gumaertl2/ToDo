@@ -1,5 +1,5 @@
 // src/features/Sudoku/components/SudokuBoard.tsx
-// [2026-10-22] - UI-FIX: Spalten-Memos durch Flex-Platzhalter exakt über dem Spielfeld ausgerichtet.
+// [2026-10-23] - UX-FIX: Deselect-Klick auf den Hintergrund (onClick(null)) und stopPropagation für Child-Elemente.
 import React from 'react';
 import type { CellData } from '../hooks/useSudokuGame';
 
@@ -7,7 +7,7 @@ interface SudokuBoardProps {
   board: CellData[];
   selectedCell: number | null;
   activeHighlightNumber: number | null;
-  onSelectCell: (index: number) => void;
+  onSelectCell: (index: number | null) => void;
   disabled?: boolean;
   activeRowMemos: number[];
   activeColMemos: number[];
@@ -35,7 +35,10 @@ export const SudokuBoard: React.FC<SudokuBoardProps> = ({
   const selectedBlock = selectedCell !== null ? Math.floor(selectedRow! / 3) * 3 + Math.floor(selectedCol! / 3) : null;
 
   return (
-    <div className="w-full max-w-lg mx-auto flex flex-col items-center">
+    <div 
+      className="w-full max-w-lg mx-auto flex flex-col items-center select-none cursor-default"
+      onClick={() => onSelectCell(null)}
+    >
       {/* OBERER RAND: Spalten-Memos (0 bis 8) - Exakt ausgerichtet durch Platzhalter */}
       <div className="w-full flex items-stretch gap-1 mb-1">
         {/* Unsichtbarer Platzhalter für die linke Zeilen-Memo-Spalte */}
@@ -49,7 +52,10 @@ export const SudokuBoard: React.FC<SudokuBoardProps> = ({
             return (
               <div
                 key={`col-memo-${colIndex}`}
-                onClick={() => onToggleColMemo(colIndex)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleColMemo(colIndex);
+                }}
                 className={`h-12 flex flex-col items-center justify-center rounded cursor-pointer transition-colors text-[9px] font-mono leading-tight ${
                   isActive ? 'bg-amber-100 border border-amber-300 text-amber-800' : 'bg-slate-200/60 hover:bg-slate-200 text-slate-400'
                 }`}
@@ -85,7 +91,10 @@ export const SudokuBoard: React.FC<SudokuBoardProps> = ({
             return (
               <div
                 key={`row-memo-l-${rowIndex}`}
-                onClick={() => onToggleRowMemo(rowIndex)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleRowMemo(rowIndex);
+                }}
                 className={`flex-1 flex items-center justify-center rounded cursor-pointer transition-colors text-[9px] font-mono ${
                   isActive ? 'bg-amber-100 border border-amber-300 text-amber-800 p-0.5' : 'bg-slate-200/60 hover:bg-slate-200 text-slate-400'
                 }`}
@@ -140,7 +149,10 @@ export const SudokuBoard: React.FC<SudokuBoardProps> = ({
             return (
               <div
                 key={cell.index}
-                onClick={() => !disabled && onSelectCell(cell.index)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!disabled) onSelectCell(cell.index);
+                }}
                 className={`relative flex items-center justify-center cursor-pointer select-none text-xl sm:text-2xl ${bgClass} ${textClass} ${borderRight} ${borderBottom}`}
                 style={{ touchAction: 'manipulation' }}
               >
@@ -170,7 +182,10 @@ export const SudokuBoard: React.FC<SudokuBoardProps> = ({
             return (
               <div
                 key={`row-memo-r-${rowIndex}`}
-                onClick={() => onToggleRowMemo(rowIndex)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleRowMemo(rowIndex);
+                }}
                 className={`flex-1 flex items-center justify-center rounded cursor-pointer transition-colors text-[9px] font-mono ${
                   isActive ? 'bg-amber-100 border border-amber-300 text-amber-800 p-0.5' : 'bg-slate-200/60 hover:bg-slate-200 text-slate-400'
                 }`}

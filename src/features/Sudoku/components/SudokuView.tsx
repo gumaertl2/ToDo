@@ -1,11 +1,14 @@
 // src/features/Sudoku/components/SudokuView.tsx
-// [2026-10-22] - FIX & FEATURE: iOS Safe-Area im Header, Pausen-Ausschluss für Rangliste inkl. visueller Warnung.
+// [2026-10-23] - FEATURE: Gamification Win-Screen integriert (evaluateScore & SudokuWinScreen). Automatischer Timeout entfernt für bessere UX.
 import React, { useState, useEffect } from 'react';
 import { useSudokuGame } from '../hooks/useSudokuGame';
 import type { SudokuDifficulty } from '../hooks/useSudokuGame';
 import { SudokuBoard } from './SudokuBoard';
 import { SudokuControls } from './SudokuControls';
 import { SudokuLeaderboard, formatTime } from './SudokuLeaderboard';
+import { SudokuWinScreen } from './SudokuWinScreen';
+import { evaluateScore } from '../utils/scoreEvaluator';
+import type { EvaluationResult } from '../utils/scoreEvaluator';
 import { useClubStore } from '../../../store/useClubStore';
 
 interface SudokuViewProps {
@@ -22,6 +25,7 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
   });
   const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false);
   const [tempTitle, setTempTitle] = useState<string>(sessionTitle);
+  const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
   
   const { user, roleProfiles } = useClubStore();
   
@@ -41,24 +45,50 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
 
   useEffect(() => {
     if (game.status === 'won') {
-      if (user && gameMode === 'ranked' && !game.hasUsedPause) {
-        saveSudokuScore({
-          userId: user.id,
-          userName: user.name,
-          timeInSeconds: game.timer,
-          difficulty: game.difficulty,
-          date: Date.now()
-        });
+      if (!evaluation) {
+        const result = evaluateScore(
+          game.timer,
+          game.penaltySeconds,
+          game.difficulty,
+          gameMode,
+          game.hasUsedPause,
+          sudokuScores
+        );
+        setEvaluation(result);
+
+        // Automatisches Speichern nur für Ranglisten-Spiele ohne Pause
+        if (user && gameMode === 'ranked' && !game.hasUsedPause) {
+          saveSudokuScore({
+            userId: user.id,
+            userName: user.name,
+            timeInSeconds: game.timer,
+            difficulty: game.difficulty,
+            date: Date.now()
+          });
+        }
       }
-      const t = setTimeout(() => {
-        setView('lobby');
-      }, 4000); 
-      return () => clearTimeout(t);
+    } else {
+      if (evaluation !== null) {
+        setEvaluation(null);
+      }
     }
-  }, [game.status, game.timer, game.difficulty, user, saveSudokuScore, gameMode, game.hasUsedPause]);
+  }, [game.status, game.timer, game.penaltySeconds, game.difficulty, gameMode, game.hasUsedPause, sudokuScores, user, saveSudokuScore, evaluation]);
+
+  const handleRetroactiveSave = () => {
+    if (user && gameMode === 'practice' && !game.hasUsedPause) {
+      saveSudokuScore({
+        userId: user.id,
+        userName: user.name,
+        timeInSeconds: game.timer,
+        difficulty: game.difficulty,
+        date: Date.now()
+      });
+    }
+  };
 
   const handleStartGame = () => {
     setShowPracticeTime(false);
+    setEvaluation(null);
     game.startGame(lobbyDifficulty);
     setView('playing');
   };
@@ -255,29 +285,19 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
           </div>
 
           <div className="flex-1 relative flex flex-col p-2 sm:p-4 justify-center bg-slate-50 overflow-y-auto">
-            {game.status === 'won' && (
-              <div className="absolute inset-0 z-20 bg-emerald-500/90 flex flex-col items-center justify-center text-white p-4">
-                <span className="text-6xl mb-4">🏆</span>
-                <h2 className="text-3xl font-black mb-2">Geschafft!</h2>
-                <p className="text-xl font-medium mb-1">Deine Zeit: {formatTime(game.timer)}</p>
-                
-                {gameMode === 'ranked' && game.hasUsedPause && (
-                  <div className="bg-white/20 p-2 rounded mt-2 mb-2 text-center max-w-xs">
-                    <p className="text-sm font-bold text-yellow-200 mb-1">⚠️ Außer Wertung</p>
-                    <p className="text-xs opacity-90">Du hast pausiert, daher wird die Zeit nicht im Leaderboard gespeichert.</p>
-                  </div>
-                )}
-
-                {gameMode === 'ranked' && !game.hasUsedPause && game.penaltySeconds > 0 && (
-                  <p className="text-xs opacity-90 mb-2">
-                    Inklusive Strafzeit ({game.errorCount} Fehler, {game.hintCount} Tipps)
-                  </p>
-                )}
-                {gameMode === 'practice' && (
-                  <p className="text-xs opacity-90 mb-2">Im Übungsmodus ohne Ranglisten-Eintrag 🧘</p>
-                )}
-                <p className="text-sm opacity-90 mt-4">Zurück zur Übersicht...</p>
-              </div>
+            
+            {game.status === 'won' && evaluation && (
+              <SudokuWinScreen 
+                timer={game.timer}
+                penaltySeconds={game.penaltySeconds}
+                errorCount={game.errorCount}
+                hintCount={game.hintCount}
+                gameMode={gameMode}
+                hasUsedPause={game.hasUsedPause}
+                evaluation={evaluation}
+                onClose={() => setView('lobby')}
+                onRetroactiveSave={handleRetroactiveSave}
+              />
             )}
 
             {game.status === 'paused' && (

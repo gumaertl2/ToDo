@@ -1,5 +1,5 @@
 // src/features/Sudoku/hooks/useSudokuGame.ts
-// [2026-10-22] - FEATURE: Flag hasUsedPause integriert, damit pausierte Spiele aus der Wertung fliegen.
+// [2026-10-23] - UX-FEATURE: Auto-Deselect nach Zahleneingabe für flüssigen Gelb-Modus & Toggle-Löschen deaktiviert.
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getSudoku } from 'sudoku-gen';
 
@@ -34,7 +34,6 @@ export const useSudokuGame = () => {
   const [activeRowMemos, setActiveRowMemos] = useState<number[]>([]);
   const [activeColMemos, setActiveColMemos] = useState<number[]>([]);
 
-  // Timer Effect
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
     if (status === 'playing') {
@@ -70,6 +69,13 @@ export const useSudokuGame = () => {
     }
     return { newBoard, hasNewConflicts };
   };
+
+  const checkWinCondition = useCallback((currentBoard: CellData[]) => {
+    const isWon = currentBoard.every(c => c.value === c.solution);
+    if (isWon) {
+      setStatus('won');
+    }
+  }, []);
 
   const startGame = useCallback((selectedDifficulty: SudokuDifficulty) => {
     const rawSudoku = getSudoku(selectedDifficulty);
@@ -117,111 +123,135 @@ export const useSudokuGame = () => {
   
   const resumeGame = () => setStatus('playing');
 
-  const checkWinCondition = (currentBoard: CellData[]) => {
-    const isWon = currentBoard.every(c => c.value === c.solution);
-    if (isWon) {
-      setStatus('won');
+  const clearConflicts = useCallback((currentBoard: CellData[]) => {
+    let changed = false;
+    const nextBoard = currentBoard.map(c => {
+      if (!c.isFixed && c.isConflict) {
+        changed = true;
+        return { ...c, value: null, isConflict: false };
+      }
+      return c;
+    });
+    if (changed) {
+      return calculateConflicts(nextBoard).newBoard;
     }
-  };
+    return currentBoard;
+  }, []);
 
-  const handleSelectCell = useCallback((index: number) => {
-    if (selectedCell === index) {
+  const handleSelectCell = useCallback((index: number | null) => {
+    let currentBoard = board;
+    
+    const hasConflicts = board.some(c => !c.isFixed && c.isConflict);
+    if (hasConflicts) {
+      currentBoard = clearConflicts(board);
+      setBoard(currentBoard);
+    }
+
+    if (index === null || selectedCell === index) {
       setSelectedCell(null);
       setActiveHighlightNumber(null);
     } else {
       setSelectedCell(index);
-      const cell = board[index];
+      const cell = currentBoard[index];
       if (cell && cell.value !== null) {
         setActiveHighlightNumber(cell.value);
-      } else {
-        setActiveHighlightNumber(null);
       }
     }
-  }, [selectedCell, board]);
+  }, [board, selectedCell, clearConflicts]);
 
   const setNumber = useCallback((num: number) => {
     if (status !== 'playing' || selectedCell === null) return;
     
-    setBoard(prev => {
-      const cell = prev[selectedCell];
-      if (cell.isFixed) return prev;
+    const cell = board[selectedCell];
+    if (cell.isFixed) return;
 
-      let newBoard = [...prev];
+    let newBoard = [...board];
+    let isErrorTriggered = false;
 
-      if (isNotesMode) {
-        const hasNote = cell.notes.includes(num);
-        const newNotes = hasNote ? cell.notes.filter(n => n !== num) : [...cell.notes, num].sort();
-        newBoard[selectedCell] = { ...cell, notes: newNotes, value: null };
-      } else {
-        if (cell.value === num) {
-          newBoard[selectedCell] = { ...cell, value: null }; 
-        } else {
-          newBoard[selectedCell] = { ...cell, value: num, notes: [] };
-          
-          newBoard = newBoard.map(c => {
-            if (c.index !== selectedCell && !c.isFixed && (c.row === cell.row || c.col === cell.col || c.block === cell.block)) {
-              if (c.notes.includes(num)) {
-                return { ...c, notes: c.notes.filter(n => n !== num) };
-              }
-            }
-            return c;
-          });
-        }
-      }
-
+    if (isNotesMode) {
+      const hasNote = cell.notes.includes(num);
+      const newNotes = hasNote ? cell.notes.filter(n => n !== num) : [...cell.notes, num].sort();
+      newBoard[selectedCell] = { ...cell, notes: newNotes, value: null };
       const evaluated = calculateConflicts(newBoard);
       newBoard = evaluated.newBoard;
+    } else {
+      // CHIRURGISCHER EINGRIFF: Kein Toggle-to-Null mehr. 
+      if (cell.value !== num) {
+        newBoard[selectedCell] = { ...cell, value: num, notes: [] };
+        
+        newBoard = newBoard.map(c => {
+          if (c.index !== selectedCell && !c.isFixed && (c.row === cell.row || c.col === cell.col || c.block === cell.block)) {
+            if (c.notes.includes(num)) {
+              return { ...c, notes: c.notes.filter(n => n !== num) };
+            }
+          }
+          return c;
+        });
 
-      const conflictCellsCount = newBoard.filter(c => c.isConflict).length;
-      if (conflictCellsCount > 0 && !cell.isFixed) {
-        setTimer(t => t + 60);
-        setPenaltySeconds(p => p + 60);
-        setErrorCount(e => e + 1);
+        const evaluated = calculateConflicts(newBoard);
+        newBoard = evaluated.newBoard;
+
+        if (newBoard[selectedCell].isConflict) {
+          isErrorTriggered = true;
+        }
       }
+    }
 
-      checkWinCondition(newBoard);
-      return newBoard;
-    });
-  }, [status, selectedCell, isNotesMode]);
+    setBoard(newBoard);
+    checkWinCondition(newBoard);
+
+    if (isErrorTriggered) {
+      setTimer(t => t + 60);
+      setPenaltySeconds(p => p + 60);
+      setErrorCount(e => e + 1);
+    }
+
+    // CHIRURGISCHER EINGRIFF: Auto-Deselect nach Zahleneingabe im normalen Modus
+    if (!isNotesMode) {
+      setSelectedCell(null);
+      setActiveHighlightNumber(null);
+    }
+  }, [status, selectedCell, isNotesMode, board, checkWinCondition]);
 
   const clearCell = useCallback(() => {
     if (status !== 'playing' || selectedCell === null) return;
-    setBoard(prev => {
-      const cell = prev[selectedCell];
-      if (cell.isFixed) return prev;
-      let newBoard = [...prev];
-      newBoard[selectedCell] = { ...cell, value: null, notes: [] };
-      const evaluated = calculateConflicts(newBoard);
-      return evaluated.newBoard;
-    });
-  }, [status, selectedCell]);
+    const cell = board[selectedCell];
+    if (cell.isFixed) return;
+    
+    let newBoard = [...board];
+    newBoard[selectedCell] = { ...cell, value: null, notes: [] };
+    const evaluated = calculateConflicts(newBoard);
+    
+    setBoard(evaluated.newBoard);
+  }, [status, selectedCell, board]);
 
   const useHint = useCallback(() => {
     if (status !== 'playing' || selectedCell === null) return;
-    setBoard(prev => {
-      const cell = prev[selectedCell];
-      if (cell.isFixed || cell.value === cell.solution) return prev;
-      
-      const correctValue = cell.solution;
-      let newBoard = [...prev];
-      newBoard[selectedCell] = { ...cell, value: correctValue, notes: [] };
-      
-      newBoard = newBoard.map(c => {
-        if (c.index !== selectedCell && !c.isFixed && (c.row === cell.row || c.col === cell.col || c.block === cell.block)) {
-          return { ...c, notes: c.notes.filter(n => n !== correctValue) };
-        }
-        return c;
-      });
-      
-      const evaluated = calculateConflicts(newBoard);
-      checkWinCondition(evaluated.newBoard);
-      return evaluated.newBoard;
+    const cell = board[selectedCell];
+    if (cell.isFixed || cell.value === cell.solution) return;
+    
+    const correctValue = cell.solution;
+    let newBoard = [...board];
+    newBoard[selectedCell] = { ...cell, value: correctValue, notes: [] };
+    
+    newBoard = newBoard.map(c => {
+      if (c.index !== selectedCell && !c.isFixed && (c.row === cell.row || c.col === cell.col || c.block === cell.block)) {
+        return { ...c, notes: c.notes.filter(n => n !== correctValue) };
+      }
+      return c;
     });
+    
+    const evaluated = calculateConflicts(newBoard);
+    setBoard(evaluated.newBoard);
+    checkWinCondition(evaluated.newBoard);
     
     setTimer(prev => prev + 60);
     setPenaltySeconds(prev => prev + 60);
     setHintCount(prev => prev + 1);
-  }, [status, selectedCell]);
+    
+    setSelectedCell(null);
+    setActiveHighlightNumber(null);
+  }, [status, selectedCell, board, checkWinCondition]);
 
   const toggleRowMemo = (rowIndex: number) => {
     setActiveRowMemos(prev => 
@@ -260,6 +290,11 @@ export const useSudokuGame = () => {
     }
     return map;
   }, [board]);
+
+  useEffect(() => {
+    setActiveRowMemos(prev => prev.filter(r => (missingInRows[r] || []).length > 0));
+    setActiveColMemos(prev => prev.filter(c => (missingInCols[c] || []).length > 0));
+  }, [missingInRows, missingInCols]);
 
   const completedNumbers = useMemo(() => {
     const counts: Record<number, number> = {};

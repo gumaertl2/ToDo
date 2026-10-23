@@ -1,3 +1,5 @@
+// src/store/slices/createAuthSlice.ts
+// [2026-10-23] - CHIRURGISCHER EINGRIFF: unsubArcade zum Logout-Reset hinzugefügt (Offline/Quoten-Schutz).
 // [2026-10-18] - UX-FEATURE: Auto-Account-Provisioning in resetPassword integriert. Existiert eine E-Mail noch nicht in Firebase Auth, wird der Account unsichtbar im Hintergrund angelegt und sofort der Passwort-Erstellen-Link per E-Mail versendet.
 // [2026-10-17] - BUGFIX: Alle unsub-Listener-Variablen beim Logout explizit auf null gesetzt, um Re-Login Blockaden durch Early-Return zu verhindern.
 // [2026-10-06] - UX-FIX: E-Mail als URL-Parameter im Magic Link übergeben, um das window.prompt bei leerem localStorage (z.B. Inkognito) zu umgehen.
@@ -6,7 +8,6 @@
 // [2026-10-06] - FEATURE: Magic Link (Passwortloser Login) Logik implementiert. 'sendMagicLink' sendet die E-Mail, 'initializeAuth' fängt den Klick-Rückkehrer ab.
 // [2026-09-28] - SEC-FIX: matchLineups in den Logout-Store-Reset aufgenommen, um Geister-Daten nach Account-Wechsel zu verhindern.
 // [2026-07-26] - BUGFIX: 'Gast' Hardcoding beim resolveUserProfile Fallback auf 'Mitglied' korrigiert.
-// src/store/slices/createAuthSlice.ts
 import type { StateCreator } from 'zustand';
 import type { User } from '../../core/types/models';
 import { auth, db } from '../../services/firebase';
@@ -286,7 +287,8 @@ export const createAuthSlice: StateCreator<StoreState, [], [], AuthSlice> = (set
       unsubRoleProfiles: null,
       unsubTeamPins: null,
       unsubMatchLineups: null,
-      unsubTemplates: null
+      unsubTemplates: null,
+      unsubArcade: null // Hinzugefügt für Arcade/Sudoku
     });
   },
 
