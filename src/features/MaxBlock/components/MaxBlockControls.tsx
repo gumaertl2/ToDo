@@ -1,5 +1,6 @@
 // src/features/MaxBlock/components/MaxBlockControls.tsx
-// [2026-10-23] - BUGFIX: Linke Seite rein für Rotation (1x Klick), rechte Seite für Swipe und Hard Drop (Doppelklick) angepasst.
+// [2026-10-23] - TWEAK: Zonenaufteilung auf 1/3 links (Rotation) und 2/3 rechts (Swipe/Doppelklick-Drop) angepasst.
+// [2026-10-23] - BUGFIX: Browser-Wischgesten (Zurück/Vorwärts) während des Spiels per touch-action und overscroll unterdrückt.
 // [2026-10-23] - FEATURE: Tastatursteuerung (Pfeiltasten/WASD + Leertaste) für Mac/Desktop hinzugefügt.
 import React, { useRef, useEffect } from 'react';
 
@@ -28,13 +29,10 @@ export const MaxBlockControls: React.FC<MaxBlockControlsProps> = ({
 
   const lastRightTapRef = useRef<number>(0);
 
-  // Schwellenwerte für das "Einrasten" (Pixel pro Spalte/Reihe)
-  const SWIPE_X_THRESHOLD = 35;
-  const SWIPE_Y_THRESHOLD = 40; 
-  
-  // Schwellenwerte für den Hard Drop (Flick)
-  const HARD_DROP_VELOCITY_TIME = 300; // ms
-  const HARD_DROP_DISTANCE = 50; // px
+  const SWIPE_X_THRESHOLD = 30;
+  const SWIPE_Y_THRESHOLD = 35; 
+  const HARD_DROP_VELOCITY_TIME = 300;
+  const HARD_DROP_DISTANCE = 45;
 
   // Tastatursteuerung für Mac/Desktop
   useEffect(() => {
@@ -66,7 +64,7 @@ export const MaxBlockControls: React.FC<MaxBlockControlsProps> = ({
           e.preventDefault();
           onRotate();
           break;
-        case ' ': // Leertaste für Hard Drop
+        case ' ':
           e.preventDefault();
           onHardDrop();
           break;
@@ -88,9 +86,8 @@ export const MaxBlockControls: React.FC<MaxBlockControlsProps> = ({
       startTime: Date.now()
     };
 
-    // Prüfe auf Double-Tap / Doppelklick rechts für Hard Drop
     const now = Date.now();
-    const DOUBLE_TAP_DELAY = 300; // ms
+    const DOUBLE_TAP_DELAY = 300;
 
     if (now - lastRightTapRef.current < DOUBLE_TAP_DELAY) {
       onHardDrop();
@@ -103,7 +100,7 @@ export const MaxBlockControls: React.FC<MaxBlockControlsProps> = ({
   const handleRightTouchMove = (e: React.TouchEvent) => {
     if (disabled) return;
     if (e.cancelable) {
-      e.preventDefault();
+      e.preventDefault(); // Verhindert das Scrollen & Browser-Wischgesten
     }
     
     const touch = e.touches[0];
@@ -128,7 +125,7 @@ export const MaxBlockControls: React.FC<MaxBlockControlsProps> = ({
     if (disabled) return;
     const touch = e.changedTouches[0];
     const totalDeltaY = touch.clientY - touchState.current.startY;
-    const totalTime = Date.now() - touchState.current.startTime;
+    const totalTime = Date.Now ? Date.now() - touchState.current.startTime : 0;
 
     if (totalDeltaY > HARD_DROP_DISTANCE && totalTime < HARD_DROP_VELOCITY_TIME) {
       onHardDrop();
@@ -137,21 +134,24 @@ export const MaxBlockControls: React.FC<MaxBlockControlsProps> = ({
 
   const handleLeftTouchStart = (e: React.TouchEvent) => {
     if (disabled) return;
-    e.preventDefault(); 
-    onRotate(); // Links ist jetzt absolut verlässlich nur für den einfachen Dreh-Befehl da
+    if (e.cancelable) e.preventDefault();
+    onRotate();
   };
 
   return (
-    <div className="absolute inset-0 z-20 flex touch-none">
-      {/* Linke Daumen-Zone: Sauberer einfacher Klick zur Rotation */}
+    <div 
+      className="absolute inset-0 z-20 flex touch-none select-none" 
+      style={{ touchAction: 'none', overscrollBehavior: 'none' }}
+    >
+      {/* Linke Zone (1/3 des Bildschirms): Exklusiv für Rotation */}
       <div 
-        className="w-1/2 h-full"
+        className="w-1/3 h-full"
         onTouchStart={handleLeftTouchStart}
       />
       
-      {/* Rechte Daumen-Zone: Für Bewegung, Wisch-Drops und Hard Drop per Doppelklick */}
+      {/* Rechte Zone (2/3 des Bildschirms): Für Bewegung, Wisch-Drops und Hard Drop per Doppelklick */}
       <div 
-        className="w-1/2 h-full"
+        className="w-2/3 h-full"
         onTouchStart={handleRightTouchStart}
         onTouchMove={handleRightTouchMove}
         onTouchEnd={handleRightTouchEnd}
