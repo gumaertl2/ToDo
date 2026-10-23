@@ -1,6 +1,8 @@
 // src/features/Sudoku/components/SudokuView.tsx
-// [2026-10-23] - FEATURE: Gamification Win-Screen integriert (evaluateScore & SudokuWinScreen). Automatischer Timeout entfernt für bessere UX.
+// [2026-10-23] - BUGFIX & FEATURE: Fehlenden 'fetchSudokuScores'-Trigger hinzugefügt und 'sessionTitle' von localStorage auf globale Firebase-Live-Synchronisation (settings/arcade) umgestellt.
 import React, { useState, useEffect } from 'react';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { db } from '../../../services/firebase';
 import { useSudokuGame } from '../hooks/useSudokuGame';
 import type { SudokuDifficulty } from '../hooks/useSudokuGame';
 import { SudokuBoard } from './SudokuBoard';
@@ -20,28 +22,49 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
   const [lobbyDifficulty, setLobbyDifficulty] = useState<SudokuDifficulty>('medium');
   const [gameMode, setGameMode] = useState<'ranked' | 'practice'>('ranked');
   const [showPracticeTime, setShowPracticeTime] = useState<boolean>(false);
-  const [sessionTitle, setSessionTitle] = useState<string>(() => {
-    return localStorage.getItem('sudoku_session_title') || 'Pausen-Spiele: Erste Runde';
-  });
+  const [sessionTitle, setSessionTitle] = useState<string>('Pausen-Spiele: Erste Runde');
   const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false);
-  const [tempTitle, setTempTitle] = useState<string>(sessionTitle);
+  const [tempTitle, setTempTitle] = useState<string>('');
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
   
-  const { user, roleProfiles } = useClubStore();
-  
-  const sudokuScores = (useClubStore.getState() as any).sudokuScores || [];
-  const saveSudokuScore = (useClubStore.getState() as any).saveSudokuScore || (async () => {});
-  const resetSudokuSeason = (useClubStore.getState() as any).resetSudokuSeason || (async () => {});
+  // CHIRURGISCHER EINGRIFF: Den kompletten Store reaktiv anbinden, damit Firebase-Updates sofort ein Re-Render auslösen!
+  const clubStore = useClubStore() as any;
+  const user = clubStore.user;
+  const roleProfiles = clubStore.roleProfiles;
+  const sudokuScores = clubStore.sudokuScores || [];
+  const saveSudokuScore = clubStore.saveSudokuScore || (async () => {});
+  const resetSudokuSeason = clubStore.resetSudokuSeason || (async () => {});
+  const fetchSudokuScores = clubStore.fetchSudokuScores || (async () => {});
 
   const game = useSudokuGame();
 
-  const userRoleProfile = roleProfiles?.find(p => p.id === user?.roleProfileId);
+  const userRoleProfile = roleProfiles?.find((p: any) => p.id === user?.roleProfileId);
   const isAdmin = 
     user?.rolle === 'ADMIN' || 
     user?.rolle === 'admin' || 
     userRoleProfile?.name === 'ADMIN' || 
-    (useClubStore.getState() as any).isAdmin?.() || 
+    clubStore.isAdmin?.() || 
     false;
+
+  // 1. Live-Daten aus Firebase abonnieren (Scores laden)
+  useEffect(() => {
+    fetchSudokuScores();
+  }, [fetchSudokuScores]);
+
+  // 2. Globalen Turnier-Titel aus Firebase synchronisieren
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'settings', 'arcade'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.sudokuTitle) {
+          setSessionTitle(data.sudokuTitle);
+          // Setze den tempTitle nur, wenn wir nicht gerade am Tippen sind (verhindert Überschreiben durch den Live-Sync)
+          setTempTitle(prev => (prev === '' ? data.sudokuTitle : prev));
+        }
+      }
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     if (game.status === 'won') {
@@ -56,7 +79,6 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
         );
         setEvaluation(result);
 
-        // Automatisches Speichern nur für Ranglisten-Spiele ohne Pause
         if (user && gameMode === 'ranked' && !game.hasUsedPause) {
           saveSudokuScore({
             userId: user.id,
@@ -93,12 +115,20 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
     setView('playing');
   };
 
-  const handleSaveTitle = () => {
+  const handleSaveTitle = async () => {
     if (tempTitle.trim()) {
-      setSessionTitle(tempTitle.trim());
-      localStorage.setItem('sudoku_session_title', tempTitle.trim());
+      const newTitle = tempTitle.trim();
+      setSessionTitle(newTitle); // Optimistic UI
+      setIsEditingTitle(false);
+      
+      try {
+        await setDoc(doc(db, 'settings', 'arcade'), { sudokuTitle: newTitle }, { merge: true });
+      } catch (e) {
+        console.error("Fehler beim Speichern des Turniertitels in Firebase:", e);
+      }
+    } else {
+      setIsEditingTitle(false);
     }
-    setIsEditingTitle(false);
   };
 
   const filteredScores = sudokuScores.filter((s: any) => s.difficulty === lobbyDifficulty);
@@ -292,7 +322,6 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
                 penaltySeconds={game.penaltySeconds}
                 errorCount={game.errorCount}
                 hintCount={game.hintCount}
-                gameMode={gameMode}
                 hasUsedPause={game.hasUsedPause}
                 evaluation={evaluation}
                 onClose={() => setView('lobby')}
