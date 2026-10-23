@@ -1,3 +1,4 @@
+// [2026-10-23] - BUGFIX: Papierkorb-Sichtbarkeit & Admin-Löschberechtigung (canDeleteAnyItem inkl. pro-admin Fallback) gehärtet + Bloodline-Dedup (!t.isHistorical) & Planungs-Sitzungs-Guard.
 // [2026-06-12] - UX-UPGRADE: "Screen Real Estate" Optimierung. Die extra Filter-Zeile wurde gelöscht. Das Zeitfilter-System wurde auf Multi-Select (Array) umgebaut, um Strg-Klick-Kombinationen in der Toolbar zu unterstützen.
 // [2026-06-12] - BUGFIX: 1970-Bug in der Datumssortierung final eliminiert. Aufgaben ohne Fälligkeit erhalten Number.MAX_SAFE_INTEGER und fallen automatisch ans Ende von "Später".
 // [2026-06-11] - UX-FIX: Routing State Interpreter integriert. Die Ansicht (Board/Liste) kann nun per Navigation-State ({ state: { view: 'list' } }) vom Dashboard aus ferngesteuert werden.
@@ -100,13 +101,14 @@ export const TasksView: React.FC = () => {
 
   const userRoleProfile = roleProfiles?.find(p => p.id === user?.roleProfileId);
   const canManageEvents = !!userRoleProfile?.permissions?.manageEvents || !!(user?.permissions as any)?.manageEvents;
-  const canDeleteAnyItem = !!userRoleProfile?.permissions?.deleteAnyItem;
+  const canDeleteAnyItem = !!userRoleProfile?.permissions?.deleteAnyItem || user?.roleProfileId === 'pro-admin' || userRoleProfile?.name === 'ADMIN';
 
   const displayedTasks = useMemo(() => {
     const sourceData = allAgendaItems.filter(t => t.type === 'AUFGABE' || t.status === 'TRASH');
 
     const baseTasks = sourceData.filter((task) => {
       if (task.isTemplate) return false;
+      const isTrashItem = task.status === 'TRASH';
 
       if (task.eventId && !canManageEvents && user) {
         const parentEvent = events.find(e => e.id === task.eventId);
@@ -124,14 +126,24 @@ export const TasksView: React.FC = () => {
       if (filterMode === 'my' && user) {
         const isUserDirectlyAssigned = task.assigneeUserIds && task.assigneeUserIds.includes(user.id);
         const isUserGroupAssigned = task.assigneeGroupIds && user.groupIds && task.assigneeGroupIds.some(groupId => user.groupIds.includes(groupId));
-        if (!isUserDirectlyAssigned && !isUserGroupAssigned) return false;
-      } else if (filterMode === 'custom' && selectedAssignees.length > 0) {
+        const hasNoAssignee = (!task.assigneeUserIds || task.assigneeUserIds.length === 0) && (!task.assigneeGroupIds || task.assigneeGroupIds.length === 0);
+        const isDeletedByMe = (task as any).deletedBy === user.id;
+
+        if (isTrashItem) {
+          // Im Papierkorb dürfen gelöschte Elemente (z. B. ohne Zuständigen, AGENDA/INFO oder vom Admin/Vorstand gelöschte Punkte) nicht durch "Meine Aufgaben" verschluckt werden
+          if (!isUserDirectlyAssigned && !isUserGroupAssigned && !isDeletedByMe && !hasNoAssignee && !canDeleteAnyItem && !canManageEvents && viewCategory !== 'trash') {
+            return false;
+          }
+        } else {
+          if (!isUserDirectlyAssigned && !isUserGroupAssigned) return false;
+        }
+      } else if (filterMode === 'custom' && selectedAssignees.length > 0 && !isTrashItem) {
         const hasUser = task.assigneeUserIds && task.assigneeUserIds.some(id => selectedAssignees.includes(id));
         const hasGroup = task.assigneeGroupIds && task.assigneeGroupIds.some(id => selectedAssignees.includes(id));
         if (!hasUser && !hasGroup) return false;
       }
 
-      if (selectedStatuses.length > 0 && !selectedStatuses.includes(task.status)) {
+      if (!isTrashItem && selectedStatuses.length > 0 && !selectedStatuses.includes(task.status)) {
         return false;
       }
 
@@ -163,7 +175,7 @@ export const TasksView: React.FC = () => {
     }
 
     return baseTasks;
-  }, [allAgendaItems, events, filterMode, user, selectedAssignees, selectedStatuses, selectedProjectTitles, localSearchQuery, users, groups, canManageEvents]);
+  }, [allAgendaItems, events, filterMode, user, selectedAssignees, selectedStatuses, selectedProjectTitles, localSearchQuery, users, groups, canManageEvents, canDeleteAnyItem, viewCategory]);
 
   const sortedTasksRaw = useMemo(() => {
     let sortableTasks = [...displayedTasks];
@@ -214,6 +226,7 @@ export const TasksView: React.FC = () => {
 
     const bloodlineMap = new Map<string, Task[]>();
     sortedTasksRaw.forEach(task => {
+      if (task.status === 'TRASH') return;
       const bId = task.baseItemId || task.id;
       if (!bloodlineMap.has(bId)) bloodlineMap.set(bId, []);
       bloodlineMap.get(bId)!.push(task);
@@ -226,7 +239,8 @@ export const TasksView: React.FC = () => {
          const timeB = b.createdAt || b.updatedAt || 0;
          return timeB - timeA;
       });
-      let primary = group.find(t => t.status !== 'ERLEDIGT' && t.progress !== 100);
+      let primary = group.find(t => !t.isHistorical && t.status !== 'ERLEDIGT' && t.progress !== 100);
+      if (!primary) primary = group.find(t => t.status !== 'ERLEDIGT' && t.progress !== 100);
       if (!primary) primary = group[0];
       primaryTaskIds.add(primary.id);
     });
@@ -239,7 +253,7 @@ export const TasksView: React.FC = () => {
         const ev = events.find(e => e.id === task.eventId);
         if (ev && (ev.status === 'ABGESCHLOSSEN' || ev.isArchived)) {
           isClosedEvent = true;
-        } else if (ev && ev.status === 'PLANUNG' && !ev.isPublished && !task.baseItemId) {
+        } else if (ev && ev.status === 'PLANUNG' && !task.baseItemId) {
           isPlanungHidden = true;
         }
       }
@@ -288,6 +302,7 @@ export const TasksView: React.FC = () => {
 
     const historical = Array.from(historicalMap.values());
     historical.sort((a, b) => (b.updatedAt || b.createdAt || b.dueDate || 0) - (a.updatedAt || a.createdAt || a.dueDate || 0));
+    trash.sort((a, b) => ((b as any).deletedAt || b.updatedAt || b.createdAt || 0) - ((a as any).deletedAt || a.updatedAt || a.createdAt || 0));
 
     let finalTasks = active;
     if (viewCategory === 'archived') finalTasks = historical;
@@ -314,8 +329,8 @@ export const TasksView: React.FC = () => {
 
     const totalBefore = finalTasks.length;
 
-    // CHIRURGISCHER EINGRIFF: Zeitfilter anwenden (OR-Verknüpfung für Multi-Select)
-    if (!timeFilter.includes('all') && timeFilter.length > 0) {
+    // CHIRURGISCHER EINGRIFF: Zeitfilter anwenden (OR-Verknüpfung für Multi-Select, außer im Papierkorb)
+    if (viewCategory !== 'trash' && !timeFilter.includes('all') && timeFilter.length > 0) {
       finalTasks = finalTasks.filter(task => {
         let isMatch = false;
         if (timeFilter.includes('overdue') && task.dueDate && task.dueDate < nowTime) isMatch = true;

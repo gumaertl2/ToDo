@@ -1,3 +1,4 @@
+// [2026-10-23] - RECHTE & HIERARCHIE-FIX: 1) Exklusives Admin-Löschrecht (roleProfileId === 'pro-admin') auch in der ToDo-Listenansicht durchgesetzt (Nicht-Admins erhalten den Hinweis, dass unerledigte/zugewiesene/vererbte Aufgaben nur durch den Administrator gelöscht werden können). 2) Oberpunkt-Auflösung über allAgendaItems + rekursive Unterpunkt-Darstellung im Archiv & Papierkorb.
 // [2026-06-12] - UX-FEATURE: Heatmap und Time-Badges aktiviert! Die TasksListView gibt nun den Befehl 'showTimeCategory={true}' an die AgendaItemRow, wodurch die farbigen Dringlichkeits-Ränder exklusiv in der ToDo-Liste leuchten.
 // [2026-06-12] - UX-FEATURE: Intelligentes Rendering für die Listenansicht eingebaut. 
 // 1. Aktive ToDos: Werden streng chronologisch (flach) gerendert, um die Dringlichkeits-Sortierung nicht zu zerstören.
@@ -6,6 +7,7 @@
 // src/features/Tasks/TasksListView.tsx
 import React from 'react';
 import { Filter, Check, ChevronUp, ChevronDown, Folder, Search, X } from 'lucide-react';
+import { useClubStore } from '../../store/useClubStore';
 import { AgendaItemRow } from '../Shared/AgendaItemRow';
 import type { Task, AgendaItem } from '../../core/types/models';
 import type { SortKey } from './TasksView';
@@ -60,6 +62,8 @@ export const TasksListView: React.FC<TasksListViewProps> = ({
   searchQuery, setSearchQuery,
   moveToTrash, restoreFromTrash, deleteTask, canDeleteAnyItem
 }) => {
+  const { user, allAgendaItems } = useClubStore();
+  const isAdmin = user?.roleProfileId === 'pro-admin';
 
   const [expandedContainers, setExpandedContainers] = React.useState<Set<string>>(new Set());
 
@@ -227,7 +231,9 @@ export const TasksListView: React.FC<TasksListViewProps> = ({
                   {!isCollapsed && (() => {
                     const renderTaskRow = (task: Task, isChild: boolean, isForceFlat: boolean, childrenCount: number = 0) => {
                       const isHistorical = historicalTaskIds.has(task.id);
-                      const parentTask = task.parentItemId ? allTasks.find(t => t.id === task.parentItemId) : undefined;
+                      const parentTask = task.parentItemId
+                        ? (allAgendaItems.find(t => t.id === task.parentItemId) || allTasks.find(t => t.id === task.parentItemId))
+                        : undefined;
                       
                       const pTitle = (task.isSubItem && (!isChild || isForceFlat)) ? parentTask?.title : undefined;
                       
@@ -274,6 +280,24 @@ export const TasksListView: React.FC<TasksListViewProps> = ({
                           }}
                           onOpenHistory={(item) => setHistoryTask(item as Task)}
                           onDelete={(id, title) => {
+                            if (task.type === 'AUFGABE' && !isAdmin) {
+                              const isClone = !!task.baseItemId;
+                              const isAssigned = (task.assigneeUserIds && task.assigneeUserIds.length > 0) || (task.assigneeGroupIds && task.assigneeGroupIds.length > 0);
+                              const isFinished = task.progress === 100 || task.status === 'ERLEDIGT';
+
+                              if (!isFinished) {
+                                window.alert(`Die unerledigte Aufgabe "${title || 'Dieser Punkt'}" kann nicht gelöscht werden (nur durch den Administrator möglich).\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn sie beendet ist.`);
+                                return;
+                              }
+                              if (isClone && !task.isSubItem) {
+                                window.alert(`Die vererbte Aufgabe "${title || 'Dieser Punkt'}" kann nicht gelöscht werden (nur durch den Administrator möglich).\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn sie beendet ist.`);
+                                return;
+                              }
+                              if (isAssigned && !task.isSubItem) {
+                                window.alert(`Die zugewiesene Aufgabe "${title || 'Dieser Punkt'}" kann nicht gelöscht werden (nur durch den Administrator möglich).\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn sie beendet ist.`);
+                                return;
+                              }
+                            }
                             if (window.confirm(`Möchtest du "${title || 'Diesen Punkt'}" in den Papierkorb verschieben?`)) {
                               moveToTrash(id);
                             }
@@ -315,17 +339,18 @@ export const TasksListView: React.FC<TasksListViewProps> = ({
                         rootTasks.push(task);
                       });
 
-                      return rootTasks.map(rootTask => {
-                        const children = childrenMap.get(rootTask.id) || [];
-                        const isContainerExpanded = expandedContainers.has(rootTask.id);
-                        
+                      const renderHierarchyNode = (node: Task, isChildNode: boolean): React.ReactNode => {
+                        const directChildren = childrenMap.get(node.id) || [];
+                        const isNodeExpanded = expandedContainers.has(node.id);
                         return (
-                          <React.Fragment key={`block-${rootTask.id}`}>
-                            {renderTaskRow(rootTask, false, false, children.length)}
-                            {isContainerExpanded && children.map(child => renderTaskRow(child, true, false, 0))}
+                          <React.Fragment key={`block-${node.id}`}>
+                            {renderTaskRow(node, isChildNode, false, directChildren.length)}
+                            {isNodeExpanded && directChildren.map(child => renderHierarchyNode(child, true))}
                           </React.Fragment>
                         );
-                      });
+                      };
+
+                      return rootTasks.map(rootTask => renderHierarchyNode(rootTask, false));
                     }
                   })()}
                 </React.Fragment>

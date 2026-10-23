@@ -1,3 +1,4 @@
+// [2026-10-23] - MASTER SYNC: Papierkorb- & Admin-Governance (Löschschutz für offene/zugewiesene/vererbte Aufgaben, Container-Kaskade im Papierkorb, Unantastbarkeit versiegelter Protokolle, Archiv-Rückführung durch Admin), rekursiver Unterbaum-Rollover beim Sitzungsabschluss, visuelle Abschluss-Validierung sowie Hierarchie-UX in TEIL 3, 4 und 8 synchronisiert.
 // [2026-10-18] - MASTER SYNC: Erinnerungs-Historie (Audit-Trail: reminderSentBy/reminderAction, Mitternachts-Cutoff vs. überfällige Aufgaben), persönliches Einsatz-Highlighting im Kalender/Spielplan/Dienste (🏓, 🚗, 📋, ☕) sowie Reminders-Submodule im Datei-Lexikon ergänzt.
 // [2026-10-18] - MASTER SYNC: Vollständiger Ist-Abgleich mit dem Quellcode (Tech-Stack Versionen, 4-Wege-Zuweisung, Magic-Link Auth, RBAC-Rechte inkl. viewJugend/viewAllReminders/manageMitglieder, alle 12 Collections, Jugend-Firewall und exaktes Datei-Lexikon in TEIL 8 aktualisiert).
 // [2026-10-17] - MASTER SYNC: Ghost-Data Prävention, Explicit Empty Array Rule und dynamische Team-Referenzierung via SmartEntityPicker dokumentiert.
@@ -132,7 +133,9 @@ Das System basiert nicht auf endlosen ToDo-Listen, sondern auf einem klaren Rhyt
        2. Der *alte* Boss UND alle *alten* Kinder (egal ob diese auf 0 % oder 100 % standen) bekommen **sofort live** den Stempel `isHistorical = true`. Die gesamte alte Familie ist versiegelt. Waisenkinder sind unmöglich.
    * **Szenario D: Der Standard-Container (Keine Routine)**
      * *Live in der Sitzung:* Slider frei beweglich.
-     * *Beim Sitzungsabschluss (Versiegelung):* Boss und Kinder werden isoliert betrachtet. Alles auf 100 % bleibt versiegelt (`isHistorical = true`) zurück. Alles < 100 % wird versiegelt zurückgelassen UND als Klon ins neue Meeting übertragen.
+     * *Beim Sitzungsabschluss (Versiegelung):*
+       * Ist der **Boss (Oberpunkt) auf 100 % (`ERLEDIGT`)**, gilt das gesamte Arbeitspaket als erledigt: Boss und alle Kinder bleiben versiegelt (`isHistorical = true`) im alten Protokoll zurück und werden nicht ins neue Meeting kopiert.
+       * Ist der **Boss < 100 %**, wird die alte Familie im abgeschlossenen Protokoll versiegelt (`isHistorical = true`) UND der Boss wird inklusive **aller dazugehörigen Unterpunkte** (auch bereits erledigter Teilschritte sowie mehrstufig verschachtelter Unterpunkte) rekursiv in das neue Meeting geklont, damit der Checklisten-Kontext und die Hierarchie unter dem neu nummerierten Oberpunkt vollständig erhalten bleiben.
 
 ---
 
@@ -143,9 +146,10 @@ Punkte auf der Agenda wechseln fließend ihren Zustand. Ein `INFO`-Punkt kann pe
 *Wenn ein Event abgeschlossen wird, greift die Container-Klon-Logik:*
 * Es werden alle offenen/unfertigen AUFGABEN in das nächste Meeting kopiert ("Weiterarbeiten"). Ihr Fortschritt (z.B. 50%) bleibt erhalten.
 * Es werden alle INFO/AGENDA-Punkte kopiert, *sofern* sie als Routine markiert sind ("Neuer Zyklus").
-* **Waisen-Schutz:** Beim Klonen eines Oberpunkts werden *alle* dazugehörigen Unterpunkte (auch die bereits erledigten!) zwingend mitkopiert, damit der Fortschrittsbalken und Kontext des Containers im neuen Meeting intakt bleibt.
+* **Waisen-Schutz & Rekursiver Unterbaum-Rollover (`copySubtreeRecursive`):** Beim Klonen eines Oberpunkts werden *alle* dazugehörigen Unterpunkte (auch die bereits erledigten sowie mehrstufige Unterpunkte!) zwingend direkt unter dem neu nummerierten Oberpunkt (`parentItemId: newParentId`) mitkopiert, damit der Fortschrittsbalken, die Reihenfolge (`protocolIndex`) und der Kontext des Containers im neuen Meeting intakt bleiben.
+* **Abschluss-Validierung mit Visueller Fehler-Ortung (`validateBeforeClose`):** Offene Aufgaben ohne zugewiesenen Verantwortlichen blockieren den Sitzungsabschluss, werden in der Agenda sofort rot umrandet (`⚠️ Verantwortlicher fehlt!`), eingeklappte Oberpunkte werden automatisch geöffnet und die Ansicht scrollt direkt zum ersten betroffenen Punkt. Unterpunkte, deren Oberpunkt bereits auf `100 %` (`ERLEDIGT`) steht, blockieren den Abschluss nicht.
 * **Blutlinien-Logik (`baseItemId` & `seriesId`):** Siehe TEIL 6 (Datenmodell).
-* **Müllabfuhr:** Beim Schließen eines Protokolls werden `TRASH`-Elemente konsequent ignoriert. Sie blockieren nicht den Abschluss der Sitzung.
+* **Müllabfuhr:** Beim Schließen eines Protokolls werden `TRASH`-Elemente konsequent ignoriert. Sie blockieren weder den Abschluss der Sitzung noch überschatten sie aktive Elemente bei der Blutlinien-Deduplizierung.
 
 ### 2. Routine-Aufgaben & Anti-Flooding (`isRoutine`)
 Wiederkehrende Aufgaben (z.B. "Kasse prüfen wöchentlich") blähen die Datenbank nicht künstlich auf. 
@@ -185,16 +189,23 @@ PapaToDo kann externe Kalender (z.B. myTischtennis, BFV oder Google) abonnieren.
 *   **Live-Integration:** Die berechnete finale Aufstellung wird automatisch in der Termin-Detailansicht für die Spieler angezeigt und bei aktivierten WhatsApp-Erinnerungen nahtlos an den Info-Text angehängt. Der öffentliche Kalender bleibt aus DSGVO-Gründen für Gäste (ohne Login) von diesen Aufstellungen isoliert.
 *   **Persönliches Einsatz-Highlighting:** Im **Spielplan (`CalendarAgendaView`)**, in der **Dienste- & Terminliste (`CalendarListView`)** sowie in der **Monats-/Wochen-/Tagesansicht (`CalendarView`)** werden Tage und Begegnungen, bei denen der eingeloggte Nutzer selbst eingeteilt ist (`useCalendarEvents.ts`), automatisch in Smaragdgrün hervorgehoben und mit kompakten Rollen-Symbolen direkt hinter dem Titel (`🏓` Spieler, `🚗` Fahrer, `📋` Betreuer, `☕` Vereinsdienst) markiert – ohne das Tabellen- oder Karten-Layout zu verschieben.
 
-### 8. Soft-Delete (Trash) & Papierkorb-Management
-Gelöschte Elemente (Agenda-Punkte, Aufgaben) werden nicht physisch aus der Datenbank entfernt, sondern erhalten den Status `TRASH` und einen `deletedAt` Zeitstempel. Sie werden in der regulären Agenda und im Kanban-Board ausgeblendet, können aber von Administratoren über die `OrphanCleanupModal` wiederhergestellt oder endgültig (hard-delete) bereinigt werden.
+### 8. Soft-Delete (Trash), Admin-Löschschutz & Papierkorb-Governance
+Gelöschte Elemente (Agenda-Punkte, Aufgaben) werden nicht sofort physisch aus der Datenbank entfernt, sondern erhalten den Status `TRASH` (auch bei `progress === 100` bleibt `TRASH` strikt erhalten) sowie `deletedAt` und `deletedBy`. Dabei gelten vier eiserne Governance-Regeln:
+* **1. Exklusives Admin-Löschrecht für Aufgaben (`AUFGABE`):** Offene (`< 100 %`), bereits zugewiesene oder aus einer Vorsitzung vererbte (`baseItemId`) Aufgaben dürfen weder in der Sitzungs-Agenda noch in der Aufgabenliste von normalen Nutzern in den Papierkorb verschoben werden. Dieses Recht liegt **exklusiv beim Admin** (`roleProfileId === 'pro-admin'`). Normale Nutzer setzen Aufgaben bei Erledigung stattdessen auf `100 % (Erledigt)`.
+* **2. Container-Kaskade (Kein Waisen-Müll):** Wird ein Oberpunkt in den Papierkorb verschoben (`moveToTrash`), wiederhergestellt (`restoreFromTrash`) oder endgültig gelöscht (`deleteTask`), wandern automatisch alle dazugehörigen Unterpunkte desselben Meetings (`collectEventDescendants`) mit.
+* **3. Unantastbarkeit abgeschlossener Protokolle:** Abgeschlossene Sitzungen (`status === 'ABGESCHLOSSEN'`) sind im Store gegen Lösch- und Sortier-Operationen gesperrt. Wird ein geklonter Punkt in einer *aktuellen* Sitzung gelöscht, bleibt sein historischer Vorfahre (`isHistorical: true`) im versiegelten Protokoll der Vorsitzung völlig unberührt.
+* **4. Papierkorb-Sichtbarkeit & Archiv-Rückführung:** Im Papierkorb (`viewCategory === 'trash'` bzw. `OrphanCleanupModal`) werden gelöschte Elemente niemals durch Personen-, Status- oder Zeitfilter verschluckt. Auch Elemente, die aus einem archivierten Projekt im Papierkorb gelandet sind, bleiben dort für den Admin sichtbar: Nur der Admin (`canDeleteAnyItem` / `pro-admin`) darf den Papierkorb endgültig leeren (`deleteTask`) oder entscheiden, ein Element per `restoreFromTrash` wieder zurück in das (aktive oder archivierte) Projekt zu schieben.
 
-### 9. Desktop Power-Features (Kontextmenü & Inline-Editoren)
+### 9. Desktop Power-Features (Kontextmenü, Inline-Editoren & Hierarchie-UX)
 Für ein blitzschnelles Arbeiten am Desktop wurden Power-Features integriert:
 * **Native Rechtsklick-Kontextmenüs (`RowContextMenu`):** Erlaubt die Bearbeitung, Positionierung und das Einfügen neuer Zeilen ohne Mauswege.
-* **Inline-Editoren (`InlineEditors`):** Bearbeitung von Titeln, Beschreibungen und Dauer direkt in der Liste.
+* **Inline-Editoren (`InlineEditors`):** Bearbeitung von Titeln, Beschreibungen und Dauer direkt in der Liste. Ein Klick auf eine andere Zeile (`onClickCapture`) schaltet den Fokus sofort um.
 * **Volltext- & Ähnlichkeitssuche:** Ein globales Suchfeld im Agenda-Header filtert den Baum in Echtzeit. Treffer in Titeln oder Notizen (`RichText`) werden visuell gelb (`<mark>`) hervorgehoben.
 * **Safe-Edit Fokus-Schutz:** Eine komplexe Interceptor-Logik verhindert den Fokus-Klau und Datenüberschreibungen zwischen Inline-Editoren (onBlur-Speichern) und Modal-Overlays.
-* **Smart-Sorting & Sub-Item Drag&Drop:** Neu angelegte Punkte erhalten strikt die `protocolIndex = max + 1` und fügen sich nahtlos in die Hierarchie ein. Unterpunkte sind vollständig drag-and-drop-fähig.
+* **Selbstheilende Hierarchie-Sortierung & Visuelle Unterpunkte:** 
+  * Unterpunkte werden optisch klar als untergeordnete Ebene dargestellt (eingerückte Karte mit Indigo-Leitlinie und Nummerierungs-Badge wie `2.1`).
+  * Ein Oberpunkt, der bereits eigene Unterpunkte besitzt, ist gegen versehentliches Einrücken gesperrt.
+  * Beim Verschieben eines Oberpunkts per Pfeiltasten (`moveAgendaItem`) wandert dessen gesamter Unterbaum (`collectSubtreeIds`) geschlossen mit. Sollte eine Reihenfolge in der Datenbank jemals verschoben sein, heilt die Agenda-Ansicht die Hierarchie automatisch (`repairEventAgendaOrder`).
 
 ### 10. Mitglieder-Self-Service, Magic-Link & Stammdaten
 * **Passwortloser Login (Magic-Link) & E-Mail-Auth:** Nutzer können sich klassisch per E-Mail/Passwort oder passwortlos per E-Mail-Magic-Link (`sendMagicLink`) anmelden, sofern ihre E-Mail-Adresse in der Vorstands- (`users`) oder Mitgliederliste (`helpers`) hinterlegt ist.
@@ -225,7 +236,7 @@ Jeder Nutzer in PapaToDo bekommt ein Rollen-Profil (`RoleProfile` in Collection 
   * `manageEvents`: Darf Sitzungen anlegen, Agenden veröffentlichen und Protokolle schließen.
   * `manageCalendarSetup`: Darf externe ICS-Feeds abonnieren, bearbeiten und Kalender-Strukturen verwalten.
   * `viewTeamPins` / `manageTeamPins`: Steuert Lese- und Schreibzugriff auf den Wettkampf-Tresor.
-  * `deleteAnyItem`: Darf beliebige Punkte/Aufgaben löschen bzw. den Papierkorb bereinigen.
+  * `deleteAnyItem`: Darf beliebige Punkte/Aufgaben endgültig löschen bzw. den Papierkorb bereinigen (ergänzt durch den exklusiven Admin-Schutz `roleProfileId === 'pro-admin'` beim Löschen offener/zugewiesener/vererbter Aufgaben).
 * **DSGVO- & Datenschutz-Firewalls:**
   * `viewEhrungen`: Darf das Jubiläums-Radar einsehen UND fungiert (zusammen mit `manageMitglieder`) als strikte Store-Firewall für die Einsicht in Daten passiver Mitglieder (`memberStatus === 'PASSIV'`).
   * `viewJugend`: Strikte Store-Firewall (zusammen mit `manageMitglieder`) für den DSGVO-konformen Schutz von Minderjährigen-Daten (`memberStatus === 'JUGEND'`).
@@ -299,7 +310,7 @@ Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der e
 * `src/services/backupService.ts`: Backup & Restore Logik für alle 12 Collections (JSON-Export, Chunked Batch-Writes, 12:00-Uhr-Reminder).
 * `src/store/useClubStore.ts`: Der Master-Zustand (Zustand Store mit `persist`-Middleware).
 * `src/store/slices/*`: Modulare Store-Fragmente:
-  * `createAuthSlice.ts`, `createCalendarSlice.ts`, `createEventPollSlice.ts` (Abstimmungslogik), `createEventSlice.ts`, `createMatchLineupSlice.ts` (Schatten-Akten & Optimistic Updates), `createTaskSlice.ts`, `createTeamPinsSlice.ts`, `createTeamSlice.ts`, `createTemplateSlice.ts`, `createUserSlice.ts`.
+  * `createArcadeSlice.ts`, `createAuthSlice.ts`, `createCalendarSlice.ts`, `createEventPollSlice.ts` (Abstimmungslogik), `createEventSlice.ts`, `createMatchLineupSlice.ts` (Schatten-Akten & Optimistic Updates), `createTaskSlice.ts`, `createTeamPinsSlice.ts`, `createTeamSlice.ts`, `createTemplateSlice.ts`, `createUserSlice.ts`.
 
 ### Features & UI Components
 
@@ -319,6 +330,7 @@ Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der e
   * `hooks/useCalendarEvents.ts` (Daten-Mapping & persönliche Einsatz-Erkennung `isMyAssignment` / `myAssignmentIcons`).
 * **Help (`src/features/Help/`):** `HelpView.tsx` (Integriertes Handbuch mit Leitfaden zu Filtern, Rollen und Admin-Cockpit).
 * **Layout (`src/features/Layout/`):** `AppLayout.tsx` (Responsive Shell, Navigation, Live-Badges & Backup-Reminder-Banner).
+* **Minigames / Arcade (`src/features/MaxBlock/`, `src/features/Sudoku/`):** Easter-Egg Pausen-Spiele (`components/`, `hooks/`, `utils/`).
 * **Reminders (`src/features/Reminders/`):** 
   * `RemindersView.tsx` (WhatsApp-Kommandozentrale, Meine/Verein-Filter & Historien-Modus).
   * `components/ReminderCard.tsx` (Karten-UI inkl. Snooze, Audit-Banner & „Wieder aktivieren“).
@@ -355,5 +367,5 @@ Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der e
 4.  `npm run dev` startet den lokalen Vite-Server (oder per Doppelklick auf `node starten.command`).
 5.  `npm run build` führt einen strengen TypeScript Check (`tsc -b`) aus und baut das Production-Bundle.
 
-*Stand: 18.10.2026 - Protokoll: Vollständiger Code-Sync (Tech-Stack, 4-Wege-Zuweisung, RBAC inkl. Jugend-Firewall, Erinnerungs-Historie, Einsatz-Highlighting, alle 12 Collections & aktuelles Datei-Lexikon)*
+*Stand: 23.10.2026 - Protokoll: Vollständiger Code- & Governance-Sync (Papierkorb-Kaskade, Admin-Löschschutz für Aufgaben, Archiv-Rückführung, Rekursiver Container-Rollover, Abschluss-Validierung & aktuelles Datei-Lexikon)*
 // --- END OF FILE ---

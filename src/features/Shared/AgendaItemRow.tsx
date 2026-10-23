@@ -1,3 +1,5 @@
+// [2026-10-23] - UX-UPGRADE: Validierungs-Hervorhebung (hasValidationError) für unzugewiesene Aufgaben beim Sitzungsabschluss integriert (roter Rahmen + direkt klickbares Warn-Badge).
+// [2026-10-19] - UX-UPGRADE: Sofortiger Zeilen-Fokus via onClickCapture (verhindert hängenbleibenden Fokus durch stopPropagation in Kind-Elementen) sowie deutliche farbliche und strukturelle Abhebung von Unterpunkten (Indigo/Slate-Hierarchie) und aktiver Auswahl.
 // [2026-06-12] - UX-REFACTOR: Time-Badges (Heatmap) in die linke Gliederungsspalte verschoben und strikt linksbündig ausgerichtet. Verhindert optisches "Flattern" der Textlängen und räumt den Platz neben dem Titel auf.
 // [2026-06-12] - BUGFIX: 'isTemplateMode' aus dem Schutzschild der Heatmap (getTimeCategory) entfernt. Die TasksListView nutzt diesen Modus für das Layout, was fälschlicherweise die Farben blockiert hatte.
 // [2026-06-12] - BUGFIX: Heatmap und Time-Badges durch 'showTimeCategory'-Prop gekapselt.
@@ -78,6 +80,7 @@ interface AgendaItemRowProps {
   searchQuery?: string;
   showMinimalDesktopActions?: boolean; 
   showTimeCategory?: boolean;
+  hasValidationError?: boolean;
 }
 
 export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({ 
@@ -85,7 +88,7 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
   onToggleSubItems, startTimeStr, isExpanded, onToggleExpand, onMove, onEdit, onOpenHistory, 
   onDelete, onRestoreFromTrash, onPermanentDelete, canDeleteAnyItem, onSaveInline, onInsertBelow, onToggleSubItem, parentContextTitle, isTemplateMode = false, 
   isReadOnly = false, isOvertime = false, effectiveDuration, onDurationPreview, isSelected, onSelect,
-  searchQuery, showMinimalDesktopActions = false, showTimeCategory = false
+  searchQuery, showMinimalDesktopActions = false, showTimeCategory = false, hasValidationError = false
 }) => {
   const { users, groups, allAgendaItems } = useClubStore();
   
@@ -186,6 +189,7 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
 
   const performScrollPreservedToggle = (e: React.MouseEvent, action: () => void) => {
     e.stopPropagation(); e.preventDefault();
+    if (onSelect) onSelect();
     const row = e.currentTarget.closest('.agenda-row-wrapper'); 
     const container = row?.closest('.overflow-y-auto') || row?.closest('.custom-scrollbar');
     if (!row || !container) { action(); return; }
@@ -200,16 +204,39 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
     }, 10);
   };
 
-  const wrapperClass = isSelected 
-    ? "bg-blue-50/60 ring-1 ring-inset ring-blue-400" 
-    : (isReadOnly ? "bg-white" : "bg-white hover:bg-blue-50/30 transition-colors cursor-pointer");
+  const isVisualSubItem = !!(item.isSubItem && !parentContextTitle);
+
+  const wrapperClass = hasValidationError
+    ? "bg-red-50/90 ring-2 ring-inset ring-red-500 shadow-sm z-10"
+    : isSelected 
+      ? "bg-blue-50/90 ring-2 ring-inset ring-blue-500 shadow-sm z-10" 
+      : isVisualSubItem
+        ? (isReadOnly ? "bg-slate-50/90" : "bg-slate-50/90 hover:bg-indigo-50/50 transition-colors cursor-pointer")
+        : (isReadOnly ? "bg-white" : "bg-white hover:bg-blue-50/30 transition-colors cursor-pointer");
     
-  const borderLeftClass = timeCategory ? `border-l-4 ${timeCategory.colorClass}` : 'border-l-0';
+  const borderLeftClass = hasValidationError
+    ? 'border-l-4 border-l-red-600'
+    : timeCategory
+      ? `border-l-4 ${timeCategory.colorClass}`
+      : isSelected
+        ? 'border-l-4 border-l-blue-600'
+        : isVisualSubItem
+          ? 'border-l-4 border-l-indigo-200'
+          : 'border-l-4 border-l-transparent';
+
+  const indexBadgeClass = isVisualSubItem
+    ? "appearance-none text-center font-bold text-indigo-700 bg-indigo-50 group-hover:bg-indigo-100 border border-indigo-200 rounded text-xs py-0.5 px-1.5 cursor-pointer outline-none"
+    : "appearance-none text-center font-extrabold text-slate-800 bg-slate-200/80 group-hover:bg-slate-300 border border-slate-300 rounded text-xs py-0.5 px-1.5 cursor-pointer outline-none";
+
+  const staticIndexBadgeClass = isVisualSubItem
+    ? "font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded text-xs py-0.5 px-1.5 ml-1 mt-0.5 z-10"
+    : "font-extrabold text-slate-800 bg-slate-200/80 border border-slate-300 rounded text-xs py-0.5 px-1.5 ml-1 mt-0.5 z-10";
 
   return (
     <div 
       id={`agenda-item-${item.id}`}
-      onClick={() => { if(onSelect) onSelect(); }} 
+      onClickCapture={() => { if (onSelect) onSelect(); }}
+      onClick={() => { if (onSelect) onSelect(); }} 
       onDoubleClick={(e) => { e.stopPropagation(); if (!isReadOnly) handleSafeEdit(item); }}
       onContextMenu={handleContextMenu}
       className={`agenda-row-wrapper ${wrapperClass} ${borderLeftClass} flex flex-col border-b border-gray-200 last:border-0 min-w-full md:min-w-[700px] print:!min-w-0 print:!w-full print:!border-l-0 print:!border-b print:!border-gray-300 relative`}
@@ -227,11 +254,11 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
         />
       )}
 
-      <div className={`p-3 grid grid-cols-[auto_1fr] ${isTemplateMode ? 'md:grid-cols-[80px_1fr_auto]' : 'md:grid-cols-[105px_1fr_auto]'} gap-2 md:gap-3 items-start print:!grid-cols-[50px_1fr_auto] print:!gap-2 print:!p-2`}>
+      <div className={`p-3 grid grid-cols-[auto_1fr] ${isTemplateMode ? 'md:grid-cols-[80px_1fr_auto]' : 'md:grid-cols-[115px_1fr_auto]'} gap-2 md:gap-3 items-start print:!grid-cols-[50px_1fr_auto] print:!gap-2 print:!p-2`}>
         
         {/* CHIRURGISCHER EINGRIFF: Die linke Gliederungsspalte. Wenn ToDo-Modus (showTimeCategory), dann sitzt hier das linksbündige Badge! */}
-        <div className={`relative flex items-start gap-1.5 pt-1 print:!pt-0 ${item.isSubItem && !parentContextTitle ? 'pl-2 md:pl-5' : ''}`}>
-          {item.isSubItem && !parentContextTitle && <div className="absolute left-1 top-2.5 w-3 h-3 border-l-2 border-b-2 border-gray-300 rounded-bl print:!hidden" />}
+        <div className={`relative flex items-start gap-1.5 pt-1 print:!pt-0 ${isVisualSubItem ? 'pl-3 md:pl-6' : ''}`}>
+          {isVisualSubItem && <div className="absolute left-1.5 top-2.5 w-3 h-3 border-l-2 border-b-2 border-indigo-300 rounded-bl print:!hidden" />}
           
           {showTimeCategory ? (
             timeCategory ? (
@@ -244,7 +271,7 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
               {onMove && index !== undefined && !isReadOnly && (!item.isSubItem || (positionOptions && positionOptions.length > 0)) ? (
                 <>
                   <div className="relative inline-flex group print:!hidden mt-0.5">
-                    <div className="appearance-none text-center font-bold text-gray-600 bg-gray-100 group-hover:bg-gray-200 border border-transparent rounded text-sm py-0 px-1 cursor-pointer outline-none">
+                    <div className={indexBadgeClass}>
                       {displayIndexStr !== undefined ? displayIndexStr : `${index + 1}.`}
                     </div>
                     <select 
@@ -263,12 +290,12 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
                   <span className="hidden print:!inline font-bold text-gray-500 text-sm mt-0.5">{displayIndexStr !== undefined ? displayIndexStr : `${index + 1}.`}</span>
                 </>
               ) : (
-                <span className="font-bold text-gray-500 text-sm ml-2 mt-0.5 z-10">{displayIndexStr !== undefined ? displayIndexStr : (index !== undefined ? `${index + 1}.` : '-')}</span>
+                <span className={staticIndexBadgeClass}>{displayIndexStr !== undefined ? displayIndexStr : (index !== undefined ? `${index + 1}.` : '-')}</span>
               )}
 
               {!isTemplateMode && (
                 <div className="flex flex-col items-center ml-0.5 z-10">
-                  <span onClick={(e) => { e.stopPropagation(); if (!isReadOnly) { setLocalDur(item.durationEstimate || 0); setIsEditingDuration(true); } }} className={`font-bold text-sm whitespace-nowrap flex flex-col items-center leading-tight ${isOvertime ? 'text-red-600' : 'text-gray-900'} ${isReadOnly ? '' : 'cursor-pointer hover:bg-blue-50 hover:text-blue-600 rounded px-1 -ml-1 transition-colors'} print:!ml-1 print:!bg-transparent`}>
+                  <span onClick={(e) => { e.stopPropagation(); if (!isReadOnly) { setLocalDur(item.durationEstimate || 0); setIsEditingDuration(true); } }} className={`font-bold text-sm whitespace-nowrap flex flex-col items-center leading-tight ${isOvertime ? 'text-red-600' : (isVisualSubItem ? 'text-slate-700' : 'text-gray-900')} ${isReadOnly ? '' : 'cursor-pointer hover:bg-blue-50 hover:text-blue-600 rounded px-1 -ml-1 transition-colors'} print:!ml-1 print:!bg-transparent`}>
                     <span>{startTimeStr}</span>
                     <span className="text-[10px] text-gray-400 font-medium mt-[1px] print:!hidden">({effectiveDuration !== undefined ? effectiveDuration : (item.durationEstimate || 0)}m)</span>
                   </span>
@@ -280,7 +307,7 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
         </div>
 
         <div className="flex flex-col min-w-0 pr-1 md:pr-4 pt-1 print:!pr-2 print:!pt-0">
-          <div className={`flex flex-col flex-1 ${item.isSubItem && !parentContextTitle ? 'pl-3 sm:pl-4 border-l-[3px] border-blue-200 ml-1' : ''}`}>
+          <div className={`flex flex-col flex-1 ${isVisualSubItem ? 'pl-3 sm:pl-4 border-l-[3px] border-indigo-300 ml-1' : ''}`}>
             {parentContextTitle && <div className="text-[10px] font-bold text-gray-400 mb-0.5 flex items-center uppercase tracking-wider">🏷️ {parentContextTitle} <ChevronRight className="w-3 h-3 mx-1" /></div>}
             
             {editField === 'title' ? (
@@ -289,17 +316,26 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
               <div className="flex items-start justify-between w-full gap-2 group/title">
                 <div className="flex items-start gap-1.5 flex-1 min-w-0">
                   {subItemCount !== undefined && subItemCount > 0 && onToggleSubItems && ( 
-                    <button onClick={(e) => performScrollPreservedToggle(e, onToggleSubItems)} className={`mt-0 p-1 rounded-md transition-colors shrink-0 border shadow-sm print:!hidden ${isSubItemsCollapsed ? 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'}`}> 
+                    <button onClick={(e) => performScrollPreservedToggle(e, onToggleSubItems)} className={`mt-0 p-1 rounded-md transition-colors shrink-0 border shadow-sm print:!hidden ${isSubItemsCollapsed ? 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100' : 'bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-700'}`}> 
                       {isSubItemsCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />} 
                     </button> 
                   )}
-                  <div className={`font-bold text-gray-900 text-sm break-words ${isReadOnly ? '' : 'cursor-text hover:bg-gray-100 rounded px-1 -ml-1 transition-colors print:!m-0 print:!p-0'} ${item.title ? '' : 'text-gray-400 italic'}`} onClick={(e) => { e.stopPropagation(); if(!isReadOnly) { setEditVal(item.title); setEditField('title'); } }}> 
+                  <div className={`${isVisualSubItem ? 'font-semibold text-slate-800' : 'font-bold text-gray-900'} text-sm break-words ${isReadOnly ? '' : 'cursor-text hover:bg-gray-100/80 rounded px-1 -ml-1 transition-colors print:!m-0 print:!p-0'} ${item.title ? '' : 'text-gray-400 italic'}`} onClick={(e) => { e.stopPropagation(); if(!isReadOnly) { setEditVal(item.title); setEditField('title'); } }}> 
                     
                     {item.type === 'AGENDA' && <span className="text-indigo-600 mr-1.5" title="Arbeitspunkt (Diskussion & Entscheidung)">A:</span>}
                     {item.type === 'INFO' && <span className="text-blue-600 mr-1.5" title="Kenntnisnahme (Reiner Wissenstransfer)">I:</span>}
 
                     {highlightText(item.title || 'Neuer Punkt', searchQuery)}
                     {isSubItemsCollapsed && subItemCount! > 0 && <span className="ml-2 text-[10px] font-bold bg-blue-50 border border-blue-200 text-blue-600 px-1.5 py-0.5 rounded-full align-middle inline-block print:!hidden">{subItemCount} Unterpunkte</span>}
+                    {hasValidationError && (
+                      <span
+                        onClick={(e) => { e.stopPropagation(); if (!isReadOnly) handleSafeEdit(item); }}
+                        className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-600 text-white shadow-sm cursor-pointer hover:bg-red-700 align-middle print:!hidden"
+                        title="Klicken, um einen Verantwortlichen zuzuweisen"
+                      >
+                        ⚠️ Verantwortlicher fehlt!
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div 

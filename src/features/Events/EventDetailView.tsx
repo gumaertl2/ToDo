@@ -1,3 +1,6 @@
+// [2026-10-23] - ROLLOVER & BLOODLINE-HARDENING: 1) deduplicatedAgenda ignoriert TRASH-Elemente, damit gelöschte Punkte niemals aktive Zwillinge verdrängen. 2) Rekursives Mit-Kopieren aller Unterpunkte (auch mehrstufiger) unter ihren neuen Oberpunkt beim Sitzungsabschluss. 3) Volltextsuche berücksichtigt den gesamten Unterpunkt-Baum.
+// [2026-10-23] - UX-UPGRADE: validateBeforeClose markiert unzugewiesene Aufgaben automatisch rot (validationErrorIds), klappt deren Oberpunkte auf, scrollt direkt hin und ignoriert Unterpunkte von bereits zu 100% erledigten Oberpunkten.
+// [2026-10-19] - HARDENING: Rollover-Logik, Hierarchie-Indexierung, Blutlinien-Deduplizierung (!isHistorical) und 24h-Zeitformatierung (de-DE) gehärtet.
 // [2026-06-11] - BUGFIX: JSX Parse Error final behoben. Kommentare vor das return-Statement verschoben.
 // [2026-06-11] - UX-FIX: "Weg B" (Natürliches Scrollen) final korrigiert. Die unsichtbare Höhen-Barriere 'h-full' im mobilen Hochformat wurde durch 'block min-h-screen' ersetzt. Das Layout verhält sich nun im Hochformat exakt so flüssig und grenzenlos wie zuvor nur im Querformat. Das Desktop-Layout (Split-Screen) bleibt via 'md:flex md:h-full' geschützt.
 // [2026-06-11] - BUGFIX: Unused variable 'isRoutineItem' entfernt, um den strict TypeScript Compiler (Vercel Build) zufrieden zu stellen.
@@ -47,6 +50,7 @@ export const EventDetailView: React.FC = () => {
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   
   const [searchTerm, setSearchTerm] = useState('');
+  const [validationErrorIds, setValidationErrorIds] = useState<string[]>([]);
   
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [presentList, setPresentList] = useState<string[]>([]);
@@ -57,6 +61,7 @@ export const EventDetailView: React.FC = () => {
   const [tempDurations, setTempDurations] = useState<Record<string, number>>({});
 
   useEffect(() => {
+    setValidationErrorIds([]);
     if (eventId) { 
       fetchEventDetails(eventId); 
       fetchEventAgenda(eventId); 
@@ -101,16 +106,24 @@ export const EventDetailView: React.FC = () => {
       location: currentEvent.location,
       participantGroupIds: currentEvent.participantGroupIds,
       participantUserIds: currentEvent.participantUserIds,
+      participantTeamIds: currentEvent.participantTeamIds,
+      participantHelperIds: currentEvent.participantHelperIds,
+      isPublic: currentEvent.isPublic,
+      color: (currentEvent as any).color,
+      reminderSenderUserId: currentEvent.reminderSenderUserId,
+      reminderLeadDays: currentEvent.reminderLeadDays,
+      reminderCustomText: currentEvent.reminderCustomText,
       status: 'PLANUNG',
       seriesId: targetSeriesId,
       plannedStartTime: newStart.getTime(),
       plannedEndTime: newEnd,
-    };
+    } as Partial<Event>;
   }, [isEventModalOpen, currentEvent]);
 
   const deduplicatedAgenda = useMemo(() => {
     const bloodlineMap = new Map<string, AgendaItem[]>();
     eventAgenda.forEach(item => {
+      if (item.status === 'TRASH') return;
       const bId = item.baseItemId || item.id;
       if (!bloodlineMap.has(bId)) bloodlineMap.set(bId, []);
       bloodlineMap.get(bId)!.push(item);
@@ -123,12 +136,14 @@ export const EventDetailView: React.FC = () => {
          const timeB = b.createdAt || b.updatedAt || 0;
          return timeB - timeA;
       });
-      let primary = group.find(t => t.status !== 'ERLEDIGT' && t.progress !== 100);
+      let primary = group.find(t => !t.isHistorical && t.status !== 'ERLEDIGT' && t.progress !== 100);
+      if (!primary) primary = group.find(t => !t.isHistorical);
+      if (!primary) primary = group.find(t => t.status !== 'ERLEDIGT' && t.progress !== 100);
       if (!primary) primary = group[0];
       primaryTaskIds.add(primary.id);
     });
 
-    return eventAgenda.filter(item => primaryTaskIds.has(item.id));
+    return eventAgenda.filter(item => item.status !== 'TRASH' && primaryTaskIds.has(item.id));
   }, [eventAgenda]);
 
   const filteredEventAgenda = useMemo(() => {
@@ -146,13 +161,28 @@ export const EventDetailView: React.FC = () => {
       matches.forEach(match => {
           idsToInclude.add(match.id);
           
-          if (match.isSubItem && match.parentItemId) {
-              idsToInclude.add(match.parentItemId);
+          // Alle übergeordneten Punkte mit einschließen
+          let curr: AgendaItem | undefined = match;
+          const visitedUp = new Set<string>();
+          while (curr?.isSubItem && curr.parentItemId && !visitedUp.has(curr.parentItemId)) {
+              idsToInclude.add(curr.parentItemId);
+              visitedUp.add(curr.parentItemId);
+              curr = deduplicatedAgenda.find(p => p.id === curr?.parentItemId);
           }
           
-          if (!match.isSubItem) {
-              const children = deduplicatedAgenda.filter(c => c.isSubItem && c.parentItemId === match.id);
-              children.forEach(c => idsToInclude.add(c.id));
+          // Alle untergeordneten Punkte (rekursiv) mit einschließen
+          const queue: string[] = [match.id];
+          const visitedDown = new Set<string>([match.id]);
+          while (queue.length > 0) {
+              const pid = queue.shift()!;
+              const children = deduplicatedAgenda.filter(c => c.isSubItem && c.parentItemId === pid);
+              for (const c of children) {
+                  if (!visitedDown.has(c.id)) {
+                      visitedDown.add(c.id);
+                      idsToInclude.add(c.id);
+                      queue.push(c.id);
+                  }
+              }
           }
       });
       
@@ -209,8 +239,11 @@ export const EventDetailView: React.FC = () => {
     const excusedNames = getNames(currentEvent.excusedAttendeeUserIds || []);
     const unexcusedNames = getNames(currentEvent.unexcusedAttendeeUserIds || []);
     
-    const formatTimeStr = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
-    const startTimeStr = currentEvent.plannedStartTime ? formatTimeStr(currentEvent.plannedStartTime) : 'Unbekannt';
+    const formatTimeStr = (ms: number) => new Date(ms).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+    const isStartMidnight = currentEvent.plannedStartTime
+      ? (new Date(currentEvent.plannedStartTime).getHours() === 0 && new Date(currentEvent.plannedStartTime).getMinutes() === 0)
+      : false;
+    const startTimeStr = (currentEvent.plannedStartTime && !isStartMidnight) ? formatTimeStr(currentEvent.plannedStartTime) : '-';
     const endTimeStr = currentEvent.actualEndTime 
       ? formatTimeStr(currentEvent.actualEndTime) 
       : (currentEvent.plannedEndTime ? formatTimeStr(currentEvent.plannedEndTime) + ' (Geplant)' : 'Offen');
@@ -265,7 +298,7 @@ export const EventDetailView: React.FC = () => {
           <h1>${currentEvent.title}</h1>
           ${currentEvent.description ? `<div style="font-size: 14px; font-style: italic; color: #555; margin-top: -5px; margin-bottom: 15px;">${currentEvent.description.replace(/\n/g, '<br/>')}</div>` : ''}
           <div class="meta">
-            <strong>Datum:</strong> ${currentEvent.plannedStartTime ? new Date(currentEvent.plannedStartTime).toLocaleDateString() : 'Unbekannt'} | 
+            <strong>Datum:</strong> ${currentEvent.plannedStartTime ? new Date(currentEvent.plannedStartTime).toLocaleDateString('de-DE') : 'Unbekannt'} | 
             <strong>Beginn:</strong> ${startTimeStr} | 
             <strong>Ende:</strong> ${endTimeStr} | 
             <strong>Ort:</strong> ${currentEvent.location || 'Kein Ort hinterlegt'}<br/>
@@ -291,11 +324,33 @@ export const EventDetailView: React.FC = () => {
     `;
     
     let runningTime = currentEvent.plannedStartTime || new Date().setHours(19, 0, 0, 0);
+    if (currentEvent.plannedStartTime && isStartMidnight) {
+      runningTime = new Date(currentEvent.plannedStartTime).setHours(19, 0, 0, 0);
+    }
     
-    if (filteredEventAgenda.length === 0) { 
+    const printableBase = [...filteredEventAgenda].filter(i => i.status !== 'TRASH' && (isReadOnly ? true : !i.isHistorical));
+    if (printableBase.length === 0) { 
       html += `<tr><td colspan="5" style="text-align:center; padding: 20px;">Keine Agendapunkte vorhanden.</td></tr>`; 
     } else {
-      const sortedAgenda = [...filteredEventAgenda].filter(i => i.status !== 'TRASH').sort((a, b) => (a.protocolIndex || 0) - (b.protocolIndex || 0));
+      const byIndex = (a: AgendaItem, b: AgendaItem) => {
+        const diff = (a.protocolIndex ?? 0) - (b.protocolIndex ?? 0);
+        if (diff !== 0) return diff;
+        return (a.createdAt || 0) - (b.createdAt || 0);
+      };
+      const sortedAgenda: AgendaItem[] = [];
+      const placedIds = new Set<string>();
+      const appendPrintWithChildren = (parent: AgendaItem) => {
+        if (placedIds.has(parent.id)) return;
+        placedIds.add(parent.id);
+        sortedAgenda.push(parent);
+        const children = printableBase.filter(i => i.isSubItem && i.parentItemId === parent.id).sort(byIndex);
+        children.forEach(c => appendPrintWithChildren(c));
+      };
+      const parents = printableBase.filter(i => !i.isSubItem).sort(byIndex);
+      parents.forEach(p => appendPrintWithChildren(p));
+      const orphans = printableBase.filter(i => !placedIds.has(i.id)).sort(byIndex);
+      orphans.forEach(o => appendPrintWithChildren(o));
+
       let mainCounter = 0; 
       let subCounter = 0;
       
@@ -310,13 +365,13 @@ export const EventDetailView: React.FC = () => {
           displayIndexStr = mainCounter === 0 ? `0.${subCounter}` : `${mainCounter}.${subCounter}`; 
         }
         
-        const timeStr = new Date(runningTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const timeStr = new Date(runningTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
         runningTime += (item.durationEstimate || 0) * 60000;
         
         let statusStr = '-'; 
         if (item.type === 'AUFGABE') { 
           if (item.isDueNextMeeting) statusStr = `<strong>Nächste Sitzung</strong>`; 
-          else if (item.dueDate) statusStr = `<strong>${new Date(item.dueDate).toLocaleDateString()}</strong>`; 
+          else if (item.dueDate) statusStr = `<strong>${new Date(item.dueDate).toLocaleDateString('de-DE')}</strong>`; 
           
           statusStr += `<br/><span style="font-size: 11px; color: #555; font-weight: normal; margin-top: 4px; display: block;">Erledigt: ${item.progress || 0}%</span>`;
         }
@@ -353,14 +408,29 @@ export const EventDetailView: React.FC = () => {
       return false; 
     }
     const incompleteTasks = eventAgenda.filter(item => { 
-      if (item.type !== 'AUFGABE' || item.status === 'ERLEDIGT' || item.status === 'TRASH') return false; 
+      if (item.type !== 'AUFGABE' || item.status === 'ERLEDIGT' || item.progress === 100 || item.status === 'TRASH' || item.isHistorical) return false; 
+      
+      // Wenn ein Unterpunkt zu einem Oberpunkt gehört, der bereits auf 100% (ERLEDIGT) oder TRASH steht,
+      // blockiert er den Sitzungsabschluss nicht mehr.
+      let pid = item.isSubItem ? item.parentItemId : undefined;
+      const visited = new Set<string>();
+      while (pid && !visited.has(pid)) {
+        visited.add(pid);
+        const parentObj = eventAgenda.find(p => p.id === pid);
+        if (!parentObj || parentObj.status === 'TRASH') return false;
+        if (parentObj.status === 'ERLEDIGT' || parentObj.progress === 100) return false;
+        pid = parentObj.isSubItem ? parentObj.parentItemId : undefined;
+      }
+
       const hasAssignee = (item.assigneeUserIds && item.assigneeUserIds.length > 0) || (item.assigneeGroupIds && item.assigneeGroupIds.length > 0); 
       return !hasAssignee; 
     });
     if (incompleteTasks.length > 0) { 
-      alert(`Halt! Das Protokoll kann noch nicht geschlossen werden.\n\nFolgenden Aufgaben fehlt ein Verantwortlicher:\n${incompleteTasks.map(t => `- ${t.title}`).join('\n')}\n\nBitte weise diese Aufgaben jemandem zu!`); 
+      setValidationErrorIds(incompleteTasks.map(t => t.id));
+      alert(`Halt! Das Protokoll kann noch nicht geschlossen werden.\n\nFolgenden Aufgaben fehlt ein Verantwortlicher:\n${incompleteTasks.map(t => `- ${t.title || 'Neuer Punkt'}`).join('\n')}\n\nDie betroffenen Punkte wurden in der Agenda rot markiert und aufgeklappt!`); 
       return false; 
     }
+    setValidationErrorIds([]);
     return true;
   };
 
@@ -385,9 +455,14 @@ export const EventDetailView: React.FC = () => {
     if (status === 'unexcused') setUnexcusedList(prev => [...prev, id]);
   };
 
-  const formatTime = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const formatTime = (ms: number) => new Date(ms).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
   const effectiveHeaderEndTime = currentEvent.actualEndTime || currentEvent.plannedEndTime;
-  const timeString = currentEvent.plannedStartTime ? `${formatTime(currentEvent.plannedStartTime)}${effectiveHeaderEndTime ? ` - ${formatTime(effectiveHeaderEndTime)}` : ''}` : '';
+  const isMidnightStart = currentEvent.plannedStartTime
+    ? (new Date(currentEvent.plannedStartTime).getHours() === 0 && new Date(currentEvent.plannedStartTime).getMinutes() === 0)
+    : false;
+  const timeString = (currentEvent.plannedStartTime && (!isMidnightStart || effectiveHeaderEndTime))
+    ? `${formatTime(currentEvent.plannedStartTime)}${effectiveHeaderEndTime ? ` - ${formatTime(effectiveHeaderEndTime)}` : ''}`
+    : '';
 
   const handleDurationPreview = (id: string, val: number) => { 
     setTempDurations(prev => ({ ...prev, [id]: val })); 
@@ -437,6 +512,7 @@ export const EventDetailView: React.FC = () => {
           isReadOnly={isReadOnly}
           tempDurations={tempDurations}
           searchQuery={searchTerm} 
+          validationErrorIds={validationErrorIds}
           onAddNewItem={() => { setEditingItem(null); setIsModalOpen(true); }}
           onEditItem={i => { setEditingItem(i); setIsModalOpen(true); }}
           onOpenHistory={i => setHistoryTask(i)}
@@ -493,14 +569,19 @@ export const EventDetailView: React.FC = () => {
             let newProtocolIndex = data.protocolIndex;
             
             if (!editingItem) {
+              const activeItems = eventAgenda.filter(i => i.status !== 'TRASH' && !i.isHistorical);
               if (!data.isSubItem) {
-                const mainItems = eventAgenda.filter(i => !i.isSubItem && i.status !== 'TRASH');
-                const maxIndex = mainItems.reduce((max, item) => Math.max(max, item.protocolIndex || 0), -1);
-                newProtocolIndex = maxIndex + 1;
+                const maxIndex = activeItems.reduce((max, item) => Math.max(max, item.protocolIndex ?? 0), -1);
+                newProtocolIndex = Math.floor(maxIndex) + 1;
               } else if (data.parentItemId) {
-                const subItems = eventAgenda.filter(i => i.isSubItem && i.parentItemId === data.parentItemId && i.status !== 'TRASH');
-                const maxIndex = subItems.reduce((max, item) => Math.max(max, item.protocolIndex || 0), -1);
-                newProtocolIndex = maxIndex + 1;
+                const parentItem = activeItems.find(i => i.id === data.parentItemId);
+                const subItems = activeItems.filter(i => i.isSubItem && i.parentItemId === data.parentItemId);
+                if (subItems.length > 0) {
+                  const maxSubIndex = subItems.reduce((max, item) => Math.max(max, item.protocolIndex ?? 0), parentItem?.protocolIndex ?? 0);
+                  newProtocolIndex = maxSubIndex + 0.01;
+                } else {
+                  newProtocolIndex = (parentItem?.protocolIndex ?? 0) + 0.01;
+                }
               }
             }
 
@@ -548,6 +629,9 @@ export const EventDetailView: React.FC = () => {
             if (!result?.success) throw new Error(result?.error?.message); 
             
             if (currentEvent.status === 'AKTIV') { 
+              // Aktive Liste vor der Versiegelung sichern (dedupliziert und ohne TRASH)
+              const activeRolloverSource = deduplicatedAgenda.filter(item => item.status !== 'TRASH' && !item.isHistorical);
+
               const sealPromises = eventAgenda.map(item => {
                 if (item.status === 'TRASH') return Promise.resolve({ success: true });
                 return saveAgendaItem({ ...item, isHistorical: true });
@@ -556,18 +640,85 @@ export const EventDetailView: React.FC = () => {
               
               await updateEvent({ ...currentEvent, status: 'ABGESCHLOSSEN', actualEndTime: Date.now() }); 
               
-              const parentItemsToCopy = eventAgenda.filter(item => {
-                if (item.isSubItem || item.status === 'TRASH') return false; 
-                if (item.type === 'AUFGABE') {
-                  const isFinished = item.progress === 100 || item.status === 'ERLEDIGT';
-                  return !isFinished;
-                } else {
+              const byOrder = (a: AgendaItem, b: AgendaItem) => {
+                const diff = (a.protocolIndex ?? 0) - (b.protocolIndex ?? 0);
+                if (diff !== 0) return diff;
+                return (a.createdAt || 0) - (b.createdAt || 0);
+              };
+
+              const parentItemsToCopy = activeRolloverSource
+                .filter(item => {
+                  if (item.isSubItem) return false; 
+                  const isRoutine = item.isRoutine === true || String(item.isRoutine) === 'true';
+                  if (isRoutine) return true;
+                  if (item.type === 'AUFGABE') {
+                    const isFinished = item.progress === 100 || item.status === 'ERLEDIGT';
+                    return !isFinished;
+                  }
                   return false; 
-                }
-              });
+                })
+                .sort(byOrder);
               
               const idMap = new Map<string, string>();
               let delay = 0;
+              let nextProtocolIndex = 0;
+
+              // Rekursiver Kopierer für alle Unterpunkte eines übernommenen Oberpunkts:
+              // Sichert, dass alle Kinder (auch mehrstufige) fest unter ihrem (neu nummerierten) Oberpunkt bleiben.
+              const copySubtreeRecursive = async (oldParentId: string, newParentId: string, keepProgress: boolean) => {
+                const directChildren = activeRolloverSource
+                  .filter(item => item.isSubItem && item.parentItemId === oldParentId)
+                  .sort(byOrder);
+
+                for (const child of directChildren) {
+                  const { id: childId, ...childRest } = child;
+                  const newChildId = doc(collection(db, 'agenda_items')).id;
+                  idMap.set(childId, newChildId);
+
+                  let newChildDueDate = child.dueDate;
+                  if (data.plannedStartTime && child.leadTimeValue !== undefined && child.leadTimeUnit) {
+                     const baseDate = new Date(data.plannedStartTime);
+                     if (child.leadTimeUnit === 'same_day') {
+                         newChildDueDate = baseDate.getTime();
+                     } else if (child.leadTimeUnit === 'days_before') {
+                         baseDate.setDate(baseDate.getDate() - child.leadTimeValue);
+                         newChildDueDate = baseDate.getTime();
+                     } else if (child.leadTimeUnit === 'days_after') {
+                         baseDate.setDate(baseDate.getDate() + child.leadTimeValue);
+                         newChildDueDate = baseDate.getTime();
+                     }
+                  } else if (child.type === 'AUFGABE' && child.isDueNextMeeting && data.plannedStartTime) {
+                     newChildDueDate = data.plannedStartTime;
+                  }
+
+                  const safeChildPayload = {
+                    ...childRest,
+                    id: newChildId,
+                    eventId: data.id,
+                    isSubItem: true,
+                    parentItemId: newParentId,
+                    protocolIndex: nextProtocolIndex++,
+                    baseItemId: child.baseItemId || child.id,
+                    status: keepProgress ? child.status : 'OFFEN',
+                    progress: keepProgress ? child.progress : 0,
+                    approvedBy: keepProgress ? child.approvedBy : [],
+                    completedAt: keepProgress ? child.completedAt : (null as any),
+                    createdAt: Date.now() + delay,
+                    isDueNextMeeting: false,
+                    dueDate: newChildDueDate,
+                    isHistorical: false 
+                  };
+
+                  Object.keys(safeChildPayload).forEach(key => {
+                    if ((safeChildPayload as any)[key] === undefined) delete (safeChildPayload as any)[key];
+                  });
+
+                  await saveAgendaItem(safeChildPayload);
+                  delay += 50;
+
+                  await copySubtreeRecursive(childId, newChildId, keepProgress);
+                }
+              };
 
               for (const parent of parentItemsToCopy) {
                 const { id, ...rest } = parent;
@@ -576,7 +727,8 @@ export const EventDetailView: React.FC = () => {
 
                 let newDueDate = parent.dueDate;
                 const isRoutine = parent.isRoutine === true || String(parent.isRoutine) === 'true';
-                const isUnfinishedTask = parent.type === 'AUFGABE';
+                const isFinished = parent.progress === 100 || parent.status === 'ERLEDIGT';
+                const keepProgress = parent.type === 'AUFGABE' && !isFinished;
 
                 if (parent.type === 'AUFGABE') {
                   if (parent.isDueNextMeeting || (!parent.dueDate && !isRoutine)) {
@@ -588,10 +740,14 @@ export const EventDetailView: React.FC = () => {
                   ...rest,
                   id: newId,
                   eventId: data.id,
+                  isSubItem: false,
+                  parentItemId: null as any,
+                  protocolIndex: nextProtocolIndex++,
                   baseItemId: parent.baseItemId || parent.id, 
-                  status: isUnfinishedTask ? parent.status : 'OFFEN',
-                  progress: isUnfinishedTask ? parent.progress : 0,
-                  approvedBy: isUnfinishedTask ? parent.approvedBy : [],
+                  status: keepProgress ? parent.status : 'OFFEN',
+                  progress: keepProgress ? parent.progress : 0,
+                  approvedBy: keepProgress ? parent.approvedBy : [],
+                  completedAt: keepProgress ? parent.completedAt : (null as any),
                   createdAt: Date.now() + delay,
                   isDueNextMeeting: false,
                   dueDate: newDueDate,
@@ -604,56 +760,8 @@ export const EventDetailView: React.FC = () => {
 
                 await saveAgendaItem(safePayload);
                 delay += 50;
-              }
 
-              const subItemsToCopy = eventAgenda.filter(item => {
-                if (!item.isSubItem || item.status === 'TRASH' || !item.parentItemId) return false;
-                return idMap.has(item.parentItemId);
-              });
-
-              for (const child of subItemsToCopy) {
-                const { id, ...rest } = child;
-                const newId = doc(collection(db, 'agenda_items')).id;
-                const newParentId = idMap.get(child.parentItemId!); 
-                
-                const parentItem = parentItemsToCopy.find(p => p.id === child.parentItemId);
-                const isParentUnfinishedTask = parentItem?.type === 'AUFGABE';
-
-                let newChildDueDate = child.dueDate;
-                if (data.plannedStartTime && child.leadTimeValue !== undefined && child.leadTimeUnit) {
-                   const baseDate = new Date(data.plannedStartTime);
-                   if (child.leadTimeUnit === 'same_day') {
-                       newChildDueDate = baseDate.getTime();
-                   } else if (child.leadTimeUnit === 'days_before') {
-                       baseDate.setDate(baseDate.getDate() - child.leadTimeValue);
-                       newChildDueDate = baseDate.getTime();
-                   } else if (child.leadTimeUnit === 'days_after') {
-                       baseDate.setDate(baseDate.getDate() + child.leadTimeValue);
-                       newChildDueDate = baseDate.getTime();
-                   }
-                }
-
-                const safeChildPayload = {
-                  ...rest,
-                  id: newId,
-                  eventId: data.id,
-                  parentItemId: newParentId,
-                  baseItemId: child.baseItemId || child.id,
-                  status: isParentUnfinishedTask ? child.status : 'OFFEN',
-                  progress: isParentUnfinishedTask ? child.progress : 0,
-                  approvedBy: isParentUnfinishedTask ? child.approvedBy : [],
-                  createdAt: Date.now() + delay,
-                  isDueNextMeeting: false,
-                  dueDate: newChildDueDate,
-                  isHistorical: false 
-                };
-
-                Object.keys(safeChildPayload).forEach(key => {
-                  if ((safeChildPayload as any)[key] === undefined) delete (safeChildPayload as any)[key];
-                });
-
-                await saveAgendaItem(safeChildPayload);
-                delay += 50;
+                await copySubtreeRecursive(id, newId, keepProgress);
               }
             } 
             

@@ -1,3 +1,7 @@
+// [2026-10-23] - RECHTE & PAPIERKORB-FIX: Exklusives Admin-Löschrecht (roleProfileId === 'pro-admin') für alle unerledigten (<100%), zugewiesenen oder vererbten Aufgaben durchgesetzt + Nutzung von moveToTrash (inkl. Unterpunkt-Kaskade & deletedBy-Stempel).
+// [2026-10-23] - UX-UPGRADE: Automatische Aufklapp-, Scroll- und Fokus-Automatik für unzugewiesene Aufgaben (validationErrorIds) integriert, rekursive Hierarchie-Auflösung für verschachtelte Unterpunkte ergänzt und Schutz gegen das Einrücken von Hauptpunkten mit eigenen Unterpunkten eingebaut.
+// [2026-10-19] - UX-FIX: Fokus-Steuerung beim Ein-/Ausklappen von Unterpunkten gehärtet. Wird ein Hauptpunkt eingeklappt, während der Fokus auf einem seiner Unterpunkte (z. B. 2.2) lag, wandert der Fokus automatisch auf den Hauptpunkt (2.).
+// [2026-10-19] - ARCHITEKTUR-FIX: Selbstheilende Hierarchie-Sortierung in EventAgendaList integriert (Unterpunkte werden im Standardmodus automatisch fest unter ihrem jeweiligen Oberpunkt gruppiert, sodass Indizes-Konflikte keine Unterpunkte mehr abtrennen können) + Uhrzeit-Anzeige auf 24h-Format ('de-DE') mit 19:00-Fallback bei 00:00-Startzeit korrigiert.
 // [2026-06-11] - BUGFIX: JSX Parse Error behoben. Den falsch platzierten JSX-Kommentar direkt nach dem return() in einen sauberen TS-Kommentar VOR das return Statement verschoben.
 // [2026-06-11] - UX-FIX: "Weg B" (Natürliches Scrollen) komplettiert. Innere Container auf 'overflow-visible md:overflow-y-auto' bzw. 'overflow-visible md:overflow-hidden' umgestellt, damit die mobile Listen-Ansicht nicht mehr durch eine eigene Scrollbar eingesperrt ist, sondern dem natürlichen Scroll-Flow der übergeordneten EventDetailView folgt.
 // [2026-06-11] - ARCHITEKTUR-FIX: Fate-Binding in EventAgendaList integriert. Kosmetik-Filter entfernt und durch isHistorical-Prüfung ersetzt. Legacy-Fallback für alte Daten (isHistorical === undefined) beibehalten.
@@ -22,6 +26,7 @@ interface EventAgendaListProps {
   isReadOnly: boolean;
   tempDurations: Record<string, number>;
   searchQuery?: string;
+  validationErrorIds?: string[];
   onAddNewItem: () => void;
   onEditItem: (item: AgendaItem) => void;
   onOpenHistory: (item: Task) => void;
@@ -32,11 +37,12 @@ interface EventAgendaListProps {
 }
 
 export const EventAgendaList: React.FC<EventAgendaListProps> = ({
-  eventId, currentEvent, eventAgenda, isReadOnly, tempDurations, searchQuery,
+  eventId, currentEvent, eventAgenda, isReadOnly, tempDurations, searchQuery, validationErrorIds = [],
   onAddNewItem, onEditItem, onOpenHistory,
   onPlanNextMeeting, onFinishEvent, onDurationPreview, onClearPreview
 }) => {
-  const { moveAgendaItem, saveAgendaItem, fetchEventAgenda, users, groups } = useClubStore();
+  const { moveAgendaItem, saveAgendaItem, moveToTrash, fetchEventAgenda, user, users, groups } = useClubStore();
+  const isAdmin = user?.roleProfileId === 'pro-admin';
   const location = useLocation(); 
 
   const [sortBy, setSortBy] = useState<'default' | 'assignee' | 'dueDate'>('default');
@@ -96,58 +102,43 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
     }
   }, [location.state, eventAgenda, eventId]);
 
-  const processedAgenda = useMemo(() => {
+  const finalSortedAgenda = useMemo(() => {
     const visibleAgenda = eventAgenda.filter(item => {
-        if (item.status === 'TRASH') return false;
+      if (item.status === 'TRASH') return false;
 
-        // ---> CHIRURGISCHER EINGRIFF: FATE-BINDING FILTER <---
-        if (!isReadOnly && item.isHistorical === true) {
-            return false;
+      // ---> CHIRURGISCHER EINGRIFF: FATE-BINDING FILTER <---
+      if (!isReadOnly && item.isHistorical === true) {
+        return false;
+      }
+
+      // FALLBACK: Wenn isHistorical noch undefined ist (Altdaten)
+      if (!isReadOnly && item.isHistorical === undefined) {
+        const isRoutine = item.isRoutine === true || String(item.isRoutine) === 'true';
+        const isCompleted = item.progress === 100 || item.status === 'ERLEDIGT';
+        
+        if (isRoutine && isCompleted) return false;
+
+        if (item.isSubItem && item.parentItemId) {
+          const parent = eventAgenda.find(p => p.id === item.parentItemId);
+          if (parent && parent.status !== 'TRASH') {
+            const parentIsRoutine = parent.isRoutine === true || String(parent.isRoutine) === 'true';
+            const parentIsCompleted = parent.progress === 100 || parent.status === 'ERLEDIGT';
+            if (parentIsRoutine && parentIsCompleted) return false;
+          }
         }
+      }
 
-        // FALLBACK: Wenn isHistorical noch undefined ist (Altdaten)
-        if (!isReadOnly && item.isHistorical === undefined) {
-            const isRoutine = item.isRoutine === true || String(item.isRoutine) === 'true';
-            const isCompleted = item.progress === 100 || item.status === 'ERLEDIGT';
-            
-            if (isRoutine && isCompleted) return false;
-
-            if (item.isSubItem && item.parentItemId) {
-                const parent = eventAgenda.find(p => p.id === item.parentItemId);
-                if (parent && parent.status !== 'TRASH') {
-                    const parentIsRoutine = parent.isRoutine === true || String(parent.isRoutine) === 'true';
-                    const parentIsCompleted = parent.progress === 100 || parent.status === 'ERLEDIGT';
-                    if (parentIsRoutine && parentIsCompleted) return false;
-                }
-            }
-        }
-
-        return true;
+      return true;
     });
 
-    let runningTime = currentEvent.plannedStartTime || new Date().setHours(19, 0, 0, 0);
-    
-    return visibleAgenda.map((item, index) => {
-      const baseEstimate = item.isSubItem ? (item.durationEstimate || 0) : (item.durationEstimate || 0);
-      const effectiveDuration = tempDurations[item.id] !== undefined ? tempDurations[item.id] : baseEstimate;
-      
-      const startTimeStr = new Date(runningTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const isOvertime = currentEvent.plannedEndTime ? runningTime > currentEvent.plannedEndTime : false;
-      
-      runningTime += effectiveDuration * 60000; 
+    const compareByOrder = (a: AgendaItem, b: AgendaItem) => {
+      const idxA = a.protocolIndex !== undefined ? a.protocolIndex : (a.createdAt || 0);
+      const idxB = b.protocolIndex !== undefined ? b.protocolIndex : (b.createdAt || 0);
+      if (idxA !== idxB) return idxA - idxB;
+      return (a.createdAt || 0) - (b.createdAt || 0);
+    };
 
-      return {
-        ...item,
-        originalIndex: index,
-        calculatedStartTimeStr: startTimeStr,
-        calculatedIsOvertime: isOvertime,
-        effectiveDuration
-      };
-    });
-  }, [eventAgenda, tempDurations, currentEvent.plannedStartTime, currentEvent.plannedEndTime, isReadOnly]);
-
-  const sortedAgenda = useMemo(() => {
-    const list = [...processedAgenda];
+    let orderedList: AgendaItem[] = [];
 
     if (sortBy === 'assignee') {
       const getAssigneeStr = (item: AgendaItem) => {
@@ -156,7 +147,7 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
         return [...uNames, ...gNames].join(', ');
       };
 
-      list.sort((a, b) => {
+      orderedList = [...visibleAgenda].sort((a, b) => {
         const strA = getAssigneeStr(a);
         const strB = getAssigneeStr(b);
         if (!strA && strB) return 1;
@@ -164,27 +155,57 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
         return strA.localeCompare(strB);
       });
     } else if (sortBy === 'dueDate') {
-      list.sort((a, b) => {
+      orderedList = [...visibleAgenda].sort((a, b) => {
         const dateA = a.dueDate || Number.MAX_SAFE_INTEGER;
         const dateB = b.dueDate || Number.MAX_SAFE_INTEGER;
         return dateA - dateB;
       });
     } else {
-      list.sort((a, b) => {
-        const idxA = a.protocolIndex !== undefined ? a.protocolIndex : a.originalIndex;
-        const idxB = b.protocolIndex !== undefined ? b.protocolIndex : b.originalIndex; 
-        return idxA - idxB;
-      });
+      // SELBSTHEILENDE HIERARCHIE-SORTIERUNG (inkl. rekursiver Unterpunkt-Auflösung):
+      const placedIds = new Set<string>();
+      const appendWithChildren = (parent: AgendaItem) => {
+        if (placedIds.has(parent.id)) return;
+        placedIds.add(parent.id);
+        orderedList.push(parent);
+        const children = visibleAgenda
+          .filter(i => i.isSubItem && i.parentItemId === parent.id)
+          .sort(compareByOrder);
+        children.forEach(child => appendWithChildren(child));
+      };
+
+      const parents = visibleAgenda.filter(i => !i.isSubItem).sort(compareByOrder);
+      parents.forEach(parent => appendWithChildren(parent));
+
+      // Falls es Unterpunkte ohne sichtbaren Oberpunkt gibt (z. B. bei aktiver Volltextsuche), nichts verschlucken
+      const orphans = visibleAgenda
+        .filter(i => !placedIds.has(i.id))
+        .sort(compareByOrder);
+      orphans.forEach(orphan => appendWithChildren(orphan));
     }
 
-    return list;
-  }, [processedAgenda, sortBy, users, groups]);
+    // Startzeit-Kalkulation (Wenn keine Uhrzeit angegeben wurde -> 00:00 Uhr, starten wir ab 19:00 Uhr im 24h-Format)
+    let runningTime = currentEvent.plannedStartTime || new Date().setHours(19, 0, 0, 0);
+    if (currentEvent.plannedStartTime) {
+      const startD = new Date(currentEvent.plannedStartTime);
+      if (startD.getHours() === 0 && startD.getMinutes() === 0) {
+        const fallbackD = new Date(currentEvent.plannedStartTime);
+        fallbackD.setHours(19, 0, 0, 0);
+        runningTime = fallbackD.getTime();
+      }
+    }
 
-  const finalSortedAgenda = useMemo(() => {
     let mainCounter = 0;
     let subCounter = 0;
-    
-    return sortedAgenda.map(item => {
+
+    return orderedList.map((item, index) => {
+      const baseEstimate = item.durationEstimate || 0;
+      const effectiveDuration = tempDurations[item.id] !== undefined ? tempDurations[item.id] : baseEstimate;
+
+      const startTimeStr = new Date(runningTime).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      const isOvertime = currentEvent.plannedEndTime ? runningTime > currentEvent.plannedEndTime : false;
+
+      runningTime += effectiveDuration * 60000;
+
       let displayIndexStr = '-';
       if (sortBy === 'default') {
         if (!item.isSubItem) {
@@ -196,9 +217,57 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
           displayIndexStr = mainCounter === 0 ? `0.${subCounter}` : `${mainCounter}.${subCounter}`;
         }
       }
-      return { ...item, displayIndexStr };
+
+      return {
+        ...item,
+        originalIndex: index,
+        calculatedStartTimeStr: startTimeStr,
+        calculatedIsOvertime: isOvertime,
+        effectiveDuration,
+        displayIndexStr
+      };
     });
-  }, [sortedAgenda, sortBy]);
+  }, [eventAgenda, tempDurations, currentEvent.plannedStartTime, currentEvent.plannedEndTime, isReadOnly, sortBy, users, groups]);
+
+  // Wenn ein Oberpunkt eingeklappt wird, während der Fokus auf einem seiner Unterpunkte (z. B. 2.2) lag,
+  // wandert der Fokus automatisch auf den sichtbaren Oberpunkt (2.).
+  useEffect(() => {
+    if (!selectedItemId) return;
+    const currentSelected = finalSortedAgenda.find(i => i.id === selectedItemId);
+    if (currentSelected?.isSubItem && currentSelected.parentItemId && collapsedParents.has(currentSelected.parentItemId)) {
+      setSelectedItemId(currentSelected.parentItemId);
+    }
+  }, [collapsedParents, selectedItemId, finalSortedAgenda]);
+
+  // Wenn Validierungsfehler beim Sitzungsabschluss auftreten:
+  // 1. Alle übergeordneten Punkte der fehlerhaften Aufgaben automatisch aufklappen
+  // 2. Den ersten fehlerhaften Punkt fokussieren und direkt ins Sichtfeld scrollen
+  useEffect(() => {
+    if (!validationErrorIds || validationErrorIds.length === 0) return;
+
+    setCollapsedParents(prev => {
+      const next = new Set(prev);
+      validationErrorIds.forEach(errId => {
+        let curr = eventAgenda.find(i => i.id === errId);
+        const visited = new Set<string>();
+        while (curr?.isSubItem && curr.parentItemId && !visited.has(curr.parentItemId)) {
+          next.delete(curr.parentItemId);
+          visited.add(curr.parentItemId);
+          curr = eventAgenda.find(i => i.id === curr?.parentItemId);
+        }
+      });
+      return next;
+    });
+
+    const firstId = validationErrorIds[0];
+    setSelectedItemId(firstId);
+    setTimeout(() => {
+      const el = document.getElementById(`agenda-item-${firstId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 150);
+  }, [validationErrorIds, eventAgenda]);
 
   const mainLevelPositions = useMemo(() => {
     const options: { index: number, label: string }[] = [];
@@ -294,23 +363,33 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
   };
 
   const handleInsertBelow = async (baseItem: typeof finalSortedAgenda[0], mode: 'sibling' | 'subitem') => {
-    const currentIndexInSorted = finalSortedAgenda.findIndex(i => i.id === baseItem.id);
-    const nextItem = finalSortedAgenda[currentIndexInSorted + 1];
-    
-    let newProtocolIndex = 0;
-    const baseIndex = baseItem.protocolIndex !== undefined ? baseItem.protocolIndex : baseItem.originalIndex || 0;
-    
-    if (nextItem) {
-      const nextIndex = nextItem.protocolIndex !== undefined ? nextItem.protocolIndex : nextItem.originalIndex || (baseIndex + 1);
-      newProtocolIndex = baseIndex + ((nextIndex - baseIndex) / 2);
-    } else {
-      newProtocolIndex = baseIndex + 1;
-    }
-
     const isSub = mode === 'subitem' ? true : !!baseItem.isSubItem;
     const parentId = mode === 'subitem' 
       ? (baseItem.isSubItem ? baseItem.parentItemId : baseItem.id) 
       : (baseItem.parentItemId || undefined);
+
+    // Berechne den echten Einfügepunkt innerhalb der gleichen Hierarchie-Ebene
+    let anchorItem = baseItem;
+    if (!isSub && !baseItem.isSubItem) {
+      // Wenn unter einem Hauptpunkt ein neuer Hauptpunkt eingefügt wird, muss er hinter den Kindern des aktuellen Hauptpunkts landen
+      const childrenOfBase = finalSortedAgenda.filter(i => i.isSubItem && i.parentItemId === baseItem.id);
+      if (childrenOfBase.length > 0) {
+        anchorItem = childrenOfBase[childrenOfBase.length - 1];
+      }
+    }
+
+    const currentIndexInSorted = finalSortedAgenda.findIndex(i => i.id === anchorItem.id);
+    const nextItem = finalSortedAgenda[currentIndexInSorted + 1];
+    
+    let newProtocolIndex = 0;
+    const baseIndex = anchorItem.protocolIndex !== undefined ? anchorItem.protocolIndex : anchorItem.originalIndex || 0;
+    
+    if (nextItem) {
+      const nextIndex = nextItem.protocolIndex !== undefined ? nextItem.protocolIndex : nextItem.originalIndex || (baseIndex + 1);
+      newProtocolIndex = nextIndex > baseIndex ? baseIndex + ((nextIndex - baseIndex) / 2) : baseIndex + 0.5;
+    } else {
+      newProtocolIndex = baseIndex + 1;
+    }
 
     const newId = `item-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     
@@ -347,9 +426,15 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
 
   const handleToggleSubItem = async (item: typeof finalSortedAgenda[0]) => {
     let newParentId: string | null = null;
-    let isSub = !item.isSubItem;
+    const isSub = !item.isSubItem;
     
     if (isSub) {
+      const hasOwnChildren = finalSortedAgenda.some(c => c.isSubItem && c.parentItemId === item.id);
+      if (hasOwnChildren) {
+        window.alert('Dieser Hauptpunkt besitzt bereits eigene Unterpunkte und kann daher nicht selbst als Unterpunkt eingerückt werden.');
+        return;
+      }
+
       const idx = finalSortedAgenda.findIndex(i => i.id === item.id);
       for (let i = idx - 1; i >= 0; i--) {
         if (!finalSortedAgenda[i].isSubItem) {
@@ -362,6 +447,7 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
     const payload = { ...item, isSubItem: isSub };
     if (newParentId) {
       payload.parentItemId = newParentId;
+      if (collapsedParents.has(newParentId)) toggleParent(newParentId);
     } else {
       payload.parentItemId = null as any; 
     }
@@ -370,27 +456,33 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
     if (eventId) fetchEventAgenda(eventId);
   };
 
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = async () => {
     if (!selectedItem) return;
-    const { title, type, baseItemId, assigneeUserIds, assigneeGroupIds } = selectedItem;
+    const { title, type, baseItemId, assigneeUserIds, assigneeGroupIds, progress, status } = selectedItem;
 
-    if (type === 'AUFGABE') {
+    if (type === 'AUFGABE' && !isAdmin) {
       const isClone = !!baseItemId;
       const isAssigned = (assigneeUserIds && assigneeUserIds.length > 0) || (assigneeGroupIds && assigneeGroupIds.length > 0);
+      const isFinished = progress === 100 || status === 'ERLEDIGT';
       
+      if (!isFinished) {
+        window.alert(`Die unerledigte Aufgabe "${title || 'Dieser Punkt'}" kann nicht gelöscht werden (nur durch den Administrator möglich).\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn sie beendet ist.`);
+        return;
+      }
       if (isClone && !selectedItem.isSubItem) {
-        window.alert(`Die vererbte Aufgabe "${title}" kann nicht gelöscht werden.\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn sie beendet ist.`);
+        window.alert(`Die vererbte Aufgabe "${title}" kann nicht gelöscht werden (nur durch den Administrator möglich).\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn sie beendet ist.`);
         return;
       }
       if (isAssigned && !selectedItem.isSubItem) {
-        window.alert(`Die zugewiesene Aufgabe "${title}" kann nicht mehr gelöscht werden.\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn sie beendet ist.`);
+        window.alert(`Die zugewiesene Aufgabe "${title}" kann nicht mehr gelöscht werden (nur durch den Administrator möglich).\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn sie beendet ist.`);
         return;
       }
     }
     
     if (window.confirm(`"${title || 'Diesen leeren Punkt'}" wirklich in den Papierkorb verschieben?`)) {
-      saveAgendaItem({ ...selectedItem, status: 'TRASH', deletedAt: Date.now() });
+      await moveToTrash(selectedItem.id);
       setSelectedItemId(null);
+      if (eventId) fetchEventAgenda(eventId);
     }
   };
 
@@ -471,11 +563,19 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
             <div className="border border-gray-200 rounded-lg overflow-x-auto bg-white shadow-sm print:!border-none print:!shadow-none print:!overflow-visible print:!block">
               {finalSortedAgenda.map((item, idx) => {
                 
-                if (item.isSubItem && item.parentItemId && collapsedParents.has(item.parentItemId)) {
-                  return null;
+                // Prüft auch mehrstufige Eltern-Ketten (falls ein Unterpunkt selbst Unterpunkte hat)
+                let ancestorId = item.isSubItem ? item.parentItemId : undefined;
+                const visitedAncestors = new Set<string>();
+                while (ancestorId && !visitedAncestors.has(ancestorId)) {
+                  if (collapsedParents.has(ancestorId)) return null;
+                  visitedAncestors.add(ancestorId);
+                  const ancestorObj = finalSortedAgenda.find(x => x.id === ancestorId);
+                  ancestorId = ancestorObj?.isSubItem ? ancestorObj.parentItemId : undefined;
                 }
 
                 const childCount = finalSortedAgenda.filter(child => child.parentItemId === item.id).length;
+                const hasAssignee = (item.assigneeUserIds && item.assigneeUserIds.length > 0) || (item.assigneeGroupIds && item.assigneeGroupIds.length > 0);
+                const isItemInvalid = validationErrorIds.includes(item.id) && !hasAssignee && item.status !== 'ERLEDIGT' && item.progress !== 100;
 
                 return (
                   <AgendaItemRow
@@ -487,7 +587,7 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
                     totalItems={eventAgenda.length} 
                     subItemCount={childCount}
                     isSubItemsCollapsed={collapsedParents.has(item.id)}
-                    onToggleSubItems={() => toggleParent(item.id)}
+                    onToggleSubItems={() => { setSelectedItemId(item.id); toggleParent(item.id); }}
                     startTimeStr={item.calculatedStartTimeStr} 
                     isExpanded={expandedIds.has(item.id)} 
                     onToggleExpand={toggleItemExpanded}
@@ -497,26 +597,33 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
                     
                     isSelected={selectedItemId === item.id}
                     onSelect={() => setSelectedItemId(item.id)}
+                    hasValidationError={isItemInvalid}
 
                     searchQuery={searchQuery} 
 
-                    onDelete={(id, title) => {
-                      if (item.type === 'AUFGABE') {
+                    onDelete={async (id, title) => {
+                      if (item.type === 'AUFGABE' && !isAdmin) {
                         const isClone = !!item.baseItemId;
                         const isAssigned = (item.assigneeUserIds && item.assigneeUserIds.length > 0) || (item.assigneeGroupIds && item.assigneeGroupIds.length > 0);
+                        const isFinished = item.progress === 100 || item.status === 'ERLEDIGT';
                         
+                        if (!isFinished) {
+                          window.alert(`Die unerledigte Aufgabe "${title || 'Dieser Punkt'}" kann nicht gelöscht werden (nur durch den Administrator möglich).\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn sie beendet ist.`);
+                          return;
+                        }
                         if (isClone && !item.isSubItem) { 
-                          window.alert(`Die vererbte Aufgabe "${title}" kann nicht gelöscht werden.\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn sie beendet ist.`); 
+                          window.alert(`Die vererbte Aufgabe "${title}" kann nicht gelöscht werden (nur durch den Administrator möglich).\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn sie beendet ist.`); 
                           return; 
                         }
                         if (isAssigned && !item.isSubItem) { 
-                          window.alert(`Die zugewiesene Aufgabe "${title}" kann nicht mehr gelöscht werden.\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn sie beendet ist.`); 
+                          window.alert(`Die zugewiesene Aufgabe "${title}" kann nicht mehr gelöscht werden (nur durch den Administrator möglich).\n\nBitte setze den Fortschritt auf 100% (Erledigt), wenn sie beendet ist.`); 
                           return; 
                         }
                       }
                       if (window.confirm(`"${title || 'Diesen leeren Punkt'}" wirklich in den Papierkorb verschieben?`)) {
-                        saveAgendaItem({ ...item, status: 'TRASH', deletedAt: Date.now() });
+                        await moveToTrash(id);
                         if (selectedItemId === id) setSelectedItemId(null);
+                        if (eventId) fetchEventAgenda(eventId);
                       }
                     }}
                     

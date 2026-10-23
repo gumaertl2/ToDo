@@ -1,3 +1,4 @@
+// [2026-10-23] - PAPIERKORB & HIERARCHIE-HARDENING: 1) normalizeItemStatus überschreibt TRASH nicht mehr mit ERLEDIGT bei 100%-Aufgaben. 2) Alle TRASH-Elemente (auch aus archivierten/abgeschlossenen Projekten) bleiben im Papierkorb sichtbar, damit der Admin sie dort endgültig löschen oder zurück ins archivierte Projekt schieben kann. 3) Rekursive Unterpunkt-Kaskadierung beim Löschen und Wiederherstellen.
 // [2026-10-18] - BUGFIX: Race-Condition beim Kaltstart (F5) in fetchTasks behoben. Aufgaben mit eventId werden nicht mehr voreilig als "isProjectDead" verworfen, solange events noch aus Firebase lädt.
 // [2026-10-17] - OPTIMIZATION: Firebase onSnapshot Listener-Zerstörung in fetchTasks verhindert (Early Return), um Free-Tier Lese-Quoten zu sparen und Offline-Starts zu ermöglichen.
 // [2026-06-11] - ARCHITEKTUR-FIX: Fate-Binding ('isHistorical') in fetchTasks integriert. Sanfter Fallback für Legacy-Daten (isHistorical === undefined) implementiert, damit alte Protokolle nicht explodieren. Live-Versiegelung beim Klonen in processRoutineRespawn eingebaut (Szenario B & C).
@@ -36,6 +37,12 @@ export interface TaskSlice {
 
 const normalizeItemStatus = (itemData: Partial<AgendaItem>, existingTask?: Partial<AgendaItem>): Partial<AgendaItem> => {
   const updatedData = { ...existingTask, ...itemData };
+
+  // Wenn das Element im Papierkorb liegt oder dorthin verschoben wird, darf progress === 100 den Status NIEMALS auf ERLEDIGT zurücksetzen!
+  if (updatedData.status === 'TRASH') {
+    return updatedData;
+  }
+
   if (updatedData.progress === 100) {
       updatedData.status = 'ERLEDIGT';
   }
@@ -97,10 +104,35 @@ const cleansePayload = (payload: any): any => {
   return result;
 };
 
+// Rekursiver Sammler für alle zugehörigen Unterpunkte (auch mehrstufige) desselben Events
+const collectEventDescendants = (rootTask: Task, allItems: Task[], includeHistorical: boolean = false): Task[] => {
+  const descendants: Task[] = [];
+  const visited = new Set<string>([rootTask.id]);
+  const queue: string[] = [rootTask.id];
+
+  while (queue.length > 0) {
+    const currentParentId = queue.shift()!;
+    const directChildren = allItems.filter(t => 
+      t.isSubItem && 
+      t.parentItemId === currentParentId && 
+      (includeHistorical || !t.isHistorical) &&
+      (!rootTask.eventId || t.eventId === rootTask.eventId)
+    );
+    for (const child of directChildren) {
+      if (!visited.has(child.id)) {
+        visited.add(child.id);
+        descendants.push(child);
+        queue.push(child.id);
+      }
+    }
+  }
+  return descendants;
+};
+
 const processRoutineRespawn = async (payload: any, existingTask: Partial<AgendaItem> | undefined, allAgendaItems: Task[]) => {
   const isRoutine = payload.isRoutine === true || String(payload.isRoutine) === 'true';
   const isSubItem = payload.isSubItem === true || String(payload.isSubItem) === 'true';
-  const justCompleted = payload.progress === 100 && (existingTask?.progress || 0) < 100;
+  const justCompleted = payload.status !== 'TRASH' && payload.progress === 100 && (existingTask?.progress || 0) < 100;
 
   if (isRoutine && !isSubItem && justCompleted) {
     // ---> CHIRURGISCHER EINGRIFF: LIVE VERSIEGELUNG (Point of No Return) <---
@@ -109,7 +141,7 @@ const processRoutineRespawn = async (payload: any, existingTask: Partial<AgendaI
         await DataProcessor.saveDocument('agenda_items', payload.id, { isHistorical: true } as any, true);
         
         // Alle seine Kinder sofort live versiegeln (Waisen-Schutz)
-        const oldChildren = allAgendaItems.filter(t => t.isSubItem && t.parentItemId === payload.id);
+        const oldChildren = collectEventDescendants(payload as Task, allAgendaItems, false);
         const sealPromises = oldChildren.map(child =>
             DataProcessor.saveDocument('agenda_items', child.id, { isHistorical: true } as any, true)
         );
@@ -156,11 +188,15 @@ const processRoutineRespawn = async (payload: any, existingTask: Partial<AgendaI
     
     await DataProcessor.saveDocument('agenda_items', newId, respawnPayload, false);
 
-    // Kinder Klonen (ohne TRASH)
-    const childrenToClone = allAgendaItems.filter(t => t.isSubItem && t.parentItemId === payload.id && t.status !== 'TRASH');
+    // Kinder Klonen (ohne TRASH, inkl. etwaiger Unter-Unterpunkte mit korrekter parentItemId-Zuordnung)
+    const idMap = new Map<string, string>([[payload.id, newId]]);
+    const childrenToClone = collectEventDescendants(payload as Task, allAgendaItems, false).filter(c => c.status !== 'TRASH');
     
-    const childPromises = childrenToClone.map((child, idx) => {
+    let idx = 0;
+    for (const child of childrenToClone) {
+        const mappedParentId = (child.parentItemId && idMap.get(child.parentItemId)) || newId;
         const newChildId = doc(collection(db, 'agenda_items')).id;
+        idMap.set(child.id, newChildId);
         
         let newChildDueDate = child.dueDate;
         if (nextDueDate && child.leadTimeUnit && child.leadTimeValue !== undefined) {
@@ -180,7 +216,7 @@ const processRoutineRespawn = async (payload: any, existingTask: Partial<AgendaI
             ...child,
             id: newChildId,
             eventId: payload.eventId,
-            parentItemId: newId, 
+            parentItemId: mappedParentId, 
             status: 'OFFEN', 
             progress: 0,
             completedAt: null, 
@@ -191,9 +227,9 @@ const processRoutineRespawn = async (payload: any, existingTask: Partial<AgendaI
         };
         
         const cleanChild = cleansePayload(childRespawn);
-        return DataProcessor.saveDocument('agenda_items', newChildId, cleanChild, false);
-    });
-    if (childPromises.length > 0) await Promise.all(childPromises);
+        await DataProcessor.saveDocument('agenda_items', newChildId, cleanChild, false);
+        idx++;
+    }
   }
 };
 
@@ -269,6 +305,13 @@ export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set,
 
         allAgendaItems.forEach((data) => {
           if (data.type === 'AUFGABE' || data.status === 'TRASH') {
+            // Wenn ein Punkt im Papierkorb liegt (TRASH), wird er IMMER in tasks aufgenommen
+            // (auch wenn das zugehörige Projekt inzwischen archiviert/abgeschlossen ist),
+            // damit der Admin ihn im Papierkorb sehen, endgültig löschen oder wiederherstellen kann!
+            if (data.status === 'TRASH') {
+              tasks.push(data);
+              return;
+            }
             
             // ---> CHIRURGISCHER EINGRIFF: FATE-BINDING FILTER <---
             // Alle korrekt versiegelten Items (aus abgeschlossenen Meetings oder alten Routinen) fliegen hier sofort raus.
@@ -361,7 +404,8 @@ export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set,
   
   deleteTask: async (taskId) => {
     try {
-      const children = get().allAgendaItems.filter(t => t.isSubItem && t.parentItemId === taskId);
+      const targetTask = get().allAgendaItems.find(t => t.id === taskId) || get().tasks.find(t => t.id === taskId);
+      const children = targetTask ? collectEventDescendants(targetTask, get().allAgendaItems, true) : [];
       
       try { await deleteDoc(doc(db, 'tasks', taskId)); } catch (e) {} 
       try { await deleteDoc(doc(db, 'agenda_items', taskId)); } catch (e) {}
@@ -382,28 +426,39 @@ export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set,
   
   moveToTrash: async (taskId) => {
     try {
-      const task = get().allAgendaItems.find(t => t.id === taskId) || get().tasks.find(t => t.id === taskId);
-      if (!task) return { success: false, error: new Error('Task/AgendaItem nicht gefunden') };
-      
       const globalState = get() as any;
+      const task = get().allAgendaItems.find(t => t.id === taskId) || get().tasks.find(t => t.id === taskId) || globalState.eventAgenda?.find((t: any) => t.id === taskId);
+      if (!task) return { success: false, error: new Error('Task/AgendaItem nicht gefunden') };
+
+      // SCHUTZ: Abgeschlossene Protokolle (Status ABGESCHLOSSEN) dürfen aktiv nicht verändert werden,
+      // aber archivierte Projekte bleiben über den Papierkorb verwaltbar.
+      const parentEvent = task.eventId ? (globalState.events || []).find((e: any) => e.id === task.eventId) : undefined;
+      if (parentEvent?.status === 'ABGESCHLOSSEN') {
+        window.alert('Punkte aus abgeschlossenen Protokollen sind versiegelt und können nicht in den Papierkorb verschoben werden.');
+        return { success: false, error: new Error('Abgeschlossenes Protokoll ist versiegelt') };
+      }
+      
       const currentUserId = globalState.user?.id || globalState.currentUser?.id || 'unknown';
+      const nowMs = Date.now();
       
       const result = await get().saveAgendaItem({
         ...task,
         status: 'TRASH',
-        deletedAt: Date.now(),
+        deletedAt: nowMs,
         deletedBy: currentUserId
       });
 
-      if (result.success && !task.isSubItem) {
-        const children = get().allAgendaItems.filter(t => t.isSubItem && t.parentItemId === task.id);
-        if (children.length > 0) {
-          const childPromises = children.map(child => {
+      if (result.success) {
+        // Alle zugehörigen Unterpunkte (auch mehrstufige) desselben Events automatisch mit in den Papierkorb verschieben
+        const sourceList: Task[] = get().allAgendaItems.length > 0 ? get().allAgendaItems : (globalState.eventAgenda || []);
+        const descendants = collectEventDescendants(task, sourceList, true);
+        if (descendants.length > 0) {
+          const childPromises = descendants.map(child => {
             if (child.status !== 'TRASH') {
               return get().saveAgendaItem({
                 ...child,
                 status: 'TRASH',
-                deletedAt: Date.now(),
+                deletedAt: nowMs,
                 deletedBy: currentUserId
               });
             }
@@ -421,24 +476,32 @@ export const createTaskSlice: StateCreator<TaskSlice, [], [], TaskSlice> = (set,
   
   restoreFromTrash: async (taskId) => {
     try {
-      const task = get().allAgendaItems.find(t => t.id === taskId) || get().tasks.find(t => t.id === taskId);
+      const globalState = get() as any;
+      const task = get().allAgendaItems.find(t => t.id === taskId) || get().tasks.find(t => t.id === taskId) || globalState.eventAgenda?.find((t: any) => t.id === taskId);
       if (!task) return { success: false, error: new Error('Task/AgendaItem nicht gefunden') };
+
+      const getRestoredStatus = (item: Task) => {
+        if (item.progress === 100) return 'ERLEDIGT';
+        if ((item.progress || 0) > 0) return 'IN_ARBEIT';
+        return 'OFFEN';
+      };
       
       const result = await get().saveAgendaItem({
         ...task,
-        status: 'OFFEN',
+        status: getRestoredStatus(task),
         deletedAt: null as any,
         deletedBy: null as any
       });
 
-      if (result.success && !task.isSubItem) {
-        const children = get().allAgendaItems.filter(t => t.isSubItem && t.parentItemId === task.id);
-        if (children.length > 0) {
-          const childPromises = children.map(child => {
+      if (result.success) {
+        const sourceList: Task[] = get().allAgendaItems.length > 0 ? get().allAgendaItems : (globalState.eventAgenda || []);
+        const descendants = collectEventDescendants(task, sourceList, true);
+        if (descendants.length > 0) {
+          const childPromises = descendants.map(child => {
             if (child.status === 'TRASH') {
               return get().saveAgendaItem({
                 ...child,
-                status: 'OFFEN',
+                status: getRestoredStatus(child),
                 deletedAt: null as any,
                 deletedBy: null as any
               });

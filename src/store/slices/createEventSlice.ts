@@ -1,3 +1,4 @@
+// [2026-10-23] - HIERARCHIE & MOVE-FIX: moveAgendaItem und repairEventAgendaOrder synchronisieren die sichtbare Hierarchie (ohne TRASH/isHistorical, inkl. rekursiver Unterpunkt-Gruppierung), sodass das Verschieben von Haupt- und Unterpunkten präzise arbeitet und alle Unterpunkte geschlossen unter ihrem Oberpunkt bleiben.
 // [2026-10-17] - OPTIMIZATION: Firebase onSnapshot Listener-Zerstörung in fetchEvents verhindert (Early Return), um Free-Tier Lese-Quoten zu sparen.
 // 2026-04-24 14:00 - FEATURE: Paket-Import (importTemplateToEvent) kopiert Vorlage inkl. aller Unterpunkte
 // 2026-04-24 14:30 - BUGFIX: Firebase 'undefined' Error beim Importieren der Hauptvorlage behoben
@@ -37,6 +38,55 @@ export interface EventSlice {
   deleteEvent: (eventId: string) => Promise<Result<void>>;
   toggleArchiveEvent: (eventId: string, isArchived: boolean) => Promise<Result<void>>;
 }
+
+const compareAgendaOrder = (a: AgendaItem, b: AgendaItem) => {
+  const idxA = a.protocolIndex !== undefined ? a.protocolIndex : (a.createdAt || 0);
+  const idxB = b.protocolIndex !== undefined ? b.protocolIndex : (b.createdAt || 0);
+  if (idxA !== idxB) return idxA - idxB;
+  return (a.createdAt || 0) - (b.createdAt || 0);
+};
+
+const buildHierarchicalOrder = (items: AgendaItem[]): AgendaItem[] => {
+  const ordered: AgendaItem[] = [];
+  const placedIds = new Set<string>();
+
+  const appendWithChildren = (parent: AgendaItem) => {
+    if (placedIds.has(parent.id)) return;
+    placedIds.add(parent.id);
+    ordered.push(parent);
+    const children = items
+      .filter(i => i.isSubItem && i.parentItemId === parent.id)
+      .sort(compareAgendaOrder);
+    children.forEach(child => appendWithChildren(child));
+  };
+
+  const parents = items.filter(i => !i.isSubItem).sort(compareAgendaOrder);
+  parents.forEach(parent => appendWithChildren(parent));
+
+  const orphans = items.filter(i => !placedIds.has(i.id)).sort(compareAgendaOrder);
+  orphans.forEach(orphan => appendWithChildren(orphan));
+
+  return ordered;
+};
+
+const collectSubtreeIds = (rootId: string, items: AgendaItem[]): string[] => {
+  const ids: string[] = [rootId];
+  const visited = new Set<string>([rootId]);
+  const queue: string[] = [rootId];
+
+  while (queue.length > 0) {
+    const curr = queue.shift()!;
+    const children = items.filter(i => i.isSubItem && i.parentItemId === curr).sort(compareAgendaOrder);
+    for (const child of children) {
+      if (!visited.has(child.id)) {
+        visited.add(child.id);
+        ids.push(child.id);
+        queue.push(child.id);
+      }
+    }
+  }
+  return ids;
+};
 
 export const createEventSlice: StateCreator<EventSlice, [], [], EventSlice> = (set, get) => ({
   events: [],
@@ -181,33 +231,15 @@ export const createEventSlice: StateCreator<EventSlice, [], [], EventSlice> = (s
 
   repairEventAgendaOrder: async (eventId) => {
     try {
-      const agenda = get().eventAgenda.filter(i => i.eventId === eventId);
+      const currentEv = get().currentEvent || get().events.find(e => e.id === eventId);
+      if (currentEv?.status === 'ABGESCHLOSSEN') {
+        return { success: true, data: undefined };
+      }
+
+      const agenda = get().eventAgenda.filter(i => i.eventId === eventId && i.status !== 'TRASH' && !i.isHistorical);
       if (agenda.length === 0) return { success: true, data: undefined };
 
-      const parents = agenda.filter(i => !i.isSubItem).sort((a, b) => {
-        const idxA = a.protocolIndex !== undefined ? a.protocolIndex : a.createdAt || 0;
-        const idxB = b.protocolIndex !== undefined ? b.protocolIndex : b.createdAt || 0;
-        return idxA - idxB;
-      });
-
-      const flattened: AgendaItem[] = [];
-      parents.forEach(parent => {
-        flattened.push(parent);
-        const children = agenda.filter(i => i.isSubItem && i.parentItemId === parent.id).sort((a, b) => {
-          const idxA = a.protocolIndex !== undefined ? a.protocolIndex : a.createdAt || 0;
-          const idxB = b.protocolIndex !== undefined ? b.protocolIndex : b.createdAt || 0;
-          return idxA - idxB;
-        });
-        flattened.push(...children);
-      });
-
-      const validParentIds = new Set(parents.map(p => p.id));
-      const orphans = agenda.filter(i => i.isSubItem && (!i.parentItemId || !validParentIds.has(i.parentItemId))).sort((a, b) => {
-          const idxA = a.protocolIndex !== undefined ? a.protocolIndex : a.createdAt || 0;
-          const idxB = b.protocolIndex !== undefined ? b.protocolIndex : b.createdAt || 0;
-          return idxA - idxB;
-      });
-      flattened.push(...orphans);
+      const flattened = buildHierarchicalOrder(agenda);
 
       const batch = writeBatch(db);
       const baseTime = Date.now();
@@ -235,71 +267,97 @@ export const createEventSlice: StateCreator<EventSlice, [], [], EventSlice> = (s
   },
 
   moveAgendaItem: async (itemId, newIndex) => {
-    const agenda = [...get().eventAgenda].sort((a, b) => {
-      const idxA = a.protocolIndex !== undefined ? a.protocolIndex : a.createdAt || 0;
-      const idxB = b.protocolIndex !== undefined ? b.protocolIndex : b.createdAt || 0;
-      return idxA - idxB;
+    const currentEv = get().currentEvent;
+    if (currentEv?.status === 'ABGESCHLOSSEN') {
+      return { success: true, data: undefined };
+    }
+
+    const rawAgenda = [...get().eventAgenda];
+
+    // 1. Blutlinien-Deduplizierung exakt wie in EventDetailView (ohne TRASH)
+    const bloodlineMap = new Map<string, AgendaItem[]>();
+    rawAgenda.forEach(item => {
+      if (item.status === 'TRASH') return;
+      const bId = item.baseItemId || item.id;
+      if (!bloodlineMap.has(bId)) bloodlineMap.set(bId, []);
+      bloodlineMap.get(bId)!.push(item);
     });
 
-    const visibleAgenda = agenda.filter(item => {
+    const primaryIds = new Set<string>();
+    bloodlineMap.forEach(group => {
+      group.sort((a, b) => (b.createdAt || b.updatedAt || 0) - (a.createdAt || a.updatedAt || 0));
+      let primary = group.find(t => !t.isHistorical && t.status !== 'ERLEDIGT' && t.progress !== 100);
+      if (!primary) primary = group.find(t => !t.isHistorical);
+      if (!primary) primary = group.find(t => t.status !== 'ERLEDIGT' && t.progress !== 100);
+      if (!primary) primary = group[0];
+      primaryIds.add(primary.id);
+    });
+
+    // 2. Sichtbare Agenda exakt wie in EventAgendaList (ohne TRASH, ohne isHistorical, mit hierarchischer Gruppierung)
+    const filteredVisible = rawAgenda.filter(item => {
+      if (item.status === 'TRASH') return false;
+      if (!primaryIds.has(item.id)) return false;
+      if (item.isHistorical === true) return false;
+
+      if (item.isHistorical === undefined) {
         const isRoutine = item.isRoutine === true || String(item.isRoutine) === 'true';
         const isCompleted = item.progress === 100 || item.status === 'ERLEDIGT';
-        
         if (isRoutine && isCompleted) return false;
 
         if (item.isSubItem && item.parentItemId) {
-            const parent = agenda.find(p => p.id === item.parentItemId);
-            if (parent) {
-                const parentIsRoutine = parent.isRoutine === true || String(parent.isRoutine) === 'true';
-                const parentIsCompleted = parent.progress === 100 || parent.status === 'ERLEDIGT';
-                if (parentIsRoutine && parentIsCompleted) return false;
-            }
+          const parent = rawAgenda.find(p => p.id === item.parentItemId);
+          if (parent && parent.status !== 'TRASH') {
+            const parentIsRoutine = parent.isRoutine === true || String(parent.isRoutine) === 'true';
+            const parentIsCompleted = parent.progress === 100 || parent.status === 'ERLEDIGT';
+            if (parentIsRoutine && parentIsCompleted) return false;
+          }
         }
-        return true;
+      }
+      return true;
     });
 
-    const targetItemFromUI = visibleAgenda[newIndex];
-    if (!targetItemFromUI) return { success: true, data: undefined };
+    const visibleAgenda = buildHierarchicalOrder(filteredVisible);
 
-    const oldIndex = agenda.findIndex(i => i.id === itemId);
-    const realNewIndex = agenda.findIndex(i => i.id === targetItemFromUI.id);
+    const oldVisIndex = visibleAgenda.findIndex(i => i.id === itemId);
+    if (oldVisIndex < 0 || oldVisIndex === newIndex) return { success: true, data: undefined };
 
-    if (oldIndex < 0 || oldIndex === realNewIndex) return { success: true, data: undefined };
+    const itemToMove = visibleAgenda[oldVisIndex];
 
-    const itemToMove = agenda[oldIndex];
-    const targetItemOld = agenda[realNewIndex];
+    // Block-Bildung: Ein Hauptpunkt (oder Unterpunkt mit eigenen Unterpunkten) nimmt immer seinen gesamten Unterbaum mit
+    const blockIds = collectSubtreeIds(itemToMove.id, visibleAgenda);
+    const blockSet = new Set(blockIds);
 
-    let blockIds = [itemToMove.id];
-    if (!itemToMove.isSubItem) {
-        const children = agenda.filter(i => i.isSubItem && i.parentItemId === itemToMove.id);
-        blockIds = [...blockIds, ...children.map(c => c.id)];
-    }
-
-    const blockToMove = agenda.filter(i => blockIds.includes(i.id));
-    const remaining = agenda.filter(i => !blockIds.includes(i.id));
+    const blockToMove = visibleAgenda.filter(i => blockSet.has(i.id));
+    const remaining = visibleAgenda.filter(i => !blockSet.has(i.id));
 
     let insertIndex = remaining.length;
-    if (targetItemOld) {
-        if (blockIds.includes(targetItemOld.id)) return { success: true, data: undefined };
 
-        const targetIndexInRemaining = remaining.findIndex(i => i.id === targetItemOld.id);
-        if (targetIndexInRemaining !== -1) {
-            if (realNewIndex > oldIndex && !targetItemOld.isSubItem) {
-                let lastChildIdx = targetIndexInRemaining;
-                for (let i = targetIndexInRemaining + 1; i < remaining.length; i++) {
-                    if (remaining[i].isSubItem && remaining[i].parentItemId === targetItemOld.id) {
-                        lastChildIdx = i;
-                    } else {
-                        break;
-                    }
-                }
-                insertIndex = lastChildIdx + 1;
-            } else if (realNewIndex > oldIndex && targetItemOld.isSubItem) {
-                insertIndex = targetIndexInRemaining + 1;
+    if (newIndex < visibleAgenda.length) {
+      const targetItemFromUI = visibleAgenda[newIndex];
+      if (!targetItemFromUI || blockSet.has(targetItemFromUI.id)) {
+        return { success: true, data: undefined };
+      }
+
+      const targetIndexInRemaining = remaining.findIndex(i => i.id === targetItemFromUI.id);
+      if (targetIndexInRemaining !== -1) {
+        if (newIndex > oldVisIndex && !targetItemFromUI.isSubItem) {
+          // Beim Nach-unten-Schieben auf einen Hauptpunkt hinter dessen gesamten Unterbaum einfügen
+          const targetSubtreeIds = new Set(collectSubtreeIds(targetItemFromUI.id, remaining));
+          let lastChildIdx = targetIndexInRemaining;
+          for (let i = targetIndexInRemaining + 1; i < remaining.length; i++) {
+            if (targetSubtreeIds.has(remaining[i].id)) {
+              lastChildIdx = i;
             } else {
-                insertIndex = targetIndexInRemaining;
+              break;
             }
+          }
+          insertIndex = lastChildIdx + 1;
+        } else if (newIndex > oldVisIndex && targetItemFromUI.isSubItem) {
+          insertIndex = targetIndexInRemaining + 1;
+        } else {
+          insertIndex = targetIndexInRemaining;
         }
+      }
     }
 
     remaining.splice(insertIndex, 0, ...blockToMove);
