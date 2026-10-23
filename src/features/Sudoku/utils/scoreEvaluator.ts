@@ -1,5 +1,6 @@
 // src/features/Sudoku/utils/scoreEvaluator.ts
-// [2026-10-23] - FEATURE: Logik-Engine für Sudoku Gamification (Rang-Berechnung & Motivations-Sprüche).
+// [2026-10-23] - BUGFIX: Null-Safing für optionales 'timeInSeconds' im ArcadeScore hinzugefügt, um Build-Fehler zu beheben[span_0](start_span)[span_0](end_span).
+// [2026-10-23] - FEATURE: Logik-Engine für Sudoku Gamification (Rang-Berechnung & Motivations-Sprüche)[span_1](start_span)[span_1](end_span).
 import type { ArcadeScore } from '../../../core/types/models';
 
 export interface EvaluationResult {
@@ -21,12 +22,13 @@ export const evaluateScore = (
   // 1. Relevante Scores filtern und sortieren (ohne den aktuell laufenden, falls noch nicht gespeichert)
   const activeScores = allScores
     .filter(s => s.game === 'SUDOKU' && s.difficulty === difficulty && !s.isArchived)
-    .sort((a, b) => a.timeInSeconds - b.timeInSeconds);
+    .sort((a, b) => (a.timeInSeconds ?? 0) - (b.timeInSeconds ?? 0));
 
   // 2. Echten Rang berechnen
   let rank = 1;
   for (const s of activeScores) {
-    if (timeInSeconds <= s.timeInSeconds) break; // <= damit man bei gleicher Zeit davor landet (neu ist besser)
+    const sTime = s.timeInSeconds ?? 0;
+    if (timeInSeconds <= sTime) break; // <= damit man bei gleicher Zeit davor landet (neu ist besser)
     rank++;
   }
 
@@ -34,7 +36,8 @@ export const evaluateScore = (
   const rawTime = Math.max(0, timeInSeconds - penaltySeconds);
   let rawRank = 1;
   for (const s of activeScores) {
-    if (rawTime <= s.timeInSeconds) break;
+    const sTime = s.timeInSeconds ?? 0;
+    if (rawTime <= sTime) break;
     rawRank++;
   }
 
@@ -45,8 +48,8 @@ export const evaluateScore = (
   else if (rank === 3) medal = 'bronze';
 
   // 5. Deltas berechnen (Abstand zu Platz 1, 2 und 3)
-  const deltaTo1 = activeScores[0] ? timeInSeconds - activeScores[0].timeInSeconds : 0;
-  const deltaTo3 = activeScores[2] ? timeInSeconds - activeScores[2].timeInSeconds : 0;
+  const deltaTo1 = activeScores[0] ? timeInSeconds - (activeScores[0].timeInSeconds ?? 0) : 0;
+  const deltaTo3 = activeScores[2] ? timeInSeconds - (activeScores[2].timeInSeconds ?? 0) : 0;
 
   // 6. Nachrichten generieren
   let message = '';
