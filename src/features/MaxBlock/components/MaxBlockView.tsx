@@ -1,4 +1,5 @@
 // src/features/MaxBlock/components/MaxBlockView.tsx
+// [2026-10-23] - BUGFIX: Viewport-Höhe auf h-[100dvh] optimiert und Board-Container mit max-h versehen, um abgeschnittene Reihen auf Mobilgeräten zu verhindern.
 // [2026-10-23] - FEATURE: Kompakteres Zwei-Spalten-Layout für die Lobby & lokalen Highscore (Personal Best via localStorage) hinzugefügt.
 // [2026-10-23] - FEATURE: Modusauswahl (Ranked/Practice), Start-Level-Boost und Desktop-Steuerungs-Infos hinzugefügt.
 // [2026-10-23] - FEATURE: Abbruch-Button in der Spielansicht (mit Bestätigung) hinzugefügt.
@@ -120,7 +121,7 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col bg-slate-950 overflow-hidden isolate font-sans">
+    <div className="fixed inset-0 h-[100dvh] w-screen z-[9999] flex flex-col bg-slate-950 overflow-hidden isolate font-sans">
       {view === 'lobby' && (
         <div className="flex-1 overflow-y-auto">
           <div className="flex flex-col items-center justify-start min-h-full p-4 sm:p-6 text-white relative pb-16">
@@ -213,7 +214,7 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
                     <div className="flex justify-between gap-2 text-xs text-slate-400">
                       <div className="flex-1 text-center bg-slate-950 p-2 rounded-xl border border-slate-800/50">
                         <span className="block text-base mb-0.5">🔄</span>
-                        Links tippen <span className="text-[9px] text-slate-500">(Rotieren)</span>
+                        Links tippen <span className="text-[9px] text-slate-500">(1x Drehen, 2x Drop)</span>
                       </div>
                       <div className="flex-1 text-center bg-slate-950 p-2 rounded-xl border border-slate-800/50">
                         <span className="block text-base mb-0.5">↔️</span>
@@ -251,10 +252,10 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
       )}
 
       {view === 'playing' && (
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 h-[100dvh] flex flex-col">
           {/* Header Dashboard */}
-          <div className="bg-slate-900 text-white pt-[max(env(safe-area-inset-top),1rem)] shadow-md z-10 border-b border-slate-800">
-            <div className="px-4 pb-2 flex justify-between items-center">
+          <div className="bg-slate-900 text-white pt-[max(env(safe-area-inset-top),0.5rem)] shadow-md z-10 border-b border-slate-800">
+            <div className="px-4 pb-1.5 flex justify-between items-center">
               <button 
                 onClick={() => {
                   if (window.confirm('Spiel wirklich abbrechen? Dein Fortschritt geht verloren.')) {
@@ -270,23 +271,23 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
               )}
             </div>
             
-            <div className="px-4 pb-4 flex items-start justify-between">
-              <div className="flex flex-col gap-1">
-                <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">Score</div>
-                <div className="text-2xl font-mono font-black text-emerald-400 leading-none">{game.score}</div>
+            <div className="px-4 pb-2.5 flex items-start justify-between">
+              <div className="flex flex-col gap-0.5">
+                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Score</div>
+                <div className="text-xl font-mono font-black text-emerald-400 leading-none">{game.score}</div>
               </div>
               
-              <div className="flex flex-col items-center gap-1">
-                <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">Level</div>
-                <div className="text-xl font-black text-white leading-none">{game.level}</div>
-                <div className="text-[10px] text-slate-500 font-medium">{game.lines} Lines</div>
+              <div className="flex flex-col items-center gap-0.5">
+                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Level</div>
+                <div className="text-lg font-black text-white leading-none">{game.level}</div>
+                <div className="text-[9px] text-slate-500 font-medium">{game.lines} Lines</div>
               </div>
 
-              <div className="flex flex-col items-end gap-1">
-                <div className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Next</div>
-                <div className="flex gap-2 bg-slate-950 p-1.5 rounded-lg border border-slate-800">
+              <div className="flex flex-col items-end gap-0.5">
+                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Next</div>
+                <div className="flex gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800">
                   {game.nextBlocks.map((type, i) => (
-                    <div key={i} className={`flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 ${i > 0 ? 'opacity-40 scale-75' : ''}`}>
+                    <div key={i} className={`flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 ${i > 0 ? 'opacity-40 scale-75' : ''}`}>
                       {renderMiniBlock(type)}
                     </div>
                   ))}
@@ -295,7 +296,7 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
             </div>
           </div>
 
-          <div className="flex-1 relative flex flex-col items-center justify-center p-4 overflow-hidden bg-slate-950">
+          <div className="flex-1 min-h-0 relative flex flex-col items-center justify-center p-2 overflow-hidden bg-slate-950">
             
             {game.status === 'gameover' && evalResult && (
               <div className="absolute inset-0 z-30 bg-slate-950/95 flex flex-col items-center justify-center p-6 text-white text-center animate-in fade-in duration-300">
@@ -341,13 +342,16 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
               </div>
             )}
 
-            <MaxBlockBoard 
-              board={game.board}
-              activeBlock={game.activeBlock}
-              getGhostPieceY={game.getGhostPieceY}
-              status={game.status}
-              showGhost={gameMode === 'practice'}
-            />
+            {/* Eingeschränkter Container, damit das Board auf Handys niemals abgeschnitten wird */}
+            <div className="w-full max-w-[260px] sm:max-w-[320px] aspect-[1/2] max-h-[calc(100dvh-180px)] flex items-center justify-center">
+              <MaxBlockBoard 
+                board={game.board}
+                activeBlock={game.activeBlock}
+                getGhostPieceY={game.getGhostPieceY}
+                status={game.status}
+                showGhost={gameMode === 'practice'}
+              />
+            </div>
 
             <div className="absolute inset-0 z-20">
               <MaxBlockControls 

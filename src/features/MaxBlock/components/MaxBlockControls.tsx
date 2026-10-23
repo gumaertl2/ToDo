@@ -1,6 +1,7 @@
 // src/features/MaxBlock/components/MaxBlockControls.tsx
+// [2026-10-23] - BUGFIX: Doppelte Rotation durch Entfernen des redundanten onMouseDown behoben & Double-Tap (Doppelklick links) für Hard Drop ergänzt.
 // [2026-10-23] - FEATURE: Tastatursteuerung (Pfeiltasten/WASD + Leertaste) für Mac/Desktop hinzugefügt.
-// [2026-10-23] - FEATURE: Zwei-Daumen Touch-Overlay für MaxBlock (Links: Rotation, Rechts: Relative Swipe-Steuerung).
+// [2026-10-23] - FEATURE: Zwei-Daumen Touch-Overlay für MaxBlock (Links: Rotation / Double-Tap Hard Drop, Rechts: Relative Swipe-Steuerung).
 import React, { useRef, useEffect } from 'react';
 
 interface MaxBlockControlsProps {
@@ -25,6 +26,8 @@ export const MaxBlockControls: React.FC<MaxBlockControlsProps> = ({
     lastY: 0,
     startTime: 0
   });
+
+  const lastTapRef = useRef<number>(0);
 
   // Schwellenwerte für das "Einrasten" (Pixel pro Spalte/Reihe)
   const SWIPE_X_THRESHOLD = 35;
@@ -89,7 +92,6 @@ export const MaxBlockControls: React.FC<MaxBlockControlsProps> = ({
 
   const handleRightTouchMove = (e: React.TouchEvent) => {
     if (disabled) return;
-    // Standard-Scrollen des Browsers blockieren, damit das Spielfeld nicht wackelt
     if (e.cancelable) {
       e.preventDefault();
     }
@@ -98,7 +100,6 @@ export const MaxBlockControls: React.FC<MaxBlockControlsProps> = ({
     const deltaX = touch.clientX - touchState.current.lastX;
     const deltaY = touch.clientY - touchState.current.lastY;
 
-    // Horizontales Snapping
     if (deltaX > SWIPE_X_THRESHOLD) {
       onMoveHorizontal(1);
       touchState.current.lastX = touch.clientX;
@@ -107,7 +108,6 @@ export const MaxBlockControls: React.FC<MaxBlockControlsProps> = ({
       touchState.current.lastX = touch.clientX;
     }
 
-    // Vertikales Snapping (Soft Drop bei langem Ziehen nach unten)
     if (deltaY > SWIPE_Y_THRESHOLD) {
       onMoveDown();
       touchState.current.lastY = touch.clientY;
@@ -120,7 +120,6 @@ export const MaxBlockControls: React.FC<MaxBlockControlsProps> = ({
     const totalDeltaY = touch.clientY - touchState.current.startY;
     const totalTime = Date.now() - touchState.current.startTime;
 
-    // Hard Drop: Wenn schnell und weit genug nach unten gewischt wurde (Flick)
     if (totalDeltaY > HARD_DROP_DISTANCE && totalTime < HARD_DROP_VELOCITY_TIME) {
       onHardDrop();
     }
@@ -128,19 +127,28 @@ export const MaxBlockControls: React.FC<MaxBlockControlsProps> = ({
 
   const handleLeftTouchStart = (e: React.TouchEvent) => {
     if (disabled) return;
-    // onClick ist auf Handys oft um 300ms verzögert, onTouchStart ist instantan!
     e.preventDefault(); 
-    onRotate();
+
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300; // ms
+
+    if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
+      // Doppelklick / Double-Tap links -> Hard Drop!
+      onHardDrop();
+      lastTapRef.current = 0;
+    } else {
+      // Einfacher Tap links -> Rotation
+      onRotate();
+      lastTapRef.current = now;
+    }
   };
 
   return (
     <div className="absolute inset-0 z-20 flex touch-none">
-      {/* Linke Daumen-Zone: Nur für die Rotation */}
+      {/* Linke Daumen-Zone: Rotation (1x) & Hard Drop (Doppelklick / Double-Tap) */}
       <div 
         className="w-1/2 h-full"
         onTouchStart={handleLeftTouchStart}
-        // Fallback für Desktop/Maus-Tests (falls kein Touch vorhanden):
-        onMouseDown={() => !disabled && onRotate()} 
       />
       
       {/* Rechte Daumen-Zone: Für Bewegung und Drops */}
