@@ -1,4 +1,5 @@
 // src/features/MaxBlock/components/MaxBlockView.tsx
+// [2026-10-23] - UX-FEATURE: Alert für unregistrierte Nutzer (Gäste) beim Versuch, den Score zu speichern, hinzugefügt.
 // [2026-10-23] - BUGFIX: Gast-Abstürze behoben. Firebase onSnapshot und fetch-Calls fangen nun Permission-Errors (fehlender Login) sanft ab, ohne die React-Komponente zu crashen.
 // [2026-10-23] - FEATURE: MaxBlock-Schwierigkeitsgrade an Sudoku angeglichen (Leicht, Mittel, Schwer, Experte) inkl. individuellem Start-Level-Stepper für Experten.
 // [2026-10-23] - REFACTOR: Lobby 100% identisch zu Sudoku gemacht (extrem platzsparend, Navbar Sync, Leaderboard Design).
@@ -58,12 +59,10 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
 
   useEffect(() => {
     if (fetchMaxBlockScores) {
-      // Fehler bei fehlenden Rechten (Gast-Modus) sanft ignorieren
       fetchMaxBlockScores().catch((e: any) => console.warn("Score Fetch Info:", e.message));
     }
   }, [fetchMaxBlockScores]);
 
-  // Sync des Headers mit Sudoku (gleicher Titel für die Arcade-Session)
   useEffect(() => {
     try {
       const unsub = onSnapshot(doc(db, 'settings', 'arcade'), (docSnap) => {
@@ -72,7 +71,6 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
           if (data.sudokuTitle) setSessionTitle(data.sudokuTitle);
         }
       }, (error) => {
-        // POKA-YOKE: Verhindert den Absturz, wenn ein Gast keine Leserechte hat
         console.warn("Lobby Sync Info (Gast-Modus):", error.message);
       });
       return () => unsub();
@@ -101,7 +99,6 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
 
   const handleExpertLevelChange = (delta: number) => {
     setExpertLevel(prev => {
-      // Experten-Modus beginnt ab Level 11, Deckelung bei 50
       const next = Math.max(11, Math.min(50, prev + delta));
       try {
         localStorage.setItem(LOCAL_EXPERT_KEY, next.toString());
@@ -123,7 +120,12 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
   };
 
   const handleSaveScore = async () => {
-    if (user && game.score > 0 && !hasSaved && saveMaxBlockScore && gameMode === 'ranked') {
+    if (!user) {
+      window.alert('Speichern geht nur für registrierte Nutzer!');
+      return;
+    }
+
+    if (game.score > 0 && !hasSaved && saveMaxBlockScore && gameMode === 'ranked') {
       setHasSaved(true);
       try {
         await saveMaxBlockScore({
