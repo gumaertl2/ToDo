@@ -1,9 +1,10 @@
+// src/App.tsx
+// [2026-10-23] - FEATURE: Öffentliche Offline-Arcade-Route '/pause' vor dem AuthGuard hinzugefügt, damit Gäste ohne Login spielen können.
 // [2026-05-30] - FEATURE: WelcomeDashboard als neue Standard-Startseite (Route '/') integriert. 
 // 2026-04-15 19:15 - FEATURE: Kalender als neue Standard-Startseite gesetzt
 // 2026-04-30 17:15 - FEATURE: Route für Team-PINs (Wettkampf-Tresor) ergänzt
-// src/App.tsx
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { AuthGuard } from './features/Auth/AuthGuard';
 import { LoginView } from './features/Auth/LoginView';
 import { AppLayout } from './features/Layout/AppLayout';
@@ -21,8 +22,16 @@ import { UsersView } from './features/Users/UsersView';
 import { HelpView } from './features/Help/HelpView';
 import { RemindersView } from './features/Reminders/RemindersView';
 import { ReportsView } from './features/Reports/ReportsView';
-// CHIRURGISCHER EINGRIFF: Import der neuen Tresor-Ansicht
 import { TeamPinsView } from './features/TeamPins/TeamPinsView';
+
+// NEU: Import für die öffentlichen Pausen-Spiele
+import { SudokuView } from './features/Sudoku/components/SudokuView';
+
+// Hüllen-Komponente für den öffentlichen Arcade-Zugang
+const PublicArcadeHOC = () => {
+  const navigate = useNavigate();
+  return <SudokuView onClose={() => navigate('/login')} />;
+};
 
 export default function App() {
   const { initializeAuth } = useClubStore();
@@ -38,6 +47,9 @@ export default function App() {
         
         <Route path="/embed/kalender" element={<PublicCalendarEmbed />} />
         
+        {/* CHIRURGISCHER EINGRIFF: Öffentliche Route für die Spiele, ohne AuthGuard */}
+        <Route path="/pause" element={<PublicArcadeHOC />} />
+        
         <Route
           path="/"
           element={
@@ -46,7 +58,6 @@ export default function App() {
             </AuthGuard>
           }
         >
-          {/* CHIRURGISCHER EINGRIFF: WelcomeDashboard als neue Standard-Startseite */}
           <Route index element={<WelcomeDashboard />} />
           <Route path="dashboard" element={<DashboardView />} />
           <Route path="calendar" element={<CalendarView />} /> 
@@ -58,7 +69,6 @@ export default function App() {
           <Route path="reports" element={<ReportsView />} />
           <Route path="reminders" element={<RemindersView />} />
           <Route path="help" element={<HelpView />} />
-          {/* CHIRURGISCHER EINGRIFF: Neue Route */}
           <Route path="team-pins" element={<TeamPinsView />} />
         </Route>
       </Routes>
