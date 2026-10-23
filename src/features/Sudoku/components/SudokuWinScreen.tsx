@@ -1,5 +1,5 @@
 // src/features/Sudoku/components/SudokuWinScreen.tsx
-// [2026-10-23] - FEATURE: Gamification Win-Screen mit dynamischen Sprüchen und Retro-Save-Button.
+// [2026-10-23] - BUGFIX: Ungenutzte Variable 'gameMode' aus der Destrukturierung entfernt, um TS-Build-Error zu beheben.
 import React, { useState } from 'react';
 import { formatTime } from './SudokuLeaderboard';
 import type { EvaluationResult } from '../utils/scoreEvaluator';
@@ -21,7 +21,6 @@ export const SudokuWinScreen: React.FC<SudokuWinScreenProps> = ({
   penaltySeconds,
   errorCount,
   hintCount,
-  gameMode,
   hasUsedPause,
   evaluation,
   onClose,

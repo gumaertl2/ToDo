@@ -1,3 +1,5 @@
+// src/core/types/models.ts
+// [2026-10-23] - SCHEMA: 'expert' zur Schwierigkeitsstufe im 'ArcadeScore' hinzugefügt, um Build-Fehler zu beheben.
 // [2026-10-22] - FEATURE: 'ArcadeScore' Modell für das Vereins-Sudoku (inkl. Hall of Fame Archivierung) hinzugefügt.
 // [2026-10-18] - SCHEMA: Optionale Audit-Felder 'reminderSentBy' und 'reminderAction' ('SENT' | 'DISMISSED') für nachvollziehbaren Erinnerungs-Verlauf ergänzt.
 // [2026-10-15] - FEATURE: Optionales Feld 'receiveBackupReminder' im User-Modell ergänzt (steuert das tägliche 12:00-Uhr Backup-Hinweisbanner).
@@ -378,7 +380,7 @@ export interface EventPollResponse extends BaseDocument {
 
 export interface ArcadeScore extends BaseDocument {
   game: 'SUDOKU' | 'TETRIS';
-  difficulty: 'easy' | 'medium' | 'hard';
+  difficulty: 'easy' | 'medium' | 'hard' | 'expert';
   userId: string;
   userName: string;
   timeInSeconds: number;
