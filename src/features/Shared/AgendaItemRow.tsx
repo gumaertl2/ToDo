@@ -1,3 +1,4 @@
+// [2026-10-23] - UX-UPGRADE: Durchgehende "Familien-Klammer" in Warm-Amber (Gold-Orange) für Oberpunkte und ihre Unterpunkte (6. -> 6.1 -> 6.2). Blau bleibt exklusiv für den Zeilen-Fokus reserviert; doppelter Mittelstrich nach der Uhrzeit entfernt und durch eine durchgehende Baum-Leitlinie links ersetzt.
 // [2026-10-23] - UX-UPGRADE: Validierungs-Hervorhebung (hasValidationError) für unzugewiesene Aufgaben beim Sitzungsabschluss integriert (roter Rahmen + direkt klickbares Warn-Badge).
 // [2026-10-19] - UX-UPGRADE: Sofortiger Zeilen-Fokus via onClickCapture (verhindert hängenbleibenden Fokus durch stopPropagation in Kind-Elementen) sowie deutliche farbliche und strukturelle Abhebung von Unterpunkten (Indigo/Slate-Hierarchie) und aktiver Auswahl.
 // [2026-06-12] - UX-REFACTOR: Time-Badges (Heatmap) in die linke Gliederungsspalte verschoben und strikt linksbündig ausgerichtet. Verhindert optisches "Flattern" der Textlängen und räumt den Platz neben dem Titel auf.
@@ -205,32 +206,46 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
   };
 
   const isVisualSubItem = !!(item.isSubItem && !parentContextTitle);
+  const hasSubItems = subItemCount !== undefined && subItemCount > 0;
+  const isExpandedParent = hasSubItems && !isSubItemsCollapsed;
 
+  // Hintergrund: Blau ist exklusiv für den Fokus (isSelected), Amber verbindet ausgeklappte Oberpunkte und ihre Unterpunkte
   const wrapperClass = hasValidationError
     ? "bg-red-50/90 ring-2 ring-inset ring-red-500 shadow-sm z-10"
     : isSelected 
       ? "bg-blue-50/90 ring-2 ring-inset ring-blue-500 shadow-sm z-10" 
       : isVisualSubItem
-        ? (isReadOnly ? "bg-slate-50/90" : "bg-slate-50/90 hover:bg-indigo-50/50 transition-colors cursor-pointer")
-        : (isReadOnly ? "bg-white" : "bg-white hover:bg-blue-50/30 transition-colors cursor-pointer");
+        ? (isReadOnly ? "bg-amber-50/35" : "bg-amber-50/35 hover:bg-amber-50/70 transition-colors cursor-pointer")
+        : isExpandedParent
+          ? (isReadOnly ? "bg-amber-50/15" : "bg-amber-50/15 hover:bg-amber-50/40 transition-colors cursor-pointer")
+          : (isReadOnly ? "bg-white" : "bg-white hover:bg-blue-50/30 transition-colors cursor-pointer");
     
+  // Linke Rand-Klammer: Verbindet den Oberpunkt (z. B. 6.) nahtlos mit allen seinen Unterpunkten (6.1, 6.2) in Warm-Amber
   const borderLeftClass = hasValidationError
     ? 'border-l-4 border-l-red-600'
     : timeCategory
       ? `border-l-4 ${timeCategory.colorClass}`
       : isSelected
         ? 'border-l-4 border-l-blue-600'
-        : isVisualSubItem
-          ? 'border-l-4 border-l-indigo-200'
-          : 'border-l-4 border-l-transparent';
+        : isExpandedParent
+          ? 'border-l-4 border-l-amber-500'
+          : isVisualSubItem
+            ? 'border-l-4 border-l-amber-400'
+            : hasSubItems
+              ? 'border-l-4 border-l-amber-300'
+              : 'border-l-4 border-l-transparent';
 
   const indexBadgeClass = isVisualSubItem
-    ? "appearance-none text-center font-bold text-indigo-700 bg-indigo-50 group-hover:bg-indigo-100 border border-indigo-200 rounded text-xs py-0.5 px-1.5 cursor-pointer outline-none"
-    : "appearance-none text-center font-extrabold text-slate-800 bg-slate-200/80 group-hover:bg-slate-300 border border-slate-300 rounded text-xs py-0.5 px-1.5 cursor-pointer outline-none";
+    ? "appearance-none text-center font-bold text-amber-900 bg-amber-100/90 group-hover:bg-amber-200 border border-amber-300 rounded text-xs py-0.5 px-1.5 cursor-pointer outline-none shadow-2xs"
+    : isExpandedParent
+      ? "appearance-none text-center font-extrabold text-amber-950 bg-amber-100 group-hover:bg-amber-200 border border-amber-400 rounded text-xs py-0.5 px-1.5 cursor-pointer outline-none shadow-2xs"
+      : "appearance-none text-center font-extrabold text-slate-800 bg-slate-200/80 group-hover:bg-slate-300 border border-slate-300 rounded text-xs py-0.5 px-1.5 cursor-pointer outline-none";
 
   const staticIndexBadgeClass = isVisualSubItem
-    ? "font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded text-xs py-0.5 px-1.5 ml-1 mt-0.5 z-10"
-    : "font-extrabold text-slate-800 bg-slate-200/80 border border-slate-300 rounded text-xs py-0.5 px-1.5 ml-1 mt-0.5 z-10";
+    ? "font-bold text-amber-900 bg-amber-100/90 border border-amber-300 rounded text-xs py-0.5 px-1.5 ml-1 mt-0.5 z-10 shadow-2xs"
+    : isExpandedParent
+      ? "font-extrabold text-amber-950 bg-amber-100 border border-amber-400 rounded text-xs py-0.5 px-1.5 ml-1 mt-0.5 z-10 shadow-2xs"
+      : "font-extrabold text-slate-800 bg-slate-200/80 border border-slate-300 rounded text-xs py-0.5 px-1.5 ml-1 mt-0.5 z-10";
 
   return (
     <div 
@@ -239,8 +254,16 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
       onClick={() => { if (onSelect) onSelect(); }} 
       onDoubleClick={(e) => { e.stopPropagation(); if (!isReadOnly) handleSafeEdit(item); }}
       onContextMenu={handleContextMenu}
-      className={`agenda-row-wrapper ${wrapperClass} ${borderLeftClass} flex flex-col border-b border-gray-200 last:border-0 min-w-full md:min-w-[700px] print:!min-w-0 print:!w-full print:!border-l-0 print:!border-b print:!border-gray-300 relative`}
+      className={`agenda-row-wrapper ${wrapperClass} ${borderLeftClass} flex flex-col border-b ${isVisualSubItem || isExpandedParent ? 'border-amber-200/70' : 'border-gray-200'} last:border-0 min-w-full md:min-w-[700px] print:!min-w-0 print:!w-full print:!border-l-0 print:!border-b print:!border-gray-300 relative`}
     >
+      {/* Durchgehende vertikale Baum-Leitlinie für Unterpunkte (verbindet 6. -> 6.1 -> 6.2 optisch miteinander) */}
+      {isVisualSubItem && !showTimeCategory && (
+        <div className="pointer-events-none absolute left-3 md:left-4 top-0 bottom-0 w-4 print:!hidden">
+          <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-amber-300/90" />
+          <div className="absolute left-0 top-5 w-2.5 h-[2px] bg-amber-300/90 rounded-r" />
+        </div>
+      )}
+
       {contextMenu && (
         <RowContextMenu 
           x={contextMenu.x} y={contextMenu.y} isExpanded={isExpanded} isReadOnly={isReadOnly} 
@@ -254,11 +277,10 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
         />
       )}
 
-      <div className={`p-3 grid grid-cols-[auto_1fr] ${isTemplateMode ? 'md:grid-cols-[80px_1fr_auto]' : 'md:grid-cols-[115px_1fr_auto]'} gap-2 md:gap-3 items-start print:!grid-cols-[50px_1fr_auto] print:!gap-2 print:!p-2`}>
+      <div className={`p-3 grid grid-cols-[auto_1fr] ${isTemplateMode ? 'md:grid-cols-[80px_1fr_auto]' : 'md:grid-cols-[120px_1fr_auto]'} gap-2 md:gap-3 items-start print:!grid-cols-[50px_1fr_auto] print:!gap-2 print:!p-2`}>
         
         {/* CHIRURGISCHER EINGRIFF: Die linke Gliederungsspalte. Wenn ToDo-Modus (showTimeCategory), dann sitzt hier das linksbündige Badge! */}
-        <div className={`relative flex items-start gap-1.5 pt-1 print:!pt-0 ${isVisualSubItem ? 'pl-3 md:pl-6' : ''}`}>
-          {isVisualSubItem && <div className="absolute left-1.5 top-2.5 w-3 h-3 border-l-2 border-b-2 border-indigo-300 rounded-bl print:!hidden" />}
+        <div className={`relative flex items-start gap-1.5 pt-1 print:!pt-0 ${isVisualSubItem ? 'pl-4 md:pl-6' : ''}`}>
           
           {showTimeCategory ? (
             timeCategory ? (
@@ -270,7 +292,7 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
             <>
               {onMove && index !== undefined && !isReadOnly && (!item.isSubItem || (positionOptions && positionOptions.length > 0)) ? (
                 <>
-                  <div className="relative inline-flex group print:!hidden mt-0.5">
+                  <div className="relative inline-flex group print:!hidden mt-0.5 z-10">
                     <div className={indexBadgeClass}>
                       {displayIndexStr !== undefined ? displayIndexStr : `${index + 1}.`}
                     </div>
@@ -307,7 +329,7 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
         </div>
 
         <div className="flex flex-col min-w-0 pr-1 md:pr-4 pt-1 print:!pr-2 print:!pt-0">
-          <div className={`flex flex-col flex-1 ${isVisualSubItem ? 'pl-3 sm:pl-4 border-l-[3px] border-indigo-300 ml-1' : ''}`}>
+          <div className={`flex flex-col flex-1 ${isVisualSubItem ? 'pl-2 sm:pl-4' : ''}`}>
             {parentContextTitle && <div className="text-[10px] font-bold text-gray-400 mb-0.5 flex items-center uppercase tracking-wider">🏷️ {parentContextTitle} <ChevronRight className="w-3 h-3 mx-1" /></div>}
             
             {editField === 'title' ? (
@@ -316,7 +338,11 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
               <div className="flex items-start justify-between w-full gap-2 group/title">
                 <div className="flex items-start gap-1.5 flex-1 min-w-0">
                   {subItemCount !== undefined && subItemCount > 0 && onToggleSubItems && ( 
-                    <button onClick={(e) => performScrollPreservedToggle(e, onToggleSubItems)} className={`mt-0 p-1 rounded-md transition-colors shrink-0 border shadow-sm print:!hidden ${isSubItemsCollapsed ? 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100' : 'bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-700'}`}> 
+                    <button
+                      onClick={(e) => performScrollPreservedToggle(e, onToggleSubItems)}
+                      className={`mt-0 p-1 rounded-md transition-colors shrink-0 border shadow-2xs print:!hidden ${isSubItemsCollapsed ? 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100' : 'bg-amber-500 border-amber-600 text-white hover:bg-amber-600'}`}
+                      title={isSubItemsCollapsed ? `${subItemCount} Unterpunkte aufklappen` : 'Unterpunkte einklappen'}
+                    > 
                       {isSubItemsCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />} 
                     </button> 
                   )}
@@ -326,7 +352,7 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
                     {item.type === 'INFO' && <span className="text-blue-600 mr-1.5" title="Kenntnisnahme (Reiner Wissenstransfer)">I:</span>}
 
                     {highlightText(item.title || 'Neuer Punkt', searchQuery)}
-                    {isSubItemsCollapsed && subItemCount! > 0 && <span className="ml-2 text-[10px] font-bold bg-blue-50 border border-blue-200 text-blue-600 px-1.5 py-0.5 rounded-full align-middle inline-block print:!hidden">{subItemCount} Unterpunkte</span>}
+                    {isSubItemsCollapsed && subItemCount! > 0 && <span className="ml-2 text-[10px] font-bold bg-amber-50 border border-amber-300 text-amber-800 px-1.5 py-0.5 rounded-full align-middle inline-block print:!hidden">{subItemCount} Unterpunkte</span>}
                     {hasValidationError && (
                       <span
                         onClick={(e) => { e.stopPropagation(); if (!isReadOnly) handleSafeEdit(item); }}

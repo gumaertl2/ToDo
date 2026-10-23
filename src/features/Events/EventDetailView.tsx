@@ -1,3 +1,4 @@
+// [2026-10-23] - UX-UPGRADE: Alle Sitzungs-Werkzeuge (pastEvents, isLibraryVisible, onToggleLibrary, onPrint, onSearchChange) an die konsolidierte EventAgendaList-Toolbar übergeben.
 // [2026-10-23] - ROLLOVER & BLOODLINE-HARDENING: 1) deduplicatedAgenda ignoriert TRASH-Elemente, damit gelöschte Punkte niemals aktive Zwillinge verdrängen. 2) Rekursives Mit-Kopieren aller Unterpunkte (auch mehrstufiger) unter ihren neuen Oberpunkt beim Sitzungsabschluss. 3) Volltextsuche berücksichtigt den gesamten Unterpunkt-Baum.
 // [2026-10-23] - UX-UPGRADE: validateBeforeClose markiert unzugewiesene Aufgaben automatisch rot (validationErrorIds), klappt deren Oberpunkte auf, scrollt direkt hin und ignoriert Unterpunkte von bereits zu 100% erledigten Oberpunkten.
 // [2026-10-19] - HARDENING: Rollover-Logik, Hierarchie-Indexierung, Blutlinien-Deduplizierung (!isHistorical) und 24h-Zeitformatierung (de-DE) gehärtet.
@@ -487,11 +488,6 @@ export const EventDetailView: React.FC = () => {
         isReadOnly={isReadOnly}
         invitedUserIds={invitedUserIds}
         timeString={timeString}
-        pastEvents={pastEvents}
-        isLibraryVisible={isLibraryVisible}
-        searchTerm={searchTerm} 
-        onSearchChange={setSearchTerm} 
-        onToggleLibrary={() => setIsLibraryVisible(!isLibraryVisible)}
         onEditEvent={() => setIsEditEventModalOpen(true)}
         onCheckAttendance={() => {
           setPresentList(currentEvent.actualAttendeeUserIds || []);
@@ -500,11 +496,10 @@ export const EventDetailView: React.FC = () => {
           setIsAttendanceConfirmed(currentEvent.attendanceConfirmed || false);
           setIsAttendanceModalOpen(true);
         }}
-        onPrint={handlePrint}
       />
 
-      {/* CHIRURGISCHER EINGRIFF: Auch hier wird das Flex-Korsett für Mobile entfernt und erst ab 'md:' reaktiviert. mt-4 sorgt für minimalen Abstand unterm Header auf dem Handy. */}
-      <div className="block mt-4 md:mt-0 md:flex-1 md:flex md:flex-row gap-6 md:overflow-hidden print:!overflow-visible print:!block print:!w-full print:!m-0">
+      {/* CHIRURGISCHER EINGRIFF: Auch hier wird das Flex-Korsett für Mobile entfernt und erst ab 'md:' reaktiviert. mt-2 sorgt für minimalen Abstand unterm Header auf dem Handy. */}
+      <div className="block mt-2 md:mt-0 md:flex-1 md:flex md:flex-row gap-4 md:overflow-hidden print:!overflow-visible print:!block print:!w-full print:!m-0">
         <EventAgendaList
           eventId={eventId || ''}
           currentEvent={currentEvent}
@@ -512,7 +507,12 @@ export const EventDetailView: React.FC = () => {
           isReadOnly={isReadOnly}
           tempDurations={tempDurations}
           searchQuery={searchTerm} 
+          onSearchChange={setSearchTerm}
           validationErrorIds={validationErrorIds}
+          pastEvents={pastEvents}
+          isLibraryVisible={isLibraryVisible}
+          onToggleLibrary={() => setIsLibraryVisible(!isLibraryVisible)}
+          onPrint={handlePrint}
           onAddNewItem={() => { setEditingItem(null); setIsModalOpen(true); }}
           onEditItem={i => { setEditingItem(i); setIsModalOpen(true); }}
           onOpenHistory={i => setHistoryTask(i)}

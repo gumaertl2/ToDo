@@ -1,3 +1,4 @@
+// [2026-10-23] - UX-UPGRADE: Komplette Werkzeugleiste in EventAgendaList konsolidiert: 1) Redundantes Einzel-'+' entfernt, 2) '++ Punkt' (Neuer Punkt am Ende) nach vorne zu den Erstell-Werkzeugen gezogen, 3) '+/-' durch klaren 'S | M | X' Detailstufen-Schalter ersetzt, 4) Sortier-Filter als reines Icon-Popover umgesetzt, 5) Reparatur, Drucken, Protokolle, Veröffentlichen & Vorlagen rechts in die Leiste integriert.
 // [2026-10-23] - RECHTE & PAPIERKORB-FIX: Exklusives Admin-Löschrecht (roleProfileId === 'pro-admin') für alle unerledigten (<100%), zugewiesenen oder vererbten Aufgaben durchgesetzt + Nutzung von moveToTrash (inkl. Unterpunkt-Kaskade & deletedBy-Stempel).
 // [2026-10-23] - UX-UPGRADE: Automatische Aufklapp-, Scroll- und Fokus-Automatik für unzugewiesene Aufgaben (validationErrorIds) integriert, rekursive Hierarchie-Auflösung für verschachtelte Unterpunkte ergänzt und Schutz gegen das Einrücken von Hauptpunkten mit eigenen Unterpunkten eingebaut.
 // [2026-10-19] - UX-FIX: Fokus-Steuerung beim Ein-/Ausklappen von Unterpunkten gehärtet. Wird ein Hauptpunkt eingeklappt, während der Fokus auf einem seiner Unterpunkte (z. B. 2.2) lag, wandert der Fokus automatisch auf den Hauptpunkt (2.).
@@ -13,9 +14,9 @@
 // --- START OF FILE ---
 // src/features/Events/EventAgendaList.tsx
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom'; 
+import { useLocation, useNavigate } from 'react-router-dom'; 
 import { useClubStore } from '../../store/useClubStore';
-import { Plus, Calendar, Filter, Edit2, Trash2, ArrowLeftToLine, ArrowRightToLine, CornerDownRight, PlusCircle } from 'lucide-react';
+import { Calendar, Filter, Edit2, Trash2, ArrowLeftToLine, ArrowRightToLine, CornerDownRight, PlusCircle, Search, X, Printer, Wrench, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { AgendaItemRow } from '../Shared/AgendaItemRow';
 import type { Event, AgendaItem, Task } from '../../core/types/models';
 
@@ -26,7 +27,12 @@ interface EventAgendaListProps {
   isReadOnly: boolean;
   tempDurations: Record<string, number>;
   searchQuery?: string;
+  onSearchChange?: (term: string) => void;
   validationErrorIds?: string[];
+  pastEvents?: Event[];
+  isLibraryVisible?: boolean;
+  onToggleLibrary?: () => void;
+  onPrint?: () => void;
   onAddNewItem: () => void;
   onEditItem: (item: AgendaItem) => void;
   onOpenHistory: (item: Task) => void;
@@ -37,28 +43,39 @@ interface EventAgendaListProps {
 }
 
 export const EventAgendaList: React.FC<EventAgendaListProps> = ({
-  eventId, currentEvent, eventAgenda, isReadOnly, tempDurations, searchQuery, validationErrorIds = [],
+  eventId, currentEvent, eventAgenda, isReadOnly, tempDurations, searchQuery = '', onSearchChange, validationErrorIds = [],
+  pastEvents = [], isLibraryVisible = false, onToggleLibrary, onPrint,
   onAddNewItem, onEditItem, onOpenHistory,
   onPlanNextMeeting, onFinishEvent, onDurationPreview, onClearPreview
 }) => {
-  const { moveAgendaItem, saveAgendaItem, moveToTrash, fetchEventAgenda, user, users, groups } = useClubStore();
+  const { moveAgendaItem, saveAgendaItem, moveToTrash, fetchEventAgenda, updateEvent, repairEventAgendaOrder, user, users, groups, roleProfiles } = useClubStore();
   const isAdmin = user?.roleProfileId === 'pro-admin';
+  const userRoleProfile = roleProfiles?.find(p => p.id === user?.roleProfileId);
+  const canManageEvents = !!userRoleProfile?.permissions?.manageEvents || !!(user?.permissions as any)?.manageEvents;
+
   const location = useLocation(); 
+  const navigate = useNavigate();
 
   const [sortBy, setSortBy] = useState<'default' | 'assignee' | 'dueDate'>('default');
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isRepairing, setIsRepairing] = useState(false);
   
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [collapsedParents, setCollapsedParents] = useState<Set<string>>(new Set());
-  const [cyclePhase, setCyclePhase] = useState(0); 
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
 
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const initialCollapseDone = useRef(false);
 
   useEffect(() => {
     setExpandedIds(new Set());
     setCollapsedParents(new Set());
-    setCyclePhase(0);
     setSelectedItemId(null);
+    setIsSearchExpanded(false);
+    setIsSortMenuOpen(false);
+    setIsHistoryOpen(false);
     initialCollapseDone.current = false;
   }, [eventId]);
 
@@ -321,44 +338,46 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
     });
   };
 
-  const handleToggleAllLevels = () => {
-    const hasSubItems = eventAgenda.some(i => i.isSubItem);
+  // Detailstufen-Logik (S = Nur Hauptpunkte, M = Haupt- & Unterpunkte, X = Alles inkl. Notizen)
+  const activeDetailLevel = useMemo((): 'S' | 'M' | 'X' => {
+    const allParentIds = finalSortedAgenda
+      .filter(i => i.isSubItem && i.parentItemId)
+      .map(i => i.parentItemId as string);
+    const uniqueParentIds = Array.from(new Set(allParentIds));
+    const itemsWithDesc = finalSortedAgenda.filter(i => !!i.description);
+
+    if (itemsWithDesc.length > 0 && itemsWithDesc.every(i => expandedIds.has(i.id)) && collapsedParents.size === 0) {
+      return 'X';
+    }
+    if (uniqueParentIds.length > 0 && uniqueParentIds.every(pid => collapsedParents.has(pid)) && expandedIds.size === 0) {
+      return 'S';
+    }
+    return 'M';
+  }, [finalSortedAgenda, collapsedParents, expandedIds]);
+
+  const handleSetDetailLevel = (level: 'S' | 'M' | 'X') => {
+    const allParents = new Set(
+      eventAgenda.filter(i => i.isSubItem && i.parentItemId).map(i => i.parentItemId as string)
+    );
     const itemsWithDesc = eventAgenda.filter(i => !!i.description);
-    const hasDescriptions = itemsWithDesc.length > 0;
 
-    if (!hasSubItems && !hasDescriptions) return; 
+    if (level === 'S') {
+      setCollapsedParents(allParents);
+      setExpandedIds(new Set());
+    } else if (level === 'M') {
+      setCollapsedParents(new Set());
+      setExpandedIds(new Set());
+    } else if (level === 'X') {
+      setCollapsedParents(new Set());
+      setExpandedIds(new Set(itemsWithDesc.map(i => i.id)));
+    }
+  };
 
-    if (hasSubItems && hasDescriptions) {
-      const nextPhase = (cyclePhase + 1) % 4;
-      setCyclePhase(nextPhase);
-
-      const allParents = new Set(
-        eventAgenda.filter(i => i.isSubItem && i.parentItemId).map(i => i.parentItemId as string)
-      );
-
-      if (nextPhase === 0) {
-        setCollapsedParents(allParents);
-        setExpandedIds(new Set());
-      } else if (nextPhase === 1 || nextPhase === 3) {
-        setCollapsedParents(new Set());
-        setExpandedIds(new Set());
-      } else if (nextPhase === 2) {
-        setCollapsedParents(new Set());
-        setExpandedIds(new Set(itemsWithDesc.map(i => i.id)));
-      }
-    } else if (hasSubItems && !hasDescriptions) {
-      const nextPhase = (cyclePhase + 1) % 2;
-      setCyclePhase(nextPhase);
-      const allParents = new Set(
-        eventAgenda.filter(i => i.isSubItem && i.parentItemId).map(i => i.parentItemId as string)
-      );
-      if (nextPhase === 0) setCollapsedParents(allParents);
-      else setCollapsedParents(new Set());
-    } else if (!hasSubItems && hasDescriptions) {
-      const nextPhase = (cyclePhase + 1) % 2;
-      setCyclePhase(nextPhase);
-      if (nextPhase === 0) setExpandedIds(new Set());
-      else setExpandedIds(new Set(itemsWithDesc.map(i => i.id)));
+  const handleRepair = async () => {
+    if (window.confirm('Möchtest du die Sortierung der Agenda-Punkte reparieren? Dies ordnet Unterpunkte wieder korrekt ihren Oberpunkten zu.')) {
+      setIsRepairing(true);
+      await repairEventAgendaOrder(eventId);
+      setIsRepairing(false);
     }
   };
 
@@ -486,76 +505,290 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
     }
   };
 
+  // Option C & A: Soll das Suchfeld aktuell als kompakte Lupe oder als Textfeld dargestellt werden?
+  const hasActiveSelection = !isReadOnly && !!selectedItem;
+  const showFullSearchInput = !hasActiveSelection || isSearchExpanded || !!searchQuery;
+
+  const sortLabels: Record<'default' | 'assignee' | 'dueDate', string> = {
+    default: 'Chronologisch (Standard)',
+    assignee: 'Nach Verantwortlichen',
+    dueDate: 'Nach Erledigungsdatum'
+  };
+
   // CHIRURGISCHER EINGRIFF: overflow-visible md:overflow-hidden erlaubt das Wachsen auf dem iPhone und behält den Split-Screen auf Desktop
   return (
     <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-visible md:overflow-hidden landscape:h-auto landscape:overflow-visible landscape:border-none landscape:shadow-none lg:!h-full lg:!overflow-hidden lg:!border lg:!border-gray-200 lg:!shadow-sm lg:!rounded-xl print:!shadow-none print:!border-none print:!rounded-none print:!overflow-visible print:!block">
-      <div className="p-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center flex-wrap gap-2 sticky top-0 z-30 landscape:bg-white landscape:py-2 lg:!bg-gray-50 lg:!py-4 print:!bg-transparent print:!border-b-2 print:!border-black print:!px-0 print:!pt-0">
+      <div className="px-2.5 py-1.5 border-b border-gray-200 bg-gray-50 flex justify-between items-center flex-wrap lg:flex-nowrap gap-1.5 sticky top-0 z-30 landscape:bg-white landscape:py-1.5 lg:!bg-gray-50 lg:!py-1.5 print:!bg-transparent print:!border-b-2 print:!border-black print:!px-0 print:!pt-0">
         
-        <div className="flex items-center">
-          <h2 className="text-lg font-bold text-gray-800 print:!text-black">Agenda & Protokoll</h2>
+        {/* LINKS: Volltextsuche + Neuer Punkt am Ende (++ Punkt) + Zeilen-Werkzeuge */}
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          {/* Nur beim Drucken sichtbare klassische Überschrift */}
+          <h2 className="hidden print:!block text-lg font-bold text-black">Agenda & Protokoll</h2>
+
+          {/* OPTION C & A: Smartes Volltext-Suchfeld */}
+          {onSearchChange && (
+            <div className="print:!hidden shrink-0">
+              {showFullSearchInput ? (
+                <div className={`relative transition-all duration-150 ${hasActiveSelection ? 'w-32 sm:w-40' : 'w-40 sm:w-52'}`}>
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => onSearchChange(e.target.value)}
+                    onFocus={() => setIsSearchExpanded(true)}
+                    onBlur={() => {
+                      if (!searchQuery) setIsSearchExpanded(false);
+                    }}
+                    placeholder="Suchen..."
+                    className="w-full h-7 pl-7 pr-6 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white shadow-2xs text-gray-800"
+                  />
+                  {(searchQuery || (hasActiveSelection && isSearchExpanded)) && (
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        onSearchChange('');
+                        setIsSearchExpanded(false);
+                        searchInputRef.current?.blur();
+                      }}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
+                      title="Suche schließen / zurücksetzen"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSearchExpanded(true);
+                    setTimeout(() => searchInputRef.current?.focus(), 20);
+                  }}
+                  className="w-7 h-7 flex items-center justify-center bg-white border border-gray-300 shadow-2xs rounded-md hover:bg-blue-50 hover:border-blue-300 text-gray-500 hover:text-blue-600 transition-colors"
+                  title="Volltextsuche öffnen"
+                >
+                  <Search className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ++ PUNKT: Neuen Punkt am Ende des Protokolls anfügen (nach vorne gezogen) */}
+          {!isReadOnly && (
+            <button
+              onClick={onAddNewItem}
+              className="h-7 px-2 flex items-center justify-center bg-blue-600 text-white hover:bg-blue-700 font-bold text-xs rounded-md shadow-2xs transition-colors shrink-0 whitespace-nowrap print:!hidden"
+              title="Neuen freien Punkt am Ende des Protokolls anfügen"
+            >
+              <span className="font-mono tracking-tighter mr-1 text-blue-100">++</span>
+              Punkt
+            </button>
+          )}
           
+          {/* Zeilen-Werkzeuge für den aktuell ausgewählten Punkt (ohne das redundante erste '+') */}
           {!isReadOnly && selectedItem && (
-            <div className="hidden md:flex items-center gap-1.5 border-l border-gray-300 pl-4 ml-4 animate-in fade-in slide-in-from-left-2">
-              <span className="text-xs font-bold text-blue-800 mr-2 bg-blue-50 px-2 py-1 rounded truncate max-w-[150px] shadow-sm">
+            <div className="hidden md:flex items-center gap-1 border-l border-gray-300 pl-2 ml-0.5 min-w-0 animate-in fade-in slide-in-from-left-1 print:!hidden">
+              <span className="text-xs font-bold text-blue-800 mr-0.5 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded truncate max-w-[110px] xl:max-w-[160px] shadow-2xs" title={selectedItem.title || 'Neuer Punkt'}>
                 {selectedItem.title || 'Neuer Punkt'}
               </span>
               
-              <button onClick={() => toggleItemExpanded(selectedItem.id)} className="w-8 h-8 flex items-center justify-center bg-white border border-gray-200 shadow-sm rounded hover:bg-gray-50 text-gray-700 transition-colors" title="Notizen ein/ausblenden">
-                <span className="font-mono font-bold leading-none">{expandedIds.has(selectedItem.id) ? '-' : '+'}</span>
-              </button>
-              
-              <div className="h-5 w-px bg-gray-300 mx-1"></div>
-              
-              <button onClick={() => handleToggleSubItem(selectedItem)} className="w-8 h-8 flex items-center justify-center bg-white border border-gray-200 shadow-sm rounded hover:bg-gray-50 text-blue-600 transition-colors" title={selectedItem.isSubItem ? "Zum Hauptpunkt machen" : "Zum Unterpunkt machen"}>
-                {selectedItem.isSubItem ? <ArrowLeftToLine className="w-4 h-4" /> : <ArrowRightToLine className="w-4 h-4" />}
+              <button onClick={() => handleToggleSubItem(selectedItem)} className="w-7 h-7 flex items-center justify-center bg-white border border-gray-200 shadow-2xs rounded-md hover:bg-gray-50 text-blue-600 transition-colors shrink-0" title={selectedItem.isSubItem ? "Zum Hauptpunkt machen (Ausrücken)" : "Zum Unterpunkt machen (Einrücken)"}>
+                {selectedItem.isSubItem ? <ArrowLeftToLine className="w-3.5 h-3.5" /> : <ArrowRightToLine className="w-3.5 h-3.5" />}
               </button>
               {!selectedItem.isSubItem && (
-                <button onClick={() => handleInsertBelow(selectedItem, 'subitem')} className="w-8 h-8 flex items-center justify-center bg-white border border-gray-200 shadow-sm rounded hover:bg-gray-50 text-blue-600 transition-colors" title="Neuen Unterpunkt hinzufügen">
-                  <CornerDownRight className="w-4 h-4" />
+                <button onClick={() => handleInsertBelow(selectedItem, 'subitem')} className="w-7 h-7 flex items-center justify-center bg-white border border-gray-200 shadow-2xs rounded-md hover:bg-gray-50 text-blue-600 transition-colors shrink-0" title="Neuen Unterpunkt darunter hinzufügen">
+                  <CornerDownRight className="w-3.5 h-3.5" />
                 </button>
               )}
-              <button onClick={() => handleInsertBelow(selectedItem, 'sibling')} className="w-8 h-8 flex items-center justify-center bg-white border border-gray-200 shadow-sm rounded hover:bg-gray-50 text-emerald-600 transition-colors" title="Neuen Punkt darunter einfügen">
-                <PlusCircle className="w-4 h-4" />
+              <button onClick={() => handleInsertBelow(selectedItem, 'sibling')} className="w-7 h-7 flex items-center justify-center bg-white border border-gray-200 shadow-2xs rounded-md hover:bg-gray-50 text-emerald-600 transition-colors shrink-0" title="Neuen Punkt direkt darunter einfügen">
+                <PlusCircle className="w-3.5 h-3.5" />
               </button>
               
-              <div className="h-5 w-px bg-gray-300 mx-1"></div>
+              <div className="h-4 w-px bg-gray-300 mx-0.5 shrink-0"></div>
               
-              <button onClick={() => onEditItem(selectedItem)} className="w-8 h-8 flex items-center justify-center bg-white border border-gray-200 shadow-sm rounded hover:bg-gray-50 text-blue-600 transition-colors" title="Details bearbeiten">
-                <Edit2 className="w-4 h-4" />
+              <button onClick={() => onEditItem(selectedItem)} className="w-7 h-7 flex items-center justify-center bg-white border border-gray-200 shadow-2xs rounded-md hover:bg-gray-50 text-blue-600 transition-colors shrink-0" title="Details im Formular bearbeiten">
+                <Edit2 className="w-3.5 h-3.5" />
               </button>
-              <button onClick={handleDeleteSelected} className="w-8 h-8 flex items-center justify-center bg-white border border-gray-200 shadow-sm rounded hover:bg-red-50 text-red-500 transition-colors" title="Punkt in den Papierkorb">
-                <Trash2 className="w-4 h-4" />
+              <button onClick={handleDeleteSelected} className="w-7 h-7 flex items-center justify-center bg-white border border-gray-200 shadow-2xs rounded-md hover:bg-red-50 text-red-500 transition-colors shrink-0" title="Punkt in den Papierkorb verschieben">
+                <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>
           )}
         </div>
 
-        <div className="flex items-center gap-2 print:!hidden print:!absolute print:!w-0 print:!h-0">
-          <div className="flex items-center bg-white border border-gray-300 rounded px-2 py-1 shadow-sm">
-            <Filter className="w-3.5 h-3.5 text-gray-500 mr-1.5" />
-            <select 
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className="text-xs bg-transparent text-gray-700 font-medium outline-none cursor-pointer"
+        {/* RECHTS: Detailstufe (S/M/X) + Filter-Popover + Reparatur & Drucken + Protokolle / Veröffentlichen / Vorlagen */}
+        <div className="flex items-center gap-1.5 shrink-0 print:!hidden print:!absolute print:!w-0 print:!h-0">
+          
+          {/* 1. S | M | X Detailstufen-Schalter */}
+          <div className="flex items-center bg-gray-200/80 p-0.5 rounded-md border border-gray-300/80" title="Ansichts-Tiefe: S = Nur Hauptpunkte | M = Inkl. Unterpunkte | X = Alles inkl. Notizen">
+            <button
+              type="button"
+              onClick={() => handleSetDetailLevel('S')}
+              className={`w-6 h-6 flex items-center justify-center rounded text-[11px] font-bold transition-all ${activeDetailLevel === 'S' ? 'bg-white text-blue-700 shadow-2xs' : 'text-gray-600 hover:text-gray-900'}`}
+              title="Stufe S: Kompakt (Nur Hauptpunkte)"
             >
-              <option value="default">Chronologisch (Standard)</option>
-              <option value="assignee">Nach Verantwortlichen</option>
-              <option value="dueDate">Nach Erledigungsdatum</option>
-            </select>
+              S
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetDetailLevel('M')}
+              className={`w-6 h-6 flex items-center justify-center rounded text-[11px] font-bold transition-all ${activeDetailLevel === 'M' ? 'bg-white text-blue-700 shadow-2xs' : 'text-gray-600 hover:text-gray-900'}`}
+              title="Stufe M: Standard (Haupt- & Unterpunkte)"
+            >
+              M
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetDetailLevel('X')}
+              className={`w-6 h-6 flex items-center justify-center rounded text-[11px] font-bold transition-all ${activeDetailLevel === 'X' ? 'bg-white text-blue-700 shadow-2xs' : 'text-gray-600 hover:text-gray-900'}`}
+              title="Stufe X: Vollansicht (Alle Punkte & alle Notizen aufgeklappt)"
+            >
+              X
+            </button>
           </div>
 
-          <button onClick={handleToggleAllLevels} className="flex items-center justify-center w-8 h-8 bg-gray-200 text-gray-700 font-mono font-bold text-lg rounded hover:bg-gray-300 transition-colors" title="Ebenen schrittweise ein-/ausblenden">+/-</button>
-          
-          {!isReadOnly && (
-            <button onClick={onAddNewItem} className="flex items-center px-3 py-1.5 bg-blue-100 text-blue-700 font-medium rounded hover:bg-blue-200 text-sm">
-              <Plus className="w-4 h-4 mr-1" />Freier Punkt
+          {/* 2. Sortier-Filter (Nur Icon, Auswahl öffnet bei Klick) */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
+              className={`w-7 h-7 flex items-center justify-center rounded-md border shadow-2xs transition-colors ${sortBy !== 'default' ? 'bg-blue-50 text-blue-600 border-blue-300' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}
+              title={`Sortierung: ${sortLabels[sortBy]} (Klicken zum Ändern)`}
+            >
+              <Filter className="w-3.5 h-3.5" />
+            </button>
+
+            {isSortMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setIsSortMenuOpen(false)}></div>
+                <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-gray-200 shadow-xl rounded-lg z-50 overflow-hidden py-1">
+                  <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                    Sortierung wählen
+                  </div>
+                  {(['default', 'assignee', 'dueDate'] as const).map(option => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => {
+                        setSortBy(option);
+                        setIsSortMenuOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-blue-50 transition-colors ${sortBy === option ? 'bg-blue-50/70 text-blue-700 font-bold' : 'text-gray-700'}`}
+                    >
+                      <span>{sortLabels[option]}</span>
+                      {sortBy === option && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* 3. Reparatur & Drucken */}
+          {!isReadOnly && canManageEvents && (
+            <button
+              type="button"
+              onClick={handleRepair}
+              disabled={isRepairing}
+              className={`w-7 h-7 rounded-md transition-colors border shadow-2xs flex justify-center items-center ${isRepairing ? 'text-gray-400 border-gray-200 bg-gray-50' : 'text-orange-500 hover:text-orange-600 hover:bg-orange-50 border-orange-300 bg-white'}`}
+              title="Agenda-Sortierung / Indizes reparieren"
+            >
+              <Wrench className={`w-3.5 h-3.5 ${isRepairing ? 'animate-spin' : ''}`} />
+            </button>
+          )}
+
+          {onPrint && (
+            <button
+              type="button"
+              onClick={onPrint}
+              className="w-7 h-7 bg-white text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors border border-gray-300 shadow-2xs flex justify-center items-center"
+              title="Drucken / PDF"
+            >
+              <Printer className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {/* 4. Protokolle, Agenda veröffentlichen / Sitzung starten & Vorlagen */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsHistoryOpen(!isHistoryOpen)}
+              className={`h-7 px-2.5 flex items-center justify-center text-xs rounded-md font-bold transition-colors shadow-2xs whitespace-nowrap ${isHistoryOpen ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}
+              title="Historie dieses Projekts / dieser Reihe"
+            >
+              📜 Protokolle
+            </button>
+
+            {isHistoryOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setIsHistoryOpen(false)}></div>
+                <div className="absolute right-0 top-full mt-1 w-64 bg-white border border-gray-200 shadow-xl rounded-lg transition-all z-50 overflow-hidden">
+                  <div className="p-2 bg-gray-50 border-b border-gray-200 font-bold text-xs text-gray-500 uppercase tracking-wider">
+                    Projekt-Historie
+                  </div>
+                  <div className="max-h-60 overflow-y-auto">
+                    {pastEvents.length === 0 && (
+                      <div className="p-4 text-xs text-gray-400 text-center">
+                        Keine früheren Sitzungen für dieses Projekt.
+                      </div>
+                    )}
+                    {pastEvents.map(e => (
+                      <button
+                        key={e.id}
+                        type="button"
+                        onClick={() => { setIsHistoryOpen(false); navigate(`/events/${e.id}`); }}
+                        className={`w-full text-left px-3 py-2 text-xs hover:bg-blue-50 border-b border-gray-100 last:border-0 ${e.id === eventId ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-700'}`}
+                      >
+                        <div className="truncate">{e.title}</div>
+                        <span className="text-[11px] text-gray-500">{new Date(e.plannedStartTime || 0).toLocaleDateString()}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {!isReadOnly && canManageEvents && currentEvent.status === 'PLANUNG' && !currentEvent.isPublished && (
+            <button
+              type="button"
+              onClick={() => updateEvent({ ...currentEvent, isPublished: true })}
+              className="h-7 px-2.5 text-xs bg-purple-600 text-white font-bold rounded-md hover:bg-purple-700 shadow-2xs flex justify-center items-center whitespace-nowrap"
+            >
+              Agenda veröffentlichen
+            </button>
+          )}
+
+          {!isReadOnly && canManageEvents && currentEvent.status === 'PLANUNG' && currentEvent.isPublished && (
+            <button
+              type="button"
+              onClick={() => updateEvent({ ...currentEvent, status: 'AKTIV', isPublished: true })}
+              className="h-7 px-2.5 text-xs bg-green-600 text-white font-bold rounded-md hover:bg-green-700 shadow-2xs flex justify-center items-center whitespace-nowrap"
+            >
+              Sitzung starten
+            </button>
+          )}
+
+          {!isReadOnly && canManageEvents && onToggleLibrary && (
+            <button
+              type="button"
+              onClick={onToggleLibrary}
+              className="h-7 px-2.5 flex items-center justify-center text-xs bg-white border border-gray-300 text-gray-700 font-medium rounded-md hover:bg-gray-50 transition-colors shadow-2xs whitespace-nowrap"
+            >
+              {isLibraryVisible ? (
+                <><ChevronRight className="w-3.5 h-3.5 mr-1" /> Fokus</>
+              ) : (
+                <><ChevronLeft className="w-3.5 h-3.5 mr-1" /> Vorlagen</>
+              )}
             </button>
           )}
         </div>
       </div>
       
-      {/* CHIRURGISCHER EINGRIFF: overflow-visible md:overflow-y-auto zwingt Mobile zum Durchreichen der Höhe, sperrt aber den Scroll-Container für Desktop ein */}
-      <div className="flex-1 overflow-visible md:overflow-y-auto landscape:overflow-visible bg-gray-50/10 p-4 lg:!overflow-y-auto print:!overflow-visible print:!p-0 print:!pt-4 print:!bg-white">
+      {/* CHIRURGISCHER EINGRIFF: overflow-visible md:overflow-y-auto zwingt Mobile zum Durchreichen der Höhe, sperrt aber den Scroll-Container für Desktop ein (mit schlankem p-1.5 statt p-4) */}
+      <div className="flex-1 overflow-visible md:overflow-y-auto landscape:overflow-visible bg-gray-50/10 p-1.5 md:p-2 lg:!overflow-y-auto print:!overflow-visible print:!p-0 print:!pt-4 print:!bg-white">
         {eventAgenda.length === 0 ? (
           <div className="text-center text-gray-400 py-10"><p>Die Agenda ist noch leer.</p></div>
         ) : (
