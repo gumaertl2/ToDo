@@ -1,5 +1,5 @@
 // src/features/Sudoku/components/SudokuWinScreen.tsx
-// [2026-10-23] - BUGFIX: Ungenutzte Variable 'gameMode' aus der Destrukturierung entfernt, um TS-Build-Error zu beheben.
+// [2026-10-23] - BUGFIX: 'gameMode' restlos aus dem SudokuWinScreenProps Interface entfernt, um TS2741 Fehler zu beheben.
 import React, { useState } from 'react';
 import { formatTime } from './SudokuLeaderboard';
 import type { EvaluationResult } from '../utils/scoreEvaluator';
@@ -9,7 +9,6 @@ interface SudokuWinScreenProps {
   penaltySeconds: number;
   errorCount: number;
   hintCount: number;
-  gameMode: 'ranked' | 'practice';
   hasUsedPause: boolean;
   evaluation: EvaluationResult;
   onClose: () => void;
