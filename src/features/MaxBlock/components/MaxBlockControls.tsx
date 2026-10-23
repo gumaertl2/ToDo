@@ -1,4 +1,5 @@
 // src/features/MaxBlock/components/MaxBlockControls.tsx
+// [2026-10-23] - BUGFIX: Tippfehler 'Date.Now' zu 'Date.now()' korrigiert, um Build-Fehler zu beheben.
 // [2026-10-23] - TWEAK: Zonenaufteilung auf 1/3 links (Rotation) und 2/3 rechts (Swipe/Doppelklick-Drop) angepasst.
 // [2026-10-23] - BUGFIX: Browser-Wischgesten (Zurück/Vorwärts) während des Spiels per touch-action und overscroll unterdrückt.
 // [2026-10-23] - FEATURE: Tastatursteuerung (Pfeiltasten/WASD + Leertaste) für Mac/Desktop hinzugefügt.
@@ -125,7 +126,7 @@ export const MaxBlockControls: React.FC<MaxBlockControlsProps> = ({
     if (disabled) return;
     const touch = e.changedTouches[0];
     const totalDeltaY = touch.clientY - touchState.current.startY;
-    const totalTime = Date.Now ? Date.now() - touchState.current.startTime : 0;
+    const totalTime = Date.now() - touchState.current.startTime;
 
     if (totalDeltaY > HARD_DROP_DISTANCE && totalTime < HARD_DROP_VELOCITY_TIME) {
       onHardDrop();
