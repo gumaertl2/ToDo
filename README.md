@@ -1,6 +1,7 @@
+// [2026-10-23] - MASTER SYNC: Leseschonende Offline-First- & Quota-Shield-Architektur (IndexedDB Multi-Tab Cache, Single-Listener Early-Return, Multi-Slice-Verteilung, Optimistic Updates, DataProcessor Sanitization), Vereins-Arcade (Sudoku & MaxBlock inkl. Rettungsring, Hall of Fame, Saison-Archivierung, öffentlicher /pause-Route und arcade_scores / settings Collections) sowie 1-Zeilen-Agenda-Toolbar & Warm-Amber Familien-Klammer dokumentiert.
 // [2026-10-23] - MASTER SYNC: Papierkorb- & Admin-Governance (Löschschutz für offene/zugewiesene/vererbte Aufgaben, Container-Kaskade im Papierkorb, Unantastbarkeit versiegelter Protokolle, Archiv-Rückführung durch Admin), rekursiver Unterbaum-Rollover beim Sitzungsabschluss, visuelle Abschluss-Validierung sowie Hierarchie-UX in TEIL 3, 4 und 8 synchronisiert.
 // [2026-10-18] - MASTER SYNC: Erinnerungs-Historie (Audit-Trail: reminderSentBy/reminderAction, Mitternachts-Cutoff vs. überfällige Aufgaben), persönliches Einsatz-Highlighting im Kalender/Spielplan/Dienste (🏓, 🚗, 📋, ☕) sowie Reminders-Submodule im Datei-Lexikon ergänzt.
-// [2026-10-18] - MASTER SYNC: Vollständiger Ist-Abgleich mit dem Quellcode (Tech-Stack Versionen, 4-Wege-Zuweisung, Magic-Link Auth, RBAC-Rechte inkl. viewJugend/viewAllReminders/manageMitglieder, alle 12 Collections, Jugend-Firewall und exaktes Datei-Lexikon in TEIL 8 aktualisiert).
+// [2026-10-18] - MASTER SYNC: Vollständiger Ist-Abgleich mit dem Quellcode (Tech-Stack Versionen, 4-Wege-Zuweisung, Magic-Link Auth, RBAC-Rechte inkl. viewJugend/viewAllReminders/manageMitglieder, alle Collections, Jugend-Firewall und exaktes Datei-Lexikon in TEIL 8 aktualisiert).
 // [2026-10-17] - MASTER SYNC: Ghost-Data Prävention, Explicit Empty Array Rule und dynamische Team-Referenzierung via SmartEntityPicker dokumentiert.
 // [2026-10-17] - MASTER SYNC: Firebase Early-Return-Pattern (Free-Tier Quoten-Schutz) und Listener-Cleanup beim Logout für Offline-First-Fähigkeit dokumentiert.
 // [2026-10-15] - MASTER SYNC: Backup & Restore System (JSON-Export, Wipe/Merge, 12:00-Uhr Reminder) dokumentiert.
@@ -63,20 +64,20 @@ Eine Serverless Progressive Web App (PWA), entwickelt mit React, TypeScript, Tai
 ## 🎨 UX & UI Design Guidelines (Strictly Follow!)
 
 * **No UI-Clutter:** Keep the interface clean. Avoid unnecessary borders or heavy backgrounds. Use subtle shades (`bg-gray-50`, `bg-blue-50/50`) to group elements visually.
-* **UI-Persistenz (Langzeitgedächtnis):** Filter- und Ansichtseinstellungen (z.B. ausgewählte Teams im Spielplan oder Dienstkategorien) MÜSSEN via `localStorage` gespeichert werden, damit der Nutzer seine Konfiguration nach einem App-Neustart nicht verliert.
+* **UI-Persistenz (Langzeitgedächtnis):** Filter- und Ansichtseinstellungen (z.B. ausgewählte Teams im Spielplan, Dienstkategorien oder eingeklappte Sitzungs-Header) MÜSSEN via `localStorage` gespeichert werden, damit der Nutzer seine Konfiguration nach einem App-Neustart nicht verliert.
 * **Responsive First:** The app is used on mobile phones (during events) and on Desktop (for protocolling). 
   * Hide heavy tables on mobile.
   * Use `lg:flex` and `landscape:` media queries to optimize screen real estate.
 * **Clear Interactive States:** Hover effects (`hover:bg-gray-100`), focus rings (`focus:ring-2`), and transition animations (`transition-all`, `animate-in`) are mandatory for buttons and interactive rows.
 * **Color Psychology:**
-  * **Blue/Indigo:** Standard actions, agenda items, primary info.
-  * **Emerald/Green:** Completed tasks, confirmations, success.
-  * **Amber/Orange:** Warnings, snoozed items, pending items.
-  * **Red/Rose:** Destructive actions (Trash), highly overdue items.
+  * **Blue/Indigo:** Active row focus (`isSelected`), standard actions, primary info.
+  * **Warm-Amber (`amber-500` / `amber-400`):** Container hierarchy ("Familien-Klammer" connecting parent items and their sub-items), warnings, snoozed items.
+  * **Emerald/Green:** Completed tasks, confirmations, personal assignment highlights (`isMyAssignment`), success.
+  * **Red/Rose:** Destructive actions (Trash), validation errors, highly overdue items.
 
 ---
 
-## 🚀 TEIL 2: Projektübersicht & Tech-Stack
+## 🚀 TEIL 2: Projektübersicht, Tech-Stack & Offline-First-Architektur
 
 PapaToDo verwandelt statische PDF-Protokolle in dynamische Kanban-Workflows. 
 
@@ -84,10 +85,33 @@ PapaToDo verwandelt statische PDF-Protokolle in dynamische Kanban-Workflows.
 * **Frontend:** React 19, TypeScript (~5.9), TailwindCSS 4.
 * **Build-Tool:** Vite 8 (inkl. `vite-plugin-pwa`).
 * **State-Management:** Zustand v5 (persistiert via LocalStorage).
-* **Backend (Serverless):** Firebase v12 (Firestore, Auth inkl. E-Mail/Passwort & Magic-Link).
+* **Backend (Serverless):** Firebase v12 (Firestore mit IndexedDB Multi-Tab-Persistenz, Auth inkl. E-Mail/Passwort, Auto-Account-Provisioning & Magic-Link).
 * **Hosting/Deployment:** Vercel (CI/CD Pipeline).
 * **Routing:** React Router v7 (`react-router-dom`).
-* **Icons & UI-Helfer:** Lucide React, `@dnd-kit/core`, `date-fns`, `fuse.js`, `ical.js`, `react-big-calendar`, `leaflet` / `react-leaflet`.
+* **Icons & UI-Helfer:** Lucide React, `@dnd-kit/core`, `date-fns`, `fuse.js`, `ical.js`, `react-big-calendar`, `leaflet` / `react-leaflet`, `sudoku-gen`.
+
+### ⚡ Leseschonende (Quota-Shield) & Offline-First Datenbank-Architektur
+Damit die App auch in Sporthallen ohne Empfang blitzschnell reagiert und die täglichen Lesekontingente des Firebase Spark/Free-Tiers maximal schont, arbeitet PapaToDo mit einer 5-stufigen Speicher- und Synchronisations-Architektur:
+
+1. **Nativer IndexedDB-Cache & Multi-Tab-Synchronisation (`src/services/firebase.ts`):**
+   * Firestore wird über `initializeFirestore` mit `localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })` initialisiert.
+   * Einmal geladene Dokumente bleiben lokal in der IndexedDB des Browsers gespeichert und werden über mehrere geöffnete Browser-Tabs hinweg synchronisiert.
+   * `experimentalForceLongPolling: true` verhindert WebSocket-Abbrüche und Safari-CORS-Timeouts in instabilen Mobilfunk- oder Hallen-WLAN-Netzen.
+2. **Strict Single-Listener & Early-Return Pattern (0-Read-Navigation):**
+   * Jeder Store-Slice prüft vor dem Öffnen eines Echtzeit-Listeners strikt `if (get().unsubXYZ) return;`.
+   * Beim Wechsel zwischen Ansichten (Dashboard ↔ Kalender ↔ Aufgaben ↔ Sitzung ↔ Arcade) werden **niemals** neue Firestore-Listener geöffnet. Unveränderte Dokumente liefert Firestore direkt aus der lokalen IndexedDB (**0 zusätzliche Dokument-Reads**).
+   * Auf einen `visibilitychange`-Refetch beim App-Wechsel auf dem Smartphone wird bewusst verzichtet, da die bestehenden `onSnapshot`-Kanäle Delta-Änderungen selbstständig und leseschonend pushen.
+   * Beim `logout()` (`createAuthSlice.ts`) werden sämtliche aktiven `unsub*`-Funktionen aufgerufen und ihre Pointer explizit auf `null` zurückgesetzt (inkl. `unsubArcade`), damit ein späterer Re-Login nicht durch das Early-Return blockiert wird.
+3. **Single-Stream Multi-Slice-Verteilung & Client-Side Filtering (Zero-Index-Overhead):**
+   * Statt mehrerer paralleler Abfragen oder fehleranfälliger Firestore-Composite-Indizes abonniert ein Slice jeweils die gesamte Collection in einem einzigen Stream und verteilt die Daten im Arbeitsspeicher:
+     * `createTaskSlice.ts` liest einmalig `agenda_items` und befüllt daraus simultan `allAgendaItems` und `tasks`.
+     * `createArcadeSlice.ts` abonniert einmalig `arcade_scores` und trennt die Dokumente clientseitig in `sudokuScores` und `maxBlockScores` (inkl. Filterung archivierter Saisons `!data.isArchived`).
+4. **Dual-Layer Caching (`localStorage`) & Optimistic UI Updates (`useClubStore.ts`):**
+   * Über die Zustand `persist`-Middleware (`club-management-storage`) werden essenzielle Stammdaten (`user`, `roleProfiles`, `isAuthenticated`, `teams`, `groups`, `sudokuScores`) zusätzlich im `localStorage` gehalten. Das ermöglicht einen **0 ms Cold-Start** ohne Ladebildschirm.
+   * Interaktive Mutationen (z.B. Aufstellungs-Klicks in `createMatchLineupSlice.ts`, Umfrage-Stimmen in `createEventPollSlice.ts` oder neue Highscores/Saison-Resets in `createArcadeSlice.ts`) aktualisieren **sofort optimistisch** den lokalen Zustand im Store, während `DataProcessor.saveDocument` oder `writeBatch` die Änderung asynchron (und offline-gepuffert) mit Firestore synchronisiert.
+5. **Schreib-Hygiene & Lazy Schema-Migration (`src/services/DataProcessor.ts`):**
+   * Jede Schreiboperation läuft durch `sanitizeForFirestore`: `undefined`-Felder werden vor dem Senden bereinigt (bei `partialUpdate: true` automatisch in `deleteField()` übersetzt, bei `partialUpdate: false` entfernt), während native Prototypen (`Timestamp`, `Date`) unangetastet bleiben.
+   * Beim Lesen hebt `processIncomingData` ältere Dokumente (`parseFloat(data.schemaVersion) < CURRENT_SCHEMA_VERSION`) automatisch im Speicher auf das aktuelle Schema-Level, ohne unnötige Datenbank-Writes auszulösen.
 
 ---
 
@@ -196,31 +220,51 @@ Gelöschte Elemente (Agenda-Punkte, Aufgaben) werden nicht sofort physisch aus d
 * **3. Unantastbarkeit abgeschlossener Protokolle:** Abgeschlossene Sitzungen (`status === 'ABGESCHLOSSEN'`) sind im Store gegen Lösch- und Sortier-Operationen gesperrt. Wird ein geklonter Punkt in einer *aktuellen* Sitzung gelöscht, bleibt sein historischer Vorfahre (`isHistorical: true`) im versiegelten Protokoll der Vorsitzung völlig unberührt.
 * **4. Papierkorb-Sichtbarkeit & Archiv-Rückführung:** Im Papierkorb (`viewCategory === 'trash'` bzw. `OrphanCleanupModal`) werden gelöschte Elemente niemals durch Personen-, Status- oder Zeitfilter verschluckt. Auch Elemente, die aus einem archivierten Projekt im Papierkorb gelandet sind, bleiben dort für den Admin sichtbar: Nur der Admin (`canDeleteAnyItem` / `pro-admin`) darf den Papierkorb endgültig leeren (`deleteTask`) oder entscheiden, ein Element per `restoreFromTrash` wieder zurück in das (aktive oder archivierte) Projekt zu schieben.
 
-### 9. Desktop Power-Features (Kontextmenü, Inline-Editoren & Hierarchie-UX)
-Für ein blitzschnelles Arbeiten am Desktop wurden Power-Features integriert:
-* **Native Rechtsklick-Kontextmenüs (`RowContextMenu`):** Erlaubt die Bearbeitung, Positionierung und das Einfügen neuer Zeilen ohne Mauswege.
-* **Inline-Editoren (`InlineEditors`):** Bearbeitung von Titeln, Beschreibungen und Dauer direkt in der Liste. Ein Klick auf eine andere Zeile (`onClickCapture`) schaltet den Fokus sofort um.
-* **Volltext- & Ähnlichkeitssuche:** Ein globales Suchfeld im Agenda-Header filtert den Baum in Echtzeit. Treffer in Titeln oder Notizen (`RichText`) werden visuell gelb (`<mark>`) hervorgehoben.
-* **Safe-Edit Fokus-Schutz:** Eine komplexe Interceptor-Logik verhindert den Fokus-Klau und Datenüberschreibungen zwischen Inline-Editoren (onBlur-Speichern) und Modal-Overlays.
-* **Selbstheilende Hierarchie-Sortierung & Visuelle Unterpunkte:** 
-  * Unterpunkte werden optisch klar als untergeordnete Ebene dargestellt (eingerückte Karte mit Indigo-Leitlinie und Nummerierungs-Badge wie `2.1`).
-  * Ein Oberpunkt, der bereits eigene Unterpunkte besitzt, ist gegen versehentliches Einrücken gesperrt.
+### 9. Desktop Power-Features (1-Zeilen-Toolbar, Inline-Editoren & Familien-Klammer)
+Für ein blitzschnelles, platzsparendes Arbeiten am Desktop wurden Power-Features integriert:
+* **Einklappbarer Sitzungs-Header (`EventDetailHeader`):** Zeigt Titel und Status ohne Umbruch in einer sauberen Kopfzeile; Metadaten, Beschreibung und Umfragen lassen sich per Klick ein- und ausklappen (`localStorage`-persistiert unter `papa_event_header_collapsed`).
+* **Konsolidierte 1-Zeilen-Agenda-Toolbar (`EventAgendaList`):**
+  * *Links:* Intelligente Suche (klappt bei ausgewählter Zeile und leerem Suchfeld automatisch zur kompakten Lupe `[🔍]` zusammen), `[++ Punkt]` (neuen freien Punkt am Ende anfügen) sowie die direkten Zeilen-Werkzeuge (Neuer Punkt darunter, Ein-/Ausrücken, Pfeile, Details, Löschen).
+  * *Rechts:* Detailstufen-Umschalter `[ S | M | X ]` (`S` = nur Hauptpunkte, `M` = inkl. Unterpunkte, `X` = alle Notizen/Kommentare aufgeklappt), `[ ▽ ]` Filter-Popover, `[ 🔧 ]` Hierarchie-Reparatur, `[ 🖨️ ]` Druckansicht, `[ 📜 Protokolle ]`, `[ Agenda veröffentlichen / Sitzung starten ]` und `[ < Vorlagen ]`.
+* **Native Rechtsklick-Kontextmenüs (`RowContextMenu`) & Inline-Editoren (`InlineEditors`):** Bearbeitung von Titeln, Beschreibungen und Dauer direkt in der Liste. Ein Klick auf eine andere Zeile (`onClickCapture`) schaltet den Fokus sofort um.
+* **Volltext- & Ähnlichkeitssuche:** Filtert den Baum in Echtzeit; Treffer in Titeln oder Notizen (`RichText`) werden visuell gelb (`<mark>`) hervorgehoben.
+* **Warm-Amber Familien-Klammer & Selbstheilende Hierarchie-Sortierung:**
+  * Oberpunkte mit Unterpunkten (`6.`) und ihre zugehörigen Unterpunkte (`6.1`, `6.2`) werden über eine durchgehende **Warm-Amber Familien-Klammer (`amber-500` / `amber-400`)** am linken Rand sowie eine durchgehende vertikale/horizontale Baum-Leitlinie visuell zu einer Einheit verbunden.
+  * **Kräftiges Blau (`blue-600`)** ist exklusiv für die aktuell fokussierte Zeile (`isSelected`) reserviert, sodass Fokus und Familien-Zugehörigkeit auf den ersten Blick unterscheidbar sind.
   * Beim Verschieben eines Oberpunkts per Pfeiltasten (`moveAgendaItem`) wandert dessen gesamter Unterbaum (`collectSubtreeIds`) geschlossen mit. Sollte eine Reihenfolge in der Datenbank jemals verschoben sein, heilt die Agenda-Ansicht die Hierarchie automatisch (`repairEventAgendaOrder`).
 
 ### 10. Mitglieder-Self-Service, Magic-Link & Stammdaten
-* **Passwortloser Login (Magic-Link) & E-Mail-Auth:** Nutzer können sich klassisch per E-Mail/Passwort oder passwortlos per E-Mail-Magic-Link (`sendMagicLink`) anmelden, sofern ihre E-Mail-Adresse in der Vorstands- (`users`) oder Mitgliederliste (`helpers`) hinterlegt ist.
+* **Passwortloser Login (Magic-Link), Auto-Provisioning & E-Mail-Auth:** Nutzer können sich per E-Mail/Passwort oder passwortlos per E-Mail-Magic-Link (`sendMagicLink`) anmelden. Lässt ein berechtigtes Mitglied beim ersten Login das Passwortfeld leer, legt die App den Firebase-Auth-Account im Hintergrund automatisch an (`isSilentProvisioning`) und versendet sofort den Link zum Festlegen des Passworts.
 * **"Mein Profil" (Self-Service):** Mitglieder können ihre Kontaktdaten (Telefon, Adresse, E-Mail der Eltern, etc.) sowie ihre DSGVO-Einstellungen jederzeit selbstständig in der App aktualisieren.
 * **Transparenz nach Art. 15 DSGVO:** Nutzer haben jederzeit vollen Lese-Zugriff auf die vom Verein über sie gespeicherten Stammdaten (Name, App-Alias, Mitgliedsstatus, Geburts- und Eintrittsdatum).
 * **Auto-Benachrichtigungen:** Ändert ein Mitglied seine Kontaktdaten im Self-Service, generiert das System automatisch eine In-App-Erinnerung (Aufgabe) an alle Vorstandsmitglieder (Recht: `manageMitglieder`), damit diese die Daten in externen Systemen (Kasse, DTTB) synchronisieren können.
 * **Login-Sicherheit:** Das primäre E-Mail-Feld ist im Self-Service gesperrt (Read-Only), um die unzerstörbare Brücke zum Firebase-Authentication-Login zu garantieren.
 
 ### 11. Backup & Restore (Sicherung & Staging)
-* **Vollständiger Export:** Mit einem Klick können Administratoren alle 12 Firestore-Collections (`users`, `helpers`, `groups`, `teams`, `role_profiles`, `events`, `calendar_events`, `calendar_subscriptions`, `match_lineups`, `event_poll_responses`, `agenda_items`, `team_pins`) als strukturierte `.json`-Datei exportieren (iCloud/Mac kompatibel).
+* **Vollständiger Export:** Mit einem Klick können Administratoren alle 12 operativen Kern-Collections (`users`, `helpers`, `groups`, `teams`, `role_profiles`, `events`, `calendar_events`, `calendar_subscriptions`, `match_lineups`, `event_poll_responses`, `agenda_items`, `team_pins`) als strukturierte `.json`-Datei exportieren (iCloud/Mac kompatibel).
 * **Täglicher Reminder:** Konfigurierbare 12:00-Uhr-Erinnerung (`receiveBackupReminder`) im Dashboard, falls am aktuellen Tag noch kein Backup auf dem Gerät durchgeführt wurde.
 * **Restore & Staging (2 Modi):** 
   * *Merge:* Aktualisiert und ergänzt bestehende Daten.
   * *Wipe & Replace (1:1 Spiegel):* Leert die Zieldatenbank komplett vor dem Import. Ideal, um eine Testumgebung (Staging) exakt mit den Produktivdaten zu überschreiben.
 * **Auth-Brücke:** Da Benutzerzuweisungen in PapaToDo bei der Anmeldung über die E-Mail-Adresse validiert werden, funktioniert ein Datenbank-Klon auch dann nahtlos, wenn die Testumgebung völlig neue Firebase-Auth-UIDs verwendet.
+
+### 12. Vereins-Arcade (Pausen-Spiele: Sudoku & MaxBlock)
+Ein integriertes, 100 % offline-fähiges Gamification-Modul für Sitzungspausen, Auswärtsfahrten und Wartezeiten in der Sporthalle:
+* **Versteckter Easter-Egg-Zugang & Öffentliche Gast-Route (`/pause`):**
+  * *Für eingeloggte Nutzer:* Doppelklick auf das „PapaToDo“-Logo in der Desktop-Sidebar oder Doppelklick auf das Home-Icon (`Start`) in der mobilen Navigation öffnet das Arcade-Overlay (`AppLayout.tsx`).
+  * *Für Gäste ohne Login:* Doppelklick auf das PapaToDo-Logo auf der Login-Maske (`LoginView.tsx`) öffnet die öffentliche Route `/pause` außerhalb des `AuthGuard`. Fehlende Firestore-Berechtigungen im Gast-Modus werden per Poka-Yoke sanft abgefangen, sodass Gäste jederzeit lokal und offline spielen können.
+  * *Live-Turniertitel:* Über das Firestore-Dokument `settings/arcade` (`sudokuTitle`) können Admins den Turniernamen in der Kopfzeile live für alle Teilnehmer anpassen.
+* **Spiel 1: Vereins-Sudoku (`src/features/Sudoku/`):**
+  * **Modi & Schwierigkeiten:** `🏆 Rangliste` (Ranked) und `🧘 Üben` (Practice mit optional einblendbarer Stoppuhr) in 4 Stufen (`Leicht`, `Mittel`, `Schwer`, `Experte`).
+  * **Komfort- & Strategie-Werkzeuge:** Notiz-Modus (Bleistift mit automatischem Löschen gesetzter Notizen im selben Block/Zeile/Spalte), Gelb-Highlighting gleicher Zahlen, zuschaltbare Zeilen- und Spalten-Memos für noch fehlende Ziffern, Tipp-Funktion (`💡 +60s` Strafzeit), Konflikt-Erkennung (`❌ +60s` Strafzeit) und Anti-Cheat-Pause (Pausieren im Ranked-Modus markiert den Lauf als *„Außer Wertung“*).
+  * **Rettungsring (`handleRescue` / `rescueGame`):** Prüft das gesamte Brett auf falsch gesetzte Zahlen, zeigt vorab die genaue Fehleranzahl und Zeitstrafe (`+60s` pro Fehler) in einer Sicherheitsabfrage an und wischt alle falschen Einträge auf Wunsch vom Brett.
+  * **Tischtennis-Gamification & Nachträgliches Speichern (`scoreEvaluator.ts`):** Berechnet nach dem Sieg den aktuellen Rang sowie den hypothetischen Rang ohne Strafsekunden (`rawRank` – *„Was-wäre-wenn“-Motivator*) mit Tischtennis-Sprüchen (*„Matchball verwandelt!“*, *„Kantenball ins Glück“*). Schafft ein Spieler im entspannten Übungsmodus ohne Pause eine Top-10-Zeit, bietet die App das **nachträgliche Eintragen in die Hall of Fame (`handleRetroactiveSave`)** an.
+* **Spiel 2: MaxBlock (`src/features/MaxBlock/`):**
+  * **Block-Puzzle-Engine:** Klassisches 10×20 Spielfeld mit fairem 7-Bag-Zufallsgenerator, 3er-Stein-Vorschau, sanft abgestimmter Fallgeschwindigkeits-Kurve und optionalem Ghost-Piece im Übungsmodus.
+  * **4 Schwierigkeitsstufen inkl. Experten-Stepper:** `Leicht` (Start-Level 1), `Mittel` (Level 5), `Schwer` (Level 10) und `Experte` (frei wählbares Start-Level zwischen 11 und 50 per `+/-` Stepper, gespeichert im `localStorage`).
+  * **Dual-Steuerung (Touch & Desktop):** Maßgeschneiderte Zwei-Zonen-Touch-Steuerung für Smartphones (linke Bildschirmhälfte tippen = Stein drehen; rechte Hälfte wischen = horizontal bewegen / Soft-Drop; Doppeltipp rechts = augenblicklicher Hard-Drop) sowie volle Tastatur-Steuerung (Pfeiltasten/WASD + Leertaste).
+  * **Rekorde & Hall of Fame (`maxBlockScoreEvaluator.ts`):** Speichert den persönlichen Bestwert lokal (`maxBlock_local_pb`) und bewertet Spiele nach `Score > Level > Lines` mit dynamischen Vereinstiteln (*„Vereinsmeister“*, *„Podest-Stürmer“*, *„Kreisliga-Legende“*, *„Block-Experte“*).
+* **Saison-Archivierung (`createArcadeSlice.ts`):** Admins können die Hall of Fame für einzelne Sudoku-Schwierigkeitsgrade oder für MaxBlock zurücksetzen (`resetSudokuSeason` / `resetMaxBlockSeason`). Dabei werden alte Rekorde **nicht gelöscht**, sondern per `writeBatch` mit `isArchived: true`, `archivedAt` und `archivedBy` revisionssicher für spätere Saisons archiviert.
 
 ---
 
@@ -236,7 +280,7 @@ Jeder Nutzer in PapaToDo bekommt ein Rollen-Profil (`RoleProfile` in Collection 
   * `manageEvents`: Darf Sitzungen anlegen, Agenden veröffentlichen und Protokolle schließen.
   * `manageCalendarSetup`: Darf externe ICS-Feeds abonnieren, bearbeiten und Kalender-Strukturen verwalten.
   * `viewTeamPins` / `manageTeamPins`: Steuert Lese- und Schreibzugriff auf den Wettkampf-Tresor.
-  * `deleteAnyItem`: Darf beliebige Punkte/Aufgaben endgültig löschen bzw. den Papierkorb bereinigen (ergänzt durch den exklusiven Admin-Schutz `roleProfileId === 'pro-admin'` beim Löschen offener/zugewiesener/vererbter Aufgaben).
+  * `deleteAnyItem`: Darf beliebige Punkte/Aufgaben endgültig löschen bzw. den Papierkorb bereinigen (ergänzt durch den exklusiven Admin-Schutz `roleProfileId === 'pro-admin'` beim Löschen offener/zugewiesene/vererbter Aufgaben).
 * **DSGVO- & Datenschutz-Firewalls:**
   * `viewEhrungen`: Darf das Jubiläums-Radar einsehen UND fungiert (zusammen mit `manageMitglieder`) als strikte Store-Firewall für die Einsicht in Daten passiver Mitglieder (`memberStatus === 'PASSIV'`).
   * `viewJugend`: Strikte Store-Firewall (zusammen mit `manageMitglieder`) für den DSGVO-konformen Schutz von Minderjährigen-Daten (`memberStatus === 'JUGEND'`).
@@ -261,7 +305,7 @@ Um Verwirrung in der UI und Logik zu vermeiden, gibt es eine strikte Trennung:
 * **`baseItemId` (Die Aufgaben-Blutlinie):** Der "Ghost-Scanner"-Schlüssel für Aufgaben und Routinen. Wird eine Aufgabe ins nächste Meeting geklont oder durch eine Routine neu erschaffen (Respawn), erhält sie zwingend eine neue `id`. Die `baseItemId` bleibt jedoch immer identisch zum Ursprungs-Item. Daran erkennen Zähler (wie `completedCount`) und Filter, dass es sich um dieselbe Aufgabenfamilie handelt, selbst wenn der Titel mutiert.
 * **`isSubItem` & `parentItemId` (Die Container-Hierarchie):** Steuert die Verschachtelung. Ein Unterpunkt hat `isSubItem: true`. Seine `parentItemId` MUSS zwingend auf die *aktuelle* `id` des Oberpunkts zeigen (niemals auf dessen `baseItemId`!). Beim Klonen eines Containers erhalten Boss und Kinder neue IDs, und die `parentItemId` der Kinder wird vom Code sofort auf die neue ID des geklonten Bosses aktualisiert. Waisenkinder sind streng verboten.
 
-**Alle 12 Firestore-Collections:**
+**Alle Firestore-Collections (12 operative Kern-Collections + Arcade-Collections):**
 1. `users`: App-Benutzerprofile (Vorstand/Funktionäre), verknüpft über E-Mail / Firebase Auth-ID.
 2. `helpers`: Vereinsmitglieder & Helfer inkl. DSGVO-Status, Kontaktdaten, `memberStatus` und `teamIds`.
 3. `groups`: Ämter & Arbeitsgruppen (z.B. "Festausschuss").
@@ -274,6 +318,8 @@ Um Verwirrung in der UI und Logik zu vermeiden, gibt es eine strikte Trennung:
 10. `team_pins`: Der Passwort- & Wettkampf-Tresor.
 11. `match_lineups`: Schatten-Akten (Overrides) für dynamische Aufstellungs-Matrizen, Verfügbarkeiten und Fahrtdienste an Spieltagen.
 12. `event_poll_responses`: Schatten-Akten für Abstimmungen und RSVP (WhatsApp-Style).
+13. `arcade_scores` *(Vereins-Arcade)*: Highscore- und Hall-of-Fame-Einträge (`ArcadeScore`) für `SUDOKU` (Zeit, Schwierigkeitsgrad) und `MAXBLOCK` (Score, Level, Lines) inkl. Saison-Archivierungs-Flags (`isArchived`, `archivedAt`, `archivedBy`).
+14. `settings` *(Dokument `arcade`)*: Globale Live-Konfiguration für den Turniertitel (`sudokuTitle`) der Pausen-Spiele.
 
 ---
 
@@ -303,19 +349,19 @@ Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der e
 
 ### Core, Config, Services & State Management (Store)
 * `src/config/dsgvoConfig.ts`: Zentrale Konfiguration und Versionierung der DSGVO-Einwilligungstexte.
-* `src/core/types/models.ts`: SSOT TypeScript Typendefinitionen für alle Datenmodelle.
+* `src/core/types/models.ts`: SSOT TypeScript Typendefinitionen für alle Datenmodelle (inkl. `ArcadeScore`).
 * `src/core/types/shared.ts`: Gemeinsame Result-Wrapper-Typen (`Result<T>`, `AsyncResult<T>`).
-* `src/services/firebase.ts`: Firebase & Firestore Initialisierung.
+* `src/services/firebase.ts`: Firebase & Firestore Initialisierung inkl. IndexedDB Multi-Tab-Offline-Cache (`persistentLocalCache`, `persistentMultipleTabManager`) und `experimentalForceLongPolling`.
 * `src/services/DataProcessor.ts`: Zentrale Firestore Lese-/Schreib-Engine inkl. `sanitizeForFirestore` und abwärtskompatibler Lazy-Schema-Migration.
-* `src/services/backupService.ts`: Backup & Restore Logik für alle 12 Collections (JSON-Export, Chunked Batch-Writes, 12:00-Uhr-Reminder).
-* `src/store/useClubStore.ts`: Der Master-Zustand (Zustand Store mit `persist`-Middleware).
+* `src/services/backupService.ts`: Backup & Restore Logik für alle 12 operativen Kern-Collections (JSON-Export, Chunked Batch-Writes, 12:00-Uhr-Reminder).
+* `src/store/useClubStore.ts`: Der Master-Zustand (Zustand Store mit `persist`-Middleware für 0ms Cold-Start).
 * `src/store/slices/*`: Modulare Store-Fragmente:
-  * `createArcadeSlice.ts`, `createAuthSlice.ts`, `createCalendarSlice.ts`, `createEventPollSlice.ts` (Abstimmungslogik), `createEventSlice.ts`, `createMatchLineupSlice.ts` (Schatten-Akten & Optimistic Updates), `createTaskSlice.ts`, `createTeamPinsSlice.ts`, `createTeamSlice.ts`, `createTemplateSlice.ts`, `createUserSlice.ts`.
+  * `createArcadeSlice.ts` (Single-Listener für `arcade_scores`, Sudoku- & MaxBlock-Highscores, Saison-Archivierung), `createAuthSlice.ts` (Auth, Magic-Link, Silent-Account-Provisioning & vollständiger Listener-Cleanup beim Logout), `createCalendarSlice.ts`, `createEventPollSlice.ts` (Abstimmungslogik), `createEventSlice.ts`, `createMatchLineupSlice.ts` (Schatten-Akten & Optimistic Updates), `createTaskSlice.ts`, `createTeamPinsSlice.ts`, `createTeamSlice.ts`, `createTemplateSlice.ts`, `createUserSlice.ts`.
 
 ### Features & UI Components
 
 * **Admin (`src/features/Admin/`):** `OrphanCleanupModal.tsx` (Papierkorb-Verwaltung und Soft-Delete Cleanup).
-* **Auth & Datenschutz (`src/features/Auth/`):** `AuthGuard.tsx`, `LoginView.tsx`, `DsgvoClickwrap.tsx`.
+* **Auth & Datenschutz (`src/features/Auth/`):** `AuthGuard.tsx`, `LoginView.tsx` (inkl. Logo-Doppelklick-Easter-Egg auf `/pause`), `DsgvoClickwrap.tsx`.
 * **Dashboard (`src/features/Dashboard/`):** 
   * `DashboardView.tsx`, `WelcomeDashboard.tsx` (Rollenbasierte Kommandozentrale).
   * `hooks/useDashboardData.ts` (Daten-Beschaffer).
@@ -325,12 +371,19 @@ Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der e
   * `components/CalendarListView.tsx` (Listen- & Agenda-Ansicht für Termine/Dienste inkl. Admin-Cockpit, SmartLogistics, Einsatz-Highlighting und LocalStorage-Persistenz).
   * `components/CalendarAgendaView.tsx` (Eigenständiger Spielplan im Karten-Look mit Sticky-Toolbar-Filter, Einsatz-Highlighting und LocalStorage-Persistenz).
   * `components/EventPollWidget.tsx` (Live-Abstimmungen in Terminen und Agenden).
-  * `EventDetailView.tsx`, `ProtocolEditor.tsx`, `EventsView.tsx`, `EventAgendaList.tsx`, `EventDetailHeader.tsx`, `EventTemplateSidebar.tsx`, `PublicCalendarEmbed.tsx`.
+  * `EventDetailView.tsx`, `ProtocolEditor.tsx`, `EventsView.tsx`, `EventAgendaList.tsx` (1-Zeilen-Toolbar mit Smart-Search & `[ S | M | X ]`), `EventDetailHeader.tsx` (einklappbarer Header), `EventTemplateSidebar.tsx`, `PublicCalendarEmbed.tsx`.
   * Modals in `src/features/Events/`: `CalendarBulkEventModal.tsx`, `CalendarEventFormModal.tsx`, `CalendarExportModal.tsx`, `CalendarIcsDetailModal.tsx`, `CalendarSubscriptionModal.tsx`, `EventFormModal.tsx`.
   * `hooks/useCalendarEvents.ts` (Daten-Mapping & persönliche Einsatz-Erkennung `isMyAssignment` / `myAssignmentIcons`).
 * **Help (`src/features/Help/`):** `HelpView.tsx` (Integriertes Handbuch mit Leitfaden zu Filtern, Rollen und Admin-Cockpit).
-* **Layout (`src/features/Layout/`):** `AppLayout.tsx` (Responsive Shell, Navigation, Live-Badges & Backup-Reminder-Banner).
-* **Minigames / Arcade (`src/features/MaxBlock/`, `src/features/Sudoku/`):** Easter-Egg Pausen-Spiele (`components/`, `hooks/`, `utils/`).
+* **Layout (`src/features/Layout/`):** `AppLayout.tsx` (Responsive Shell, Navigation, Live-Badges, Backup-Reminder-Banner & Arcade-Easter-Egg-Trigger).
+* **Vereins-Arcade: Sudoku (`src/features/Sudoku/`):**
+  * `components/`: `SudokuView.tsx` (Lobby, Modus-/Schwierigkeitswahl, Live-Turniertitel & Spiel-Container), `SudokuBoard.tsx` (9×9 Grid inkl. Zeilen-/Spalten-Memos), `SudokuControls.tsx` (Ziffernblock, Notiz-Toggle, Tipp & Rettungsring), `SudokuLeaderboard.tsx` (Top-10 Hall of Fame, Sticky-Rank & Admin-Saison-Reset), `SudokuWinScreen.tsx` (Sieger-Overlay & nachträgliches Speichern).
+  * `hooks/useSudokuGame.ts` (Sudoku-Engine, Konfliktprüfung, Notiz-Bereinigung, Timer/Strafzeiten & `rescueGame`).
+  * `utils/scoreEvaluator.ts` (Tischtennis-Gamification, Medaillen- & `rawRank`-Berechnung).
+* **Vereins-Arcade: MaxBlock (`src/features/MaxBlock/`):**
+  * `components/`: `MaxBlockView.tsx` (Lobby, Schwierigkeitswahl inkl. Experten-Level-Stepper, Game-Over-Auswertung & Score-Speicherung), `MaxBlockBoard.tsx` (10×20 Spielfeld & Ghost-Piece), `MaxBlockControls.tsx` (Zwei-Zonen-Touch- & Tastatur-Steuerung), `MaxBlockLeaderboard.tsx` (Top-10 Hall of Fame nach `Score > Level > Lines`).
+  * `hooks/useMaxBlockGame.ts` (Block-Engine, Kollisionsprüfung, Rotation mit Wall-Kick, Hard-Drop & Level-Kurve).
+  * `utils/`: `blocks.ts` (Tetromino-Formen, Farben & 7-Bag-Generator), `maxBlockScoreEvaluator.ts` (Rang-, Medaillen- & Titel-Auswertung).
 * **Reminders (`src/features/Reminders/`):** 
   * `RemindersView.tsx` (WhatsApp-Kommandozentrale, Meine/Verein-Filter & Historien-Modus).
   * `components/ReminderCard.tsx` (Karten-UI inkl. Snooze, Audit-Banner & „Wieder aktivieren“).
@@ -351,7 +404,7 @@ Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der e
   * Modals in `src/features/Users/`: `CsvImportModal.tsx`, `GroupFormModal.tsx`, `HelperFormModal.tsx`, `MatchLineupMatrixModal.tsx` (Base & Override Planungs-Matrix für Captains), `TeamFormModal.tsx`, `UserFormModal.tsx`, `UserSuccessionModal.tsx`.
   * `hooks/useMatchLineupMatrix.ts`.
 * **Shared UI & Utils (`src/features/Shared/`):** 
-  * `ItemFormModal.tsx`, `AgendaItemRow.tsx`, `ItemCard.tsx`, `RichText.tsx`.
+  * `ItemFormModal.tsx`, `AgendaItemRow.tsx` (inkl. Warm-Amber Familien-Klammer & Baum-Leitlinie), `ItemCard.tsx`, `RichText.tsx`.
   * `components/SmartEntityPicker.tsx`.
   * `components/AgendaItem/`: `InlineEditors.tsx`, `ItemMetadata.tsx`, `ItemStatusSection.tsx`, `RowContextMenu.tsx`.
   * `components/ItemForm/`: `AssigneePicker.tsx`, `ReminderSettings.tsx`, `RoutineSettings.tsx`.
@@ -367,5 +420,5 @@ Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der e
 4.  `npm run dev` startet den lokalen Vite-Server (oder per Doppelklick auf `node starten.command`).
 5.  `npm run build` führt einen strengen TypeScript Check (`tsc -b`) aus und baut das Production-Bundle.
 
-*Stand: 23.10.2026 - Protokoll: Vollständiger Code- & Governance-Sync (Papierkorb-Kaskade, Admin-Löschschutz für Aufgaben, Archiv-Rückführung, Rekursiver Container-Rollover, Abschluss-Validierung & aktuelles Datei-Lexikon)*
+*Stand: 23.10.2026 - Protokoll: Vollständiger Code-, Offline-Architektur- & Arcade-Sync (IndexedDB Multi-Tab Cache, Single-Listener Quota-Shield, Vereins-Arcade Sudoku & MaxBlock, 1-Zeilen-Agenda-Toolbar, Warm-Amber Familien-Klammer & aktuelles Datei-Lexikon)*
 // --- END OF FILE ---
