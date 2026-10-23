@@ -1,5 +1,5 @@
 // src/features/Sudoku/hooks/useSudokuGame.ts
-// [2026-10-22] - FIX: ReturnType anstelle von NodeJS.Timeout zur Behebung von Build-Fehlern.
+// [2026-10-22] - FEATURE: Flag hasUsedPause integriert, damit pausierte Spiele aus der Wertung fliegen.
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getSudoku } from 'sudoku-gen';
 
@@ -29,6 +29,7 @@ export const useSudokuGame = () => {
   const [isNotesMode, setIsNotesMode] = useState<boolean>(false);
   const [selectedCell, setSelectedCell] = useState<number | null>(null);
   const [activeHighlightNumber, setActiveHighlightNumber] = useState<number | null>(null);
+  const [hasUsedPause, setHasUsedPause] = useState<boolean>(false);
 
   const [activeRowMemos, setActiveRowMemos] = useState<number[]>([]);
   const [activeColMemos, setActiveColMemos] = useState<number[]>([]);
@@ -102,13 +103,18 @@ export const useSudokuGame = () => {
     setPenaltySeconds(0);
     setErrorCount(0);
     setHintCount(0);
+    setHasUsedPause(false);
     setSelectedCell(null);
     setActiveHighlightNumber(null);
     setActiveRowMemos([]);
     setActiveColMemos([]);
   }, []);
 
-  const pauseGame = () => setStatus('paused');
+  const pauseGame = () => {
+    setStatus('paused');
+    setHasUsedPause(true);
+  };
+  
   const resumeGame = () => setStatus('playing');
 
   const checkWinCondition = (currentBoard: CellData[]) => {
@@ -288,6 +294,7 @@ export const useSudokuGame = () => {
     activeColMemos,
     missingInRows,
     missingInCols,
+    hasUsedPause,
     startGame,
     pauseGame,
     resumeGame,

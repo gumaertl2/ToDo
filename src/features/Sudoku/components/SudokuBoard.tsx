@@ -1,5 +1,5 @@
 // src/features/Sudoku/components/SudokuBoard.tsx
-// [2026-10-22] - FEATURE: Originales SudokuBoard UI mit Papier-Style Rand-Notizen für Zeilen und Spalten wiederhergestellt.
+// [2026-10-22] - UI-FIX: Spalten-Memos durch Flex-Platzhalter exakt über dem Spielfeld ausgerichtet.
 import React from 'react';
 import type { CellData } from '../hooks/useSudokuGame';
 
@@ -35,35 +35,44 @@ export const SudokuBoard: React.FC<SudokuBoardProps> = ({
   const selectedBlock = selectedCell !== null ? Math.floor(selectedRow! / 3) * 3 + Math.floor(selectedCol! / 3) : null;
 
   return (
-    <div className="w-full max-w-lg mx-auto flex flex-col items-center select-none">
-      {/* OBERER RAND: Spalten-Memos (0 bis 8) - Exakt über dem Spielfeld ausgerichtet */}
-      <div className="w-full grid grid-cols-9 gap-px pl-12 pr-12 sm:pr-12 mb-1">
-        {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((colIndex) => {
-          const isActive = activeColMemos.includes(colIndex);
-          const missing = missingInCols[colIndex] || [];
-          return (
-            <div
-              key={`col-memo-${colIndex}`}
-              onClick={() => onToggleColMemo(colIndex)}
-              className={`h-12 flex flex-col items-center justify-center rounded cursor-pointer transition-colors text-[9px] font-mono leading-tight ${
-                isActive ? 'bg-amber-100 border border-amber-300 text-amber-800' : 'bg-slate-200/60 hover:bg-slate-200 text-slate-400'
-              }`}
-              title="Klick für Spalten-Notiz"
-            >
-              {isActive ? (
-                <div className="grid grid-cols-3 gap-0.5 text-[8px] font-bold">
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
-                    <span key={n} className={missing.includes(n) ? 'opacity-100 text-amber-900' : 'opacity-20 text-slate-400'}>
-                      {n}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <span className="text-xs">↕ {colIndex + 1}</span>
-              )}
-            </div>
-          );
-        })}
+    <div className="w-full max-w-lg mx-auto flex flex-col items-center">
+      {/* OBERER RAND: Spalten-Memos (0 bis 8) - Exakt ausgerichtet durch Platzhalter */}
+      <div className="w-full flex items-stretch gap-1 mb-1">
+        {/* Unsichtbarer Platzhalter für die linke Zeilen-Memo-Spalte */}
+        <div className="w-12 flex-shrink-0"></div>
+        
+        {/* Spalten-Memos über dem flex-1 Grid */}
+        <div className="flex-1 grid grid-cols-9 gap-px">
+          {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((colIndex) => {
+            const isActive = activeColMemos.includes(colIndex);
+            const missing = missingInCols[colIndex] || [];
+            return (
+              <div
+                key={`col-memo-${colIndex}`}
+                onClick={() => onToggleColMemo(colIndex)}
+                className={`h-12 flex flex-col items-center justify-center rounded cursor-pointer transition-colors text-[9px] font-mono leading-tight ${
+                  isActive ? 'bg-amber-100 border border-amber-300 text-amber-800' : 'bg-slate-200/60 hover:bg-slate-200 text-slate-400'
+                }`}
+                title="Klick für Spalten-Notiz"
+              >
+                {isActive ? (
+                  <div className="grid grid-cols-3 gap-0.5 text-[8px] font-bold">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+                      <span key={n} className={missing.includes(n) ? 'opacity-100 text-amber-900' : 'opacity-20 text-slate-400'}>
+                        {n}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-xs">↕ {colIndex + 1}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Unsichtbarer Platzhalter für die rechte Zeilen-Memo-Spalte (nur sm+) */}
+        <div className="w-12 flex-shrink-0 hidden sm:block"></div>
       </div>
 
       {/* MITTLERER BEREICH: Linker Rand + 9x9 Gitter + Rechter Rand */}
@@ -153,7 +162,7 @@ export const SudokuBoard: React.FC<SudokuBoardProps> = ({
           })}
         </div>
 
-        {/* RECHTER RAND: Zeilen-Memos (für größere Displays) */}
+        {/* RECHTER RAND: Zeilen-Memos (alternativ für größere Displays) */}
         <div className="w-12 hidden sm:flex flex-col gap-px">
           {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((rowIndex) => {
             const isActive = activeRowMemos.includes(rowIndex);

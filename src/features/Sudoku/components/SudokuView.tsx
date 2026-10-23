@@ -1,5 +1,5 @@
 // src/features/Sudoku/components/SudokuView.tsx
-// [2026-10-22] - FIX & FEATURE: Session-Titel, Admin-Bleistift, Zurück-Button und korrekte Admin-Rolle wiederhergestellt.
+// [2026-10-22] - FIX & FEATURE: iOS Safe-Area im Header, Pausen-Ausschluss für Rangliste inkl. visueller Warnung.
 import React, { useState, useEffect } from 'react';
 import { useSudokuGame } from '../hooks/useSudokuGame';
 import type { SudokuDifficulty } from '../hooks/useSudokuGame';
@@ -41,7 +41,7 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
 
   useEffect(() => {
     if (game.status === 'won') {
-      if (user && gameMode === 'ranked') {
+      if (user && gameMode === 'ranked' && !game.hasUsedPause) {
         saveSudokuScore({
           userId: user.id,
           userName: user.name,
@@ -52,10 +52,10 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
       }
       const t = setTimeout(() => {
         setView('lobby');
-      }, 3000);
+      }, 4000); 
       return () => clearTimeout(t);
     }
-  }, [game.status, game.timer, game.difficulty, user, saveSudokuScore, gameMode]);
+  }, [game.status, game.timer, game.difficulty, user, saveSudokuScore, gameMode, game.hasUsedPause]);
 
   const handleStartGame = () => {
     setShowPracticeTime(false);
@@ -77,7 +77,7 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
     <div className="fixed inset-0 z-[9999] flex flex-col bg-slate-100 overflow-hidden isolate">
       {view === 'lobby' && (
         <div className="flex-1 flex flex-col overflow-y-auto pb-10">
-          <div className="bg-slate-900 text-white p-4 flex items-center justify-between shadow-md sticky top-0 z-20">
+          <div className="bg-slate-900 text-white p-4 pt-[max(env(safe-area-inset-top),1rem)] flex items-center justify-between shadow-md sticky top-0 z-20">
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-bold tracking-wide">☕ {sessionTitle}</h1>
               {isAdmin && !isEditingTitle && (
@@ -95,7 +95,7 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
               className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold rounded-lg transition-colors shadow-sm"
             >
               <span>◀</span>
-              <span>Zurück zur App</span>
+              <span className="hidden sm:inline">Zurück zur App</span>
             </button>
           </div>
 
@@ -196,7 +196,7 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
 
       {view === 'playing' && (
         <div className="flex-1 flex flex-col">
-          <div className="bg-slate-900 text-white p-3 sm:p-4 flex items-center justify-between shadow-md">
+          <div className="bg-slate-900 text-white p-3 sm:p-4 pt-[max(env(safe-area-inset-top),1rem)] flex items-center justify-between shadow-md">
             <button 
               onClick={() => {
                 if(window.confirm('Spiel wirklich abbrechen?')) setView('lobby');
@@ -209,10 +209,15 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
             <div className="flex flex-col items-center">
               {gameMode === 'ranked' ? (
                 <>
-                  <div className="font-mono text-xl font-bold tracking-wider text-emerald-400">
+                  <div className={`font-mono text-xl font-bold tracking-wider ${game.hasUsedPause ? 'text-amber-400' : 'text-emerald-400'}`}>
                     {formatTime(game.timer)}
                   </div>
-                  {game.penaltySeconds > 0 && (
+                  {game.hasUsedPause && (
+                    <div className="text-[9px] font-bold text-amber-500 uppercase tracking-widest mt-0.5">
+                      Außer Wertung
+                    </div>
+                  )}
+                  {!game.hasUsedPause && game.penaltySeconds > 0 && (
                     <div className="text-[10px] font-mono text-red-400 font-semibold flex gap-2">
                       {game.errorCount > 0 && <span>❌ {game.errorCount} Fehler (+{game.errorCount * 60}s)</span>}
                       {game.hintCount > 0 && <span>💡 {game.hintCount} Tipps (+{game.hintCount * 60}s)</span>}
@@ -255,7 +260,15 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
                 <span className="text-6xl mb-4">🏆</span>
                 <h2 className="text-3xl font-black mb-2">Geschafft!</h2>
                 <p className="text-xl font-medium mb-1">Deine Zeit: {formatTime(game.timer)}</p>
-                {gameMode === 'ranked' && game.penaltySeconds > 0 && (
+                
+                {gameMode === 'ranked' && game.hasUsedPause && (
+                  <div className="bg-white/20 p-2 rounded mt-2 mb-2 text-center max-w-xs">
+                    <p className="text-sm font-bold text-yellow-200 mb-1">⚠️ Außer Wertung</p>
+                    <p className="text-xs opacity-90">Du hast pausiert, daher wird die Zeit nicht im Leaderboard gespeichert.</p>
+                  </div>
+                )}
+
+                {gameMode === 'ranked' && !game.hasUsedPause && game.penaltySeconds > 0 && (
                   <p className="text-xs opacity-90 mb-2">
                     Inklusive Strafzeit ({game.errorCount} Fehler, {game.hintCount} Tipps)
                   </p>
@@ -263,13 +276,19 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
                 {gameMode === 'practice' && (
                   <p className="text-xs opacity-90 mb-2">Im Übungsmodus ohne Ranglisten-Eintrag 🧘</p>
                 )}
-                <p className="text-sm opacity-90">Zurück zur Übersicht...</p>
+                <p className="text-sm opacity-90 mt-4">Zurück zur Übersicht...</p>
               </div>
             )}
 
             {game.status === 'paused' && (
               <div className="absolute inset-0 z-10 bg-slate-100/95 backdrop-blur-sm flex flex-col items-center justify-center p-4">
                 <h2 className="text-2xl font-bold text-slate-800 mb-6">Spiel pausiert</h2>
+                {gameMode === 'ranked' && (
+                  <div className="bg-amber-100 text-amber-900 p-4 rounded-xl max-w-sm text-center mb-8 border border-amber-300">
+                    <p className="font-bold mb-1">Hinweis für die Rangliste:</p>
+                    <p className="text-sm">Pausierte Spiele werden nicht im Leaderboard gespeichert, um Schummeln zu verhindern.</p>
+                  </div>
+                )}
                 <button 
                   onClick={game.resumeGame}
                   className="px-8 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-md text-lg active:scale-95 transition-transform"
