@@ -1,4 +1,5 @@
 // src/core/types/models.ts
+// [2026-10-23] - SCHEMA: 'ArcadeScore' für MAXBLOCK angepasst (Umbenennung von TETRIS, neue Felder level/lines, difficulty/timeInSeconds optional gemacht).
 // [2026-10-23] - SCHEMA: 'expert' zur Schwierigkeitsstufe im 'ArcadeScore' hinzugefügt, um Build-Fehler zu beheben.
 // [2026-10-22] - FEATURE: 'ArcadeScore' Modell für das Vereins-Sudoku (inkl. Hall of Fame Archivierung) hinzugefügt.
 // [2026-10-18] - SCHEMA: Optionale Audit-Felder 'reminderSentBy' und 'reminderAction' ('SENT' | 'DISMISSED') für nachvollziehbaren Erinnerungs-Verlauf ergänzt.
@@ -42,7 +43,6 @@
 // 2026-05-13 15:45 - CHIRURGISCHER EINGRIFF: Soft-Delete (TRASH) implementiert und ungenutzte Rechte entfernt
 // 2026-05-14 14:20 - FEATURE: hasAppAccess & lastAppLoginAt beim Helper für die Gast-Zugangs-Prüfung ergänzt
 // 2026-05-14 15:00 - FEATURE: assignedHelperIds beim TeamPin für die Sichtbarkeit von Gästen hinzugefügt
-// src/core/types/models.ts
 
 export interface BaseDocument {
   id: string;
@@ -379,12 +379,14 @@ export interface EventPollResponse extends BaseDocument {
 }
 
 export interface ArcadeScore extends BaseDocument {
-  game: 'SUDOKU' | 'TETRIS';
-  difficulty: 'easy' | 'medium' | 'hard' | 'expert';
+  game: 'SUDOKU' | 'MAXBLOCK';
+  difficulty?: 'easy' | 'medium' | 'hard' | 'expert';
   userId: string;
   userName: string;
-  timeInSeconds: number;
+  timeInSeconds?: number;
   score?: number;
+  level?: number;
+  lines?: number;
   date: number;
   isArchived?: boolean; 
   archivedAt?: number;

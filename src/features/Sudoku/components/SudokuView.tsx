@@ -1,4 +1,5 @@
 // src/features/Sudoku/components/SudokuView.tsx
+// [2026-10-23] - FEATURE: "Papa-Blocks" in "MaxBlock" umbenannt und aktiviert. Absprung in die MaxBlockView eingebaut.
 // [2026-10-23] - BUGFIX & FEATURE: Fehlenden 'fetchSudokuScores'-Trigger hinzugefügt und 'sessionTitle' von localStorage auf globale Firebase-Live-Synchronisation (settings/arcade) umgestellt.
 import React, { useState, useEffect } from 'react';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
@@ -12,6 +13,7 @@ import { SudokuWinScreen } from './SudokuWinScreen';
 import { evaluateScore } from '../utils/scoreEvaluator';
 import type { EvaluationResult } from '../utils/scoreEvaluator';
 import { useClubStore } from '../../../store/useClubStore';
+import { MaxBlockView } from '../../MaxBlock/components/MaxBlockView'; // NEU: Import der MaxBlockView
 
 interface SudokuViewProps {
   onClose: () => void;
@@ -19,6 +21,7 @@ interface SudokuViewProps {
 
 export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
   const [view, setView] = useState<'lobby' | 'playing'>('lobby');
+  const [showMaxBlock, setShowMaxBlock] = useState(false); // NEU: State für den Wechsel zu MaxBlock
   const [lobbyDifficulty, setLobbyDifficulty] = useState<SudokuDifficulty>('medium');
   const [gameMode, setGameMode] = useState<'ranked' | 'practice'>('ranked');
   const [showPracticeTime, setShowPracticeTime] = useState<boolean>(false);
@@ -131,6 +134,11 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
     }
   };
 
+  // NEU: Wenn MaxBlock aktiv ist, rendern wir die View direkt als Overlay
+  if (showMaxBlock) {
+    return <MaxBlockView onClose={() => setShowMaxBlock(false)} />;
+  }
+
   const filteredScores = sudokuScores.filter((s: any) => s.difficulty === lobbyDifficulty);
 
   return (
@@ -185,11 +193,15 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
 
           <div className="p-4 flex-1">
             <div className="flex gap-2 mb-6">
-              <button className="flex-1 py-3 px-4 bg-blue-600 text-white font-bold rounded-xl shadow-md">
+              <button className="flex-1 py-3 px-4 bg-blue-600 text-white font-bold rounded-xl shadow-md cursor-default">
                 📝 Sudoku
               </button>
-              <button disabled className="flex-1 py-3 px-4 bg-slate-200 text-slate-400 font-bold rounded-xl opacity-70 cursor-not-allowed">
-                🧱 Papa-Blocks<br/><span className="text-[10px] font-normal">(Coming Soon)</span>
+              {/* NEU: Der MaxBlock Button ist jetzt voll funktionsfähig */}
+              <button 
+                onClick={() => setShowMaxBlock(true)}
+                className="flex-1 py-3 px-4 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl shadow-md transition-colors active:scale-95"
+              >
+                🧱 MaxBlock
               </button>
             </div>
 
@@ -254,6 +266,7 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
         </div>
       )}
 
+      {/* Die Playing-Ansicht für Sudoku bleibt hier unberührt */}
       {view === 'playing' && (
         <div className="flex-1 flex flex-col">
           <div className="bg-slate-900 text-white p-3 sm:p-4 pt-[max(env(safe-area-inset-top),1rem)] flex items-center justify-between shadow-md">
