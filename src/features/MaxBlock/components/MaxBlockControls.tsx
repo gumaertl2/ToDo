@@ -1,7 +1,6 @@
 // src/features/MaxBlock/components/MaxBlockControls.tsx
-// [2026-10-23] - BUGFIX: Doppelte Rotation durch Entfernen des redundanten onMouseDown behoben & Double-Tap (Doppelklick links) für Hard Drop ergänzt.
+// [2026-10-23] - BUGFIX: Linke Seite rein für Rotation (1x Klick), rechte Seite für Swipe und Hard Drop (Doppelklick) angepasst.
 // [2026-10-23] - FEATURE: Tastatursteuerung (Pfeiltasten/WASD + Leertaste) für Mac/Desktop hinzugefügt.
-// [2026-10-23] - FEATURE: Zwei-Daumen Touch-Overlay für MaxBlock (Links: Rotation / Double-Tap Hard Drop, Rechts: Relative Swipe-Steuerung).
 import React, { useRef, useEffect } from 'react';
 
 interface MaxBlockControlsProps {
@@ -27,7 +26,7 @@ export const MaxBlockControls: React.FC<MaxBlockControlsProps> = ({
     startTime: 0
   });
 
-  const lastTapRef = useRef<number>(0);
+  const lastRightTapRef = useRef<number>(0);
 
   // Schwellenwerte für das "Einrasten" (Pixel pro Spalte/Reihe)
   const SWIPE_X_THRESHOLD = 35;
@@ -88,6 +87,17 @@ export const MaxBlockControls: React.FC<MaxBlockControlsProps> = ({
       lastY: touch.clientY,
       startTime: Date.now()
     };
+
+    // Prüfe auf Double-Tap / Doppelklick rechts für Hard Drop
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300; // ms
+
+    if (now - lastRightTapRef.current < DOUBLE_TAP_DELAY) {
+      onHardDrop();
+      lastRightTapRef.current = 0;
+    } else {
+      lastRightTapRef.current = now;
+    }
   };
 
   const handleRightTouchMove = (e: React.TouchEvent) => {
@@ -128,30 +138,18 @@ export const MaxBlockControls: React.FC<MaxBlockControlsProps> = ({
   const handleLeftTouchStart = (e: React.TouchEvent) => {
     if (disabled) return;
     e.preventDefault(); 
-
-    const now = Date.now();
-    const DOUBLE_TAP_DELAY = 300; // ms
-
-    if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
-      // Doppelklick / Double-Tap links -> Hard Drop!
-      onHardDrop();
-      lastTapRef.current = 0;
-    } else {
-      // Einfacher Tap links -> Rotation
-      onRotate();
-      lastTapRef.current = now;
-    }
+    onRotate(); // Links ist jetzt absolut verlässlich nur für den einfachen Dreh-Befehl da
   };
 
   return (
     <div className="absolute inset-0 z-20 flex touch-none">
-      {/* Linke Daumen-Zone: Rotation (1x) & Hard Drop (Doppelklick / Double-Tap) */}
+      {/* Linke Daumen-Zone: Sauberer einfacher Klick zur Rotation */}
       <div 
         className="w-1/2 h-full"
         onTouchStart={handleLeftTouchStart}
       />
       
-      {/* Rechte Daumen-Zone: Für Bewegung und Drops */}
+      {/* Rechte Daumen-Zone: Für Bewegung, Wisch-Drops und Hard Drop per Doppelklick */}
       <div 
         className="w-1/2 h-full"
         onTouchStart={handleRightTouchStart}
