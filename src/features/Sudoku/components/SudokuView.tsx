@@ -1,7 +1,7 @@
 // src/features/Sudoku/components/SudokuView.tsx
+// [2026-10-23] - BUGFIX: Gast-Abstürze behoben. Firebase onSnapshot und fetch-Calls fangen nun Permission-Errors (fehlender Login) sanft ab, ohne die React-Komponente zu crashen.
 // [2026-10-23] - TWEAK: Layout-Paddings und Abstände extrem komprimiert, um Platz auf mobilen Geräten zu sparen.
 // [2026-10-23] - FEATURE: "Papa-Blocks" in "MaxBlock" umbenannt und aktiviert. Absprung in die MaxBlockView eingebaut.
-// [2026-10-23] - BUGFIX & FEATURE: Fehlenden 'fetchSudokuScores'-Trigger hinzugefügt und 'sessionTitle' von localStorage auf globale Firebase-Live-Synchronisation (settings/arcade) umgestellt.
 import React, { useState, useEffect } from 'react';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from '../../../services/firebase';
@@ -33,7 +33,7 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
   
   const clubStore = useClubStore() as any;
   const user = clubStore.user;
-  const roleProfiles = clubStore.roleProfiles;
+  const roleProfiles = clubStore.roleProfiles || [];
   const sudokuScores = clubStore.sudokuScores || [];
   const saveSudokuScore = clubStore.saveSudokuScore || (async () => {});
   const resetSudokuSeason = clubStore.resetSudokuSeason || (async () => {});
@@ -41,7 +41,7 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
 
   const game = useSudokuGame();
 
-  const userRoleProfile = roleProfiles?.find((p: any) => p.id === user?.roleProfileId);
+  const userRoleProfile = roleProfiles.find((p: any) => p.id === user?.roleProfileId);
   const isAdmin = 
     user?.rolle === 'ADMIN' || 
     user?.rolle === 'admin' || 
@@ -50,20 +50,28 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
     false;
 
   useEffect(() => {
-    fetchSudokuScores();
+    // Fehler bei fehlenden Rechten (Gast-Modus) sanft ignorieren
+    fetchSudokuScores().catch((e: any) => console.warn("Score Fetch Info:", e.message));
   }, [fetchSudokuScores]);
 
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'settings', 'arcade'), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.sudokuTitle) {
-          setSessionTitle(data.sudokuTitle);
-          setTempTitle(prev => (prev === '' ? data.sudokuTitle : prev));
+    try {
+      const unsub = onSnapshot(doc(db, 'settings', 'arcade'), (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.sudokuTitle) {
+            setSessionTitle(data.sudokuTitle);
+            setTempTitle(prev => (prev === '' ? data.sudokuTitle : prev));
+          }
         }
-      }
-    });
-    return () => unsub();
+      }, (error) => {
+        // POKA-YOKE: Verhindert den Absturz, wenn ein Gast keine Leserechte für 'settings' hat
+        console.warn("Lobby Sync Info (Gast-Modus):", error.message);
+      });
+      return () => unsub();
+    } catch (e) {
+      console.warn(e);
+    }
   }, []);
 
   useEffect(() => {
@@ -86,7 +94,7 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
             timeInSeconds: game.timer,
             difficulty: game.difficulty,
             date: Date.now()
-          });
+          }).catch((e: any) => console.warn(e));
         }
       }
     } else {
@@ -104,7 +112,7 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
         timeInSeconds: game.timer,
         difficulty: game.difficulty,
         date: Date.now()
-      });
+      }).catch((e: any) => console.warn(e));
     }
   };
 

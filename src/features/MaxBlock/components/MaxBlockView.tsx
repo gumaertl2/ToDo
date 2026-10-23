@@ -1,4 +1,5 @@
 // src/features/MaxBlock/components/MaxBlockView.tsx
+// [2026-10-23] - BUGFIX: Gast-Abstürze behoben. Firebase onSnapshot und fetch-Calls fangen nun Permission-Errors (fehlender Login) sanft ab, ohne die React-Komponente zu crashen.
 // [2026-10-23] - FEATURE: MaxBlock-Schwierigkeitsgrade an Sudoku angeglichen (Leicht, Mittel, Schwer, Experte) inkl. individuellem Start-Level-Stepper für Experten.
 // [2026-10-23] - REFACTOR: Lobby 100% identisch zu Sudoku gemacht (extrem platzsparend, Navbar Sync, Leaderboard Design).
 // [2026-10-23] - BUGFIX: Viewport-Höhe auf h-[100dvh] optimiert.
@@ -57,19 +58,27 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
 
   useEffect(() => {
     if (fetchMaxBlockScores) {
-      fetchMaxBlockScores();
+      // Fehler bei fehlenden Rechten (Gast-Modus) sanft ignorieren
+      fetchMaxBlockScores().catch((e: any) => console.warn("Score Fetch Info:", e.message));
     }
   }, [fetchMaxBlockScores]);
 
   // Sync des Headers mit Sudoku (gleicher Titel für die Arcade-Session)
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'settings', 'arcade'), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.sudokuTitle) setSessionTitle(data.sudokuTitle);
-      }
-    });
-    return () => unsub();
+    try {
+      const unsub = onSnapshot(doc(db, 'settings', 'arcade'), (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.sudokuTitle) setSessionTitle(data.sudokuTitle);
+        }
+      }, (error) => {
+        // POKA-YOKE: Verhindert den Absturz, wenn ein Gast keine Leserechte hat
+        console.warn("Lobby Sync Info (Gast-Modus):", error.message);
+      });
+      return () => unsub();
+    } catch (e) {
+      console.warn(e);
+    }
   }, []);
 
   useEffect(() => {
@@ -92,7 +101,7 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
 
   const handleExpertLevelChange = (delta: number) => {
     setExpertLevel(prev => {
-      // Experten-Modus beginnt ab Level 11, Deckelung bei 50 (für absolute Profis)
+      // Experten-Modus beginnt ab Level 11, Deckelung bei 50
       const next = Math.max(11, Math.min(50, prev + delta));
       try {
         localStorage.setItem(LOCAL_EXPERT_KEY, next.toString());
@@ -116,15 +125,19 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
   const handleSaveScore = async () => {
     if (user && game.score > 0 && !hasSaved && saveMaxBlockScore && gameMode === 'ranked') {
       setHasSaved(true);
-      await saveMaxBlockScore({
-        userId: user.id,
-        userName: user.name,
-        score: game.score,
-        lines: game.lines,
-        level: game.level,
-        date: Date.now()
-      });
-      setView('lobby');
+      try {
+        await saveMaxBlockScore({
+          userId: user.id,
+          userName: user.name,
+          score: game.score,
+          lines: game.lines,
+          level: game.level,
+          date: Date.now()
+        });
+        setView('lobby');
+      } catch (e: any) {
+        console.warn("Speichern fehlgeschlagen (Gast-Modus):", e.message);
+      }
     }
   };
 

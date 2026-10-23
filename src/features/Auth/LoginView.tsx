@@ -1,5 +1,5 @@
 // src/features/Auth/LoginView.tsx
-// [2026-10-23] - FEATURE: Öffentlicher 'Nur Spielen'-Button für den Offline-Arcade-Modus ergänzt (verlinkt auf /pause).
+// [2026-10-23] - UX-TWEAK: Arcade-Zugang als Easter-Egg auf das Logo verschoben (Doppelklick), um die Login-Maske sauber zu halten.
 // [2026-10-18] - UX-SIMPLIFICATION: Registrieren- und Passwort-vergessen-Ballast entfernt. Lässt ein Nutzer beim Klick auf "Mit E-Mail anmelden" das Passwort-Feld leer, legt die App ihn (falls neu) automatisch im Hintergrund an und sendet sofort den Link zum Passwort-Erstellen.
 // [2026-10-06] - BUGFIX: Auto-Redirect (useEffect) hinzugefügt, falls der Nutzer im Hintergrund via Magic Link eingeloggt wird, aber noch auf der Maske festhängt.
 // [2026-10-06] - FEATURE: Magic Link Modus (Passwortloser Login via E-Mail) in die Login-Maske integriert.
@@ -139,17 +139,18 @@ export const LoginView: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg">
-        <img src={logo} alt="PapaToDo Logo" className="mx-auto h-24 w-auto mb-6" />
+        {/* EASTER EGG: Doppelklick aufs Logo öffnet den Offline-Spielemodus */}
+        <img 
+          src={logo} 
+          alt="PapaToDo Logo" 
+          className="mx-auto h-24 w-auto mb-6 select-none cursor-pointer active:scale-95 transition-transform" 
+          onDoubleClick={(e) => {
+            e.preventDefault();
+            navigate('/pause');
+          }}
+          title="PapaToDo"
+        />
         <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">PapaToDo Login</h2>
-        
-        {/* NEU: Offline-Spiel Button für Gäste */}
-        <button
-          type="button"
-          onClick={() => navigate('/pause')}
-          className="w-full mb-6 flex justify-center items-center py-3 px-4 border-2 border-emerald-500 rounded-xl shadow-sm text-sm font-black text-emerald-700 bg-emerald-50 hover:bg-emerald-100 active:scale-95 transition-all cursor-pointer"
-        >
-          <span className="text-xl mr-2">🎮</span> Nur Spielen (Offline)
-        </button>
         
         {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm font-medium">{error}</div>}
         
