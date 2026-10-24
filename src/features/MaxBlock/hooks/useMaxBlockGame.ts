@@ -1,13 +1,18 @@
 // src/features/MaxBlock/hooks/useMaxBlockGame.ts
+// [2026-10-24] - UX-FEATURE: Lock-Delay (550ms Einrast-Verzögerung am Boden/auf Steinen) implementiert, damit Steine auch bei hohen Levels oder nach schnellem Soft-Drop noch seitlich in Lücken geschoben und gedreht werden können.
 // [2026-10-23] - BUGFIX: Hard-Drop-Logik korrigiert (setzt den Stein jetzt verlässlich und augenblicklich auf den Boden/Grund).
 // [2026-10-23] - TWEAK: Level-Geschwindigkeiten (dropTime) für Level 5 und Level 10 feinjustiert (flüssige Kurve).
 // [2026-10-23] - FEATURE: variables Start-Level (startLevel) implementiert.
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { BLOCKS, generateBlockBag } from '../utils/blocks';
 import type { BlockType } from '../utils/blocks';
 
 export const BOARD_WIDTH = 10;
 export const BOARD_HEIGHT = 20;
+
+// Einrast-Verzögerung (Lock Delay), sobald ein Stein aufliegt
+const LOCK_DELAY_MS = 550;
+const MAX_LOCK_RESETS = 12;
 
 export type CellValue = BlockType | 'EMPTY';
 export type BoardState = CellValue[][];
@@ -33,6 +38,10 @@ export const useMaxBlockGame = () => {
   const [lines, setLines] = useState<number>(0);
   const [level, setLevel] = useState<number>(1);
   const [initialLevel, setInitialLevel] = useState<number>(1);
+
+  // Zählt mit, wie oft der Einrast-Timer am Boden durch Schieben/Drehen verlängert wurde
+  const lockResetCountRef = useRef<number>(0);
+  const maxReachedYRef = useRef<number>(-10);
 
   // Feinjustierte Fallgeschwindigkeit (sanftere Kurve: Level 1 ~800ms, Level 5 ~400ms, Level 10 ~150ms)
   const dropTime = status === 'playing' ? Math.max(80, Math.floor(850 * Math.pow(0.85, level - 1))) : null;
@@ -65,13 +74,16 @@ export const useMaxBlockGame = () => {
     setNextBlocks(bag);
 
     const shape = BLOCKS[nextType].shape;
+    const startY = -shape.length;
     const newBlock: ActiveBlock = {
       type: nextType,
       shape,
       x: Math.floor(BOARD_WIDTH / 2) - Math.floor(shape[0].length / 2),
-      y: -shape.length
+      y: startY
     };
 
+    lockResetCountRef.current = 0;
+    maxReachedYRef.current = startY;
     setActiveBlock(newBlock);
     return newBlock;
   }, []);
@@ -163,16 +175,24 @@ export const useMaxBlockGame = () => {
     if (!activeBlock || status !== 'playing') return;
 
     if (!checkCollision(activeBlock.shape, activeBlock.x, activeBlock.y + 1, board)) {
-      setActiveBlock(prev => prev ? { ...prev, y: prev.y + 1 } : null);
-    } else {
-      lockBlock();
+      const nextY = activeBlock.y + 1;
+      if (nextY > maxReachedYRef.current) {
+        maxReachedYRef.current = nextY;
+        lockResetCountRef.current = 0;
+      }
+      setActiveBlock(prev => prev ? { ...prev, y: nextY } : null);
     }
-  }, [activeBlock, status, board, checkCollision, lockBlock]);
+    // Wenn der Stein unten aufliegt, übernimmt der Lock-Delay-Timer das verzögerte Einrasten,
+    // damit man ihn auch nach schnellem Runterziehen noch seitlich in eine Lücke schieben kann.
+  }, [activeBlock, status, board, checkCollision]);
 
   const moveHorizontal = useCallback((direction: -1 | 1) => {
     if (!activeBlock || status !== 'playing') return;
 
     if (!checkCollision(activeBlock.shape, activeBlock.x + direction, activeBlock.y, board)) {
+      if (checkCollision(activeBlock.shape, activeBlock.x, activeBlock.y + 1, board)) {
+        lockResetCountRef.current += 1;
+      }
       setActiveBlock(prev => prev ? { ...prev, x: prev.x + direction } : null);
     }
   }, [activeBlock, status, board, checkCollision]);
@@ -189,6 +209,10 @@ export const useMaxBlockGame = () => {
       if (!checkCollision(newShape, newX + 1, activeBlock.y, board)) newX += 1;
       else if (!checkCollision(newShape, newX - 1, activeBlock.y, board)) newX -= 1;
       else return;
+    }
+
+    if (checkCollision(activeBlock.shape, activeBlock.x, activeBlock.y + 1, board)) {
+      lockResetCountRef.current += 1;
     }
 
     setActiveBlock(prev => prev ? { ...prev, shape: newShape, x: newX } : null);
@@ -214,11 +238,30 @@ export const useMaxBlockGame = () => {
     return ghostY;
   }, [activeBlock, board, checkCollision]);
 
+  // Prüfen, ob der aktive Stein aktuell auf dem Boden oder einem anderen Stein aufliegt
+  const isGrounded =
+    status === 'playing' &&
+    activeBlock !== null &&
+    checkCollision(activeBlock.shape, activeBlock.x, activeBlock.y + 1, board);
+
+  // Reguläre Schwerkraft (läuft nur, solange der Stein frei fällt)
   useEffect(() => {
-    if (!dropTime) return;
+    if (!dropTime || isGrounded) return;
     const interval = setInterval(moveDown, dropTime);
     return () => clearInterval(interval);
-  }, [dropTime, moveDown]);
+  }, [dropTime, isGrounded, moveDown]);
+
+  // Lock-Delay-Timer: Gibt dem Spieler ~550ms Zeit zum Verschieben/Drehen in Lücken, sobald der Stein aufliegt
+  useEffect(() => {
+    if (!isGrounded || !activeBlock) return;
+
+    const delay = lockResetCountRef.current >= MAX_LOCK_RESETS ? 50 : LOCK_DELAY_MS;
+    const timer = setTimeout(() => {
+      lockBlock();
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [isGrounded, activeBlock, lockBlock]);
 
   return {
     board,
