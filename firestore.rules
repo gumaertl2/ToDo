@@ -1,3 +1,4 @@
+// [2026-10-24] - SECURITY-UPDATE: Lesezugriff (allow read: if true) und Schreibzugriff für eingeloggte Nutzer (isSignedIn) für 'arcade_scores' und 'settings' (Vereins-Arcade: Sudoku & MaxBlock) freigegeben.
 // [2026-10-08] - SECURITY-FIX: Lese- und Schreibzugriff für 'event_poll_responses' (Schatten-Akten für Umfragen) für eingeloggte Nutzer freigegeben.
 // [2026-09-28] - SECURITY-FIX: Lese- und Schreibzugriff für 'match_lineups' (Schatten-Akten der Aufstellungen) für eingeloggte Nutzer freigegeben.
 // [2026-07-23] - SECURITY-UPDATE: Lesezugriff für Kalender-Abos (calendar_subscriptions) auf 'true' gesetzt, damit der eingebettete Kalender für Gäste (ohne Login) funktioniert.
@@ -87,6 +88,22 @@ service cloud.firestore {
 
     match /team_pins/{pinId} {
       allow read, create, update, delete: if isSignedIn();
+    }
+
+    // =========================================================
+    // VEREINS-ARCADE (SUDOKU & MAXBLOCK)
+    // =========================================================
+
+    match /arcade_scores/{scoreId} {
+      // Hall of Fame darf öffentlich (nur mit Alias) gelesen, aber nur von eingeloggten Mitgliedern beschrieben werden
+      allow read: if true;
+      allow create, update, delete: if isSignedIn();
+    }
+
+    match /settings/{docId} {
+      // Turniertitel (settings/arcade) darf öffentlich gelesen, aber nur von eingeloggten Mitgliedern/Admins geändert werden
+      allow read: if true;
+      allow write: if isSignedIn();
     }
     
     // =========================================================

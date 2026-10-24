@@ -1,3 +1,4 @@
+// [2026-10-24] - FEATURE: 'arcadeScores' (arcade_scores inkl. archivierter Saison-Einträge) in den Data Explorer aufgenommen.
 // [2026-10-17] - BUGFIX: Scanner kontextsensitiv gemacht (erhält nun explorerCollection als Parameter), damit 'eventId' bei Umfragen korrekt auf 'calendarEvents' gemappt wird statt auf 'events'.
 // [2026-10-17] - REFACTOR: Auslagerung des Data Explorers aus der überladenen ReportsView.tsx. Enthält die hybride Smart-Mapping Logik, CSV/TSV Exporte und Tabellen-Filter.
 // [2026-10-17] - BUGFIX: Smart-Mapping Scanner (getTargetCollectionForColumn) case-insensitive gemacht.
@@ -6,7 +7,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { useClubStore } from '../../store/useClubStore';
-import type { EventPollResponse } from '../../core/types/models';
+import type { EventPollResponse, ArcadeScore } from '../../core/types/models';
 import { Settings2, ArrowUp, ArrowDown, ArrowUpDown, Copy, Check, Download, Link } from 'lucide-react';
 import { ColumnMappingPopover } from './ColumnMappingPopover';
 
@@ -23,7 +24,9 @@ const getTargetCollectionForColumn = (col: string, currentView: string): string 
     parentItemId: 'allAgendaItems',
     baseItemId: 'allAgendaItems',
     roleProfileId: 'roleProfiles',
-    subscriptionId: 'calendarSubscriptions'
+    subscriptionId: 'calendarSubscriptions',
+    archivedBy: 'users',
+    deletedBy: 'users'
   };
   if (exactMatches[col]) return exactMatches[col];
 
@@ -42,7 +45,7 @@ export const DataExplorerTab: React.FC = () => {
     tasks, users, events, 
     allAgendaItems, helpers, groups, teams, 
     roleProfiles, calendarEvents, calendarSubscriptions, teamPins, templates,
-    matchLineups, pollResponsesByEvent
+    matchLineups, pollResponsesByEvent, sudokuScores, maxBlockScores
   } = useClubStore();
 
   const [explorerCollection, setExplorerCollection] = useState<string>('allAgendaItems');
@@ -51,6 +54,7 @@ export const DataExplorerTab: React.FC = () => {
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
   const [isCopied, setIsCopied] = useState(false);
   const [allPollResponses, setAllPollResponses] = useState<EventPollResponse[]>([]);
+  const [allArcadeScores, setAllArcadeScores] = useState<ArcadeScore[]>([]);
 
   // Smart-Mapping State (mit LocalStorage Persistenz)
   const [columnMappings, setColumnMappings] = useState<Record<string, string>>(() => {
@@ -85,6 +89,16 @@ export const DataExplorerTab: React.FC = () => {
         .catch((err) => {
           console.error('Fehler beim Laden der EventPollResponses für Data Explorer:', err);
         });
+    } else if (explorerCollection === 'arcadeScores') {
+      getDocs(collection(db, 'arcade_scores'))
+        .then((snap) => {
+          const list: ArcadeScore[] = [];
+          snap.forEach((d) => list.push({ ...d.data(), id: d.id } as ArcadeScore));
+          setAllArcadeScores(list);
+        })
+        .catch((err) => {
+          console.error('Fehler beim Laden der ArcadeScores für Data Explorer:', err);
+        });
     }
   }, [explorerCollection]);
 
@@ -106,9 +120,13 @@ export const DataExplorerTab: React.FC = () => {
         if (allPollResponses.length > 0) return allPollResponses;
         return Object.values(pollResponsesByEvent || {}).flat();
       }
+      case 'arcadeScores': {
+        if (allArcadeScores.length > 0) return allArcadeScores;
+        return [...(sudokuScores || []), ...(maxBlockScores || [])];
+      }
       default: return tasks;
     }
-  }, [explorerCollection, allAgendaItems, events, users, helpers, groups, teams, roleProfiles, calendarEvents, calendarSubscriptions, teamPins, templates, matchLineups, allPollResponses, pollResponsesByEvent, tasks]);
+  }, [explorerCollection, allAgendaItems, events, users, helpers, groups, teams, roleProfiles, calendarEvents, calendarSubscriptions, teamPins, templates, matchLineups, allPollResponses, pollResponsesByEvent, allArcadeScores, sudokuScores, maxBlockScores, tasks]);
 
   const allKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -265,6 +283,7 @@ export const DataExplorerTab: React.FC = () => {
             <option value="eventPollResponses">Umfrage-Antworten (Polls)</option>
             <option value="teamPins">Team-PINs</option>
             <option value="templates">Vorlagen</option>
+            <option value="arcadeScores">Arcade-Rekorde (Sudoku & MaxBlock)</option>
           </select>
           <div className="text-xs font-bold text-gray-400 bg-gray-100 px-3 py-2 rounded-lg shrink-0">
             {processedExplorerData.length} Treffer

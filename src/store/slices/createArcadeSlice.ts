@@ -1,4 +1,5 @@
 // src/store/slices/createArcadeSlice.ts
+// [2026-10-24] - DSGVO-FIX: Zentrale Alias-Auflösung in saveSudokuScore, saveMaxBlockScore und im Listener implementiert, damit in der öffentlichen Hall of Fame garantiert nur der Vereins-Alias (oder Vorname) statt des vollen Nachnamens gespeichert und angezeigt wird.
 // [2026-10-23] - FEATURE: ArcadeSlice um MaxBlock erweitert (einheitlicher Listener, getrennte Arrays & Speicher-Routinen).
 // [2026-10-23] - FEATURE & OPTIMIZATION: Echte Firebase-Anbindung für ArcadeScores inkl. Quoten-Schutz (Early Return) und Optimistic UI Updates.
 import type { StateCreator } from 'zustand';
@@ -23,6 +24,22 @@ export interface ArcadeSlice {
   resetMaxBlockSeason: () => Promise<void>;
 }
 
+const resolveSafeAlias = (state: StoreState, userId: string, rawUserName: string): string => {
+  const currentUser = state.user;
+  const targetUser = state.users?.find(u => u.id === userId) || (currentUser?.id === userId ? currentUser : null);
+  const email = targetUser?.email?.toLowerCase().trim();
+
+  const matchedHelper = state.helpers?.find(
+    h => (email && h.email?.toLowerCase().trim() === email) || h.id === userId
+  );
+
+  if (matchedHelper?.alias?.trim()) {
+    return matchedHelper.alias.trim();
+  }
+
+  return (rawUserName || '').trim().split(/\s+/)[0] || 'Spieler';
+};
+
 export const createArcadeSlice: StateCreator<
   StoreState,
   [],
@@ -40,14 +57,17 @@ export const createArcadeSlice: StateCreator<
     // Ein einziger Listener lädt alle Scores und verteilt sie clientseitig in die jeweiligen Arrays.
     // Das spart Firebase-Reads und macht komplexe Composite-Indizes überflüssig.
     const unsub = onSnapshot(collection(db, 'arcade_scores'), (snap) => {
+      const state = get();
       const sScores: ArcadeScore[] = [];
       const mScores: ArcadeScore[] = [];
       
       snap.forEach((d) => {
         const data = d.data() as ArcadeScore;
         if (!data.isArchived) {
-          if (data.game === 'SUDOKU') sScores.push({ ...data, id: d.id });
-          if (data.game === 'MAXBLOCK') mScores.push({ ...data, id: d.id });
+          const safeName = resolveSafeAlias(state, data.userId, data.userName);
+          const sanitizedScore: ArcadeScore = { ...data, id: d.id, userName: safeName };
+          if (data.game === 'SUDOKU') sScores.push(sanitizedScore);
+          if (data.game === 'MAXBLOCK') mScores.push(sanitizedScore);
         }
       });
       
@@ -65,6 +85,8 @@ export const createArcadeSlice: StateCreator<
   },
 
   saveSudokuScore: async (scoreData) => {
+    const state = get();
+    const safeAlias = resolveSafeAlias(state, scoreData.userId, scoreData.userName);
     const newId = doc(collection(db, 'arcade_scores')).id;
     const newScore: ArcadeScore = {
       id: newId,
@@ -72,12 +94,13 @@ export const createArcadeSlice: StateCreator<
       game: 'SUDOKU',
       createdAt: Date.now(),
       isArchived: false,
-      ...scoreData
+      ...scoreData,
+      userName: safeAlias
     };
     
     // Optimistic UI Update: Sofort in die Liste aufnehmen für Offline-Feeling
-    set((state) => ({
-      sudokuScores: [...state.sudokuScores, newScore]
+    set((prev) => ({
+      sudokuScores: [...prev.sudokuScores, newScore]
     }));
 
     try {
@@ -88,6 +111,8 @@ export const createArcadeSlice: StateCreator<
   },
 
   saveMaxBlockScore: async (scoreData) => {
+    const state = get();
+    const safeAlias = resolveSafeAlias(state, scoreData.userId, scoreData.userName);
     const newId = doc(collection(db, 'arcade_scores')).id;
     const newScore: ArcadeScore = {
       id: newId,
@@ -95,12 +120,13 @@ export const createArcadeSlice: StateCreator<
       game: 'MAXBLOCK',
       createdAt: Date.now(),
       isArchived: false,
-      ...scoreData
+      ...scoreData,
+      userName: safeAlias
     };
     
     // Optimistic UI Update
-    set((state) => ({
-      maxBlockScores: [...state.maxBlockScores, newScore]
+    set((prev) => ({
+      maxBlockScores: [...prev.maxBlockScores, newScore]
     }));
 
     try {

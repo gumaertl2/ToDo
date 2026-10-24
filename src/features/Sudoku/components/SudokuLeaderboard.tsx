@@ -1,3 +1,4 @@
+// [2026-10-24] - FEATURE: Schwierigkeitsstufe 'expert' (Experte) in den Hall-of-Fame-Tabs und beim Admin-Saison-Reset ergänzt.
 // [2026-10-22] - FIX: Import von SudokuDifficulty auf 'type' umgestellt, um Vite SyntaxError beim Build zu beheben.
 // [2026-10-22] - FEATURE: SudokuLeaderboard UI. Zeigt die Top 10 Rangliste pro Schwierigkeitsgrad, den Sticky-Rank für den aktuellen Nutzer und den geschützten Admin-Saison-Reset.
 import React from 'react';
@@ -43,6 +44,15 @@ export const SudokuLeaderboard: React.FC<SudokuLeaderboardProps> = ({
   const myBestScore = myRankIndex !== -1 ? sortedScores[myRankIndex] : null;
   const isNotInTop10 = myRankIndex >= 10;
 
+  const difficultyLabel =
+    difficulty === 'easy'
+      ? 'Leicht'
+      : difficulty === 'medium'
+      ? 'Mittel'
+      : difficulty === 'hard'
+      ? 'Schwer'
+      : 'Experte';
+
   const renderRank = (index: number) => {
     if (index === 0) return '🥇';
     if (index === 1) return '🥈';
@@ -75,16 +85,17 @@ export const SudokuLeaderboard: React.FC<SudokuLeaderboardProps> = ({
       <h3 className="text-lg font-bold text-slate-800 text-center mb-4">🏆 Hall of Fame</h3>
       
       {/* TABS für Schwierigkeitsgrade */}
-      <div className="flex bg-slate-200 p-1 rounded-xl mb-4">
+      <div className="flex bg-slate-200 p-1 rounded-xl mb-4 gap-1">
         {[
           { id: 'easy', label: 'Leicht' },
           { id: 'medium', label: 'Mittel' },
-          { id: 'hard', label: 'Schwer' }
+          { id: 'hard', label: 'Schwer' },
+          { id: 'expert', label: 'Experte' }
         ].map(tab => (
           <button
             key={tab.id}
             onClick={() => onDifficultyChange(tab.id as SudokuDifficulty)}
-            className={`flex-1 text-sm font-semibold py-2 rounded-lg transition-all ${
+            className={`flex-1 text-xs sm:text-sm font-semibold py-2 rounded-lg transition-all ${
               difficulty === tab.id 
                 ? 'bg-white text-blue-700 shadow-sm' 
                 : 'text-slate-500 hover:text-slate-700'
@@ -121,13 +132,13 @@ export const SudokuLeaderboard: React.FC<SudokuLeaderboardProps> = ({
         <div className="mt-8 pt-4 border-t border-slate-200 flex justify-center">
           <button
             onClick={() => {
-              if (window.confirm('Möchtest du die Rangliste für diese Schwierigkeit wirklich zurücksetzen? Die aktuellen Zeiten werden archiviert (Saison-Neustart).')) {
+              if (window.confirm(`Möchtest du die Rangliste für "${difficultyLabel}" wirklich zurücksetzen? Die aktuellen Zeiten werden archiviert (Saison-Neustart).`)) {
                 onResetSeason(difficulty);
               }
             }}
             className="text-xs font-semibold text-red-500 hover:text-red-700 px-4 py-2 bg-red-50 rounded-lg transition-colors"
           >
-            ⚠️ Saison zurücksetzen ({difficulty === 'easy' ? 'Leicht' : difficulty === 'medium' ? 'Mittel' : 'Schwer'})
+            ⚠️ Saison zurücksetzen ({difficultyLabel})
           </button>
         </div>
       )}

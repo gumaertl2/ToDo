@@ -1,5 +1,6 @@
-// [2026-10-15] - FEATURE: Zentraler Backup & Restore Service für alle 12 Firestore-Collections erstellt (inkl. Chunked Batch-Writes, Wipe-Modus für Test-DB und 12:00-Uhr-Reminder-Tracking).
-// src/utils/backupService.ts
+// [2026-10-24] - FEATURE: 'arcade_scores' und 'settings' in BACKUP_COLLECTIONS aufgenommen, damit auch Pausen-Spiele-Rekorde und Turniertitel im 1-Klick-Backup gesichert werden.
+// [2026-10-15] - FEATURE: Zentraler Backup & Restore Service für alle Firestore-Collections erstellt (inkl. Chunked Batch-Writes, Wipe-Modus für Test-DB und 12:00-Uhr-Reminder-Tracking).
+// src/services/backupService.ts
 import { collection, getDocs, writeBatch, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
@@ -15,7 +16,9 @@ export const BACKUP_COLLECTIONS = [
   'match_lineups',
   'event_poll_responses',
   'agenda_items',
-  'team_pins'
+  'team_pins',
+  'arcade_scores',
+  'settings'
 ] as const;
 
 export type BackupCollectionName = typeof BACKUP_COLLECTIONS[number];
@@ -98,7 +101,7 @@ export const shouldShowBackupReminder = (userReceiveFlag?: boolean): boolean => 
 };
 
 /**
- * Liest alle 12 Collections direkt und ungefiltert aus Firestore aus
+ * Liest alle registrierten Collections direkt und ungefiltert aus Firestore aus
  * und löst den Browser-Download als .json Datei aus.
  */
 export const exportFullDatabaseBackup = async (exportedByUserName?: string): Promise<BackupMetadata> => {
@@ -199,7 +202,7 @@ export const parseAndValidateBackupFile = async (file: File): Promise<BackupPayl
 /**
  * Spielt ein Backup in die aktuell verbundene Firestore-Datenbank ein.
  * @param mode 'merge' = Bestehende überschreiben/ergänzen, nichts löschen.
- *             'wipe'  = Alle 12 Collections vorher komplett leeren (1:1 Spiegel für Testdatenbank).
+ *             'wipe'  = Alle registrierten Collections vorher komplett leeren (1:1 Spiegel für Testdatenbank).
  */
 export const restoreDatabaseBackup = async (
   payload: BackupPayload,
