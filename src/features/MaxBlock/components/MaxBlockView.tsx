@@ -1,4 +1,5 @@
 // src/features/MaxBlock/components/MaxBlockView.tsx
+// [2026-10-24] - UX-FEATURE: Pause-Button (⏸️/▶️ inkl. Pause-Overlay ohne Ausschluss von der Hall of Fame) für Rangliste & Üben sowie explizite Speicher-Auswahl ('In die Hall of Fame' vs. 'Nur lokal speichern') am Spielende integriert.
 // [2026-10-24] - BUGFIX: Persönlichen Rekord ('localBest') automatisch mit den eigenen Hall-of-Fame-Scores ('maxBlockScores') synchronisiert, damit Rekorde geräteübergreifend (Mac <-> iPhone) stimmen.
 // [2026-10-24] - UX-IMPROVEMENT: Kopfzeile in Lobby und Spielansicht (Score | Level | Next) auf Spielbreite (max-w-md mx-auto) zentriert und '◀ Zurück' konsistent auf die linke Seite über dem Spiel positioniert.
 // [2026-10-23] - UX-FEATURE: Alert für unregistrierte Nutzer (Gäste) beim Versuch, den Score zu speichern, hinzugefügt.
@@ -96,16 +97,40 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
     }
   }, []);
 
+  // Tastatur-Shortcut (P oder Escape) zum Pausieren / Fortsetzen auf Desktop
+  useEffect(() => {
+    if (view !== 'playing') return;
+    const handleKeyPause = (e: KeyboardEvent) => {
+      if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
+        if (game.status === 'playing') {
+          e.preventDefault();
+          game.pauseGame();
+        } else if (game.status === 'paused') {
+          e.preventDefault();
+          game.resumeGame();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyPause);
+    return () => window.removeEventListener('keydown', handleKeyPause);
+  }, [view, game.status, game.pauseGame, game.resumeGame]);
+
+  const saveScoreLocally = (scoreToSave: number) => {
+    if (scoreToSave <= 0) return;
+    setLocalBest(prev => {
+      const nextBest = Math.max(prev, scoreToSave);
+      try {
+        localStorage.setItem(LOCAL_PB_KEY, nextBest.toString());
+      } catch (e) {}
+      return nextBest;
+    });
+  };
+
   useEffect(() => {
     if (game.status === 'gameover' && game.score > 0 && gameMode === 'ranked') {
-      if (game.score > localBest) {
-        setLocalBest(game.score);
-        try {
-          localStorage.setItem(LOCAL_PB_KEY, game.score.toString());
-        } catch (e) {}
-      }
+      saveScoreLocally(game.score);
     }
-  }, [game.status, game.score, gameMode, localBest]);
+  }, [game.status, game.score, gameMode]);
 
   const handleDifficultyChange = (diff: 'easy' | 'medium' | 'hard' | 'expert') => {
     setDifficulty(diff);
@@ -136,13 +161,14 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
     setView('playing');
   };
 
-  const handleSaveScore = async () => {
+  const handleSaveScoreToHallOfFame = async () => {
     if (!user) {
-      window.alert('Speichern geht nur für registrierte Nutzer!');
+      window.alert('Speichern in der Hall of Fame geht nur für angemeldete Vereinsmitglieder! Dein Rekord wurde aber lokal auf diesem Gerät gespeichert.');
       return;
     }
 
     if (game.score > 0 && !hasSaved && saveMaxBlockScore && gameMode === 'ranked') {
+      saveScoreLocally(game.score);
       setHasSaved(true);
       try {
         await saveMaxBlockScore({
@@ -158,6 +184,13 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
         console.warn("Speichern fehlgeschlagen (Gast-Modus):", e.message);
       }
     }
+  };
+
+  const handleSaveLocalOnly = () => {
+    if (game.score > 0) {
+      saveScoreLocally(game.score);
+    }
+    setView('lobby');
   };
 
   const evalResult = useMemo(() => {
@@ -300,7 +333,7 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
             {/* Steuerung ultradezent als Footer-Text ohne Riesen-Box */}
             <div className="mt-4 text-[10px] text-slate-400 text-center leading-relaxed mb-6">
               <strong>Steuerung Touch:</strong> Links tippen (Drehen), Rechts wischen (Bewegen/Drop), Doppeltipp Rechts (Hard-Drop).<br/>
-              <strong>Desktop:</strong> Pfeiltasten/WASD (Bewegen/Drehen), Leertaste (Hard-Drop).
+              <strong>Desktop:</strong> Pfeiltasten/WASD (Bewegen/Drehen), Leertaste (Hard-Drop), P (Pause).
             </div>
           </div>
         </div>
@@ -321,9 +354,18 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
                 >
                   ◀ Abbrechen
                 </button>
+
                 {gameMode === 'practice' && (
                   <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest bg-emerald-900/30 px-2 py-0.5 rounded">Übungsmodus</span>
                 )}
+
+                <button
+                  onClick={() => game.status === 'paused' ? game.resumeGame() : game.pauseGame()}
+                  disabled={game.status !== 'playing' && game.status !== 'paused'}
+                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg flex items-center gap-1 text-xs font-semibold transition-colors disabled:opacity-40"
+                >
+                  {game.status === 'paused' ? '▶️ Weiter' : '⏸️ Pause'}
+                </button>
               </div>
               
               <div className="pb-2.5 flex items-start justify-between">
@@ -351,6 +393,22 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
           </div>
 
           <div className="flex-1 min-h-0 relative flex flex-col items-center justify-center p-2 overflow-hidden bg-slate-950">
+            {game.status === 'paused' && (
+              <div className="absolute inset-0 z-30 bg-slate-950/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-white text-center animate-in fade-in duration-200">
+                <div className="text-5xl mb-4">⏸️</div>
+                <h2 className="text-2xl font-black mb-2 tracking-wide">Spiel pausiert</h2>
+                <p className="text-xs text-slate-400 mb-6 max-w-xs">
+                  Kurze Verschnaufpause – dein Lauf zählt weiterhin regulär für die Hall of Fame!
+                </p>
+                <button
+                  onClick={game.resumeGame}
+                  className="px-8 py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl shadow-lg text-base active:scale-95 transition-transform"
+                >
+                  ▶ Weiter spielen
+                </button>
+              </div>
+            )}
+
             {game.status === 'gameover' && evalResult && (
               <div className="absolute inset-0 z-30 bg-slate-950/95 flex flex-col items-center justify-center p-6 text-white text-center animate-in fade-in duration-300">
                 <h2 className="text-4xl font-black text-rose-500 mb-2 tracking-widest uppercase drop-shadow-md">Game Over</h2>
@@ -358,10 +416,10 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
                   {evalResult.medal === 'gold' ? '🏆' : evalResult.medal === 'silver' ? '🥈' : evalResult.medal === 'bronze' ? '🥉' : '🧱'}
                 </div>
                 <h3 className="text-2xl font-bold text-amber-400 mb-2">{evalResult.title}</h3>
-                <p className="text-slate-300 text-sm mb-6 max-w-xs leading-relaxed">
-                  {gameMode === 'practice' ? 'Übung macht den Meister! Im Ranked-Modus zählt dein Score für den lokalen Bestwert.' : evalResult.message}
+                <p className="text-slate-300 text-sm mb-5 max-w-xs leading-relaxed">
+                  {gameMode === 'practice' ? 'Übung macht den Meister! Im Ranked-Modus zählt dein Score für die Hall of Fame und deinen Rekord.' : evalResult.message}
                 </p>
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-xs mb-8">
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 w-full max-w-xs mb-6">
                   <div className="text-sm text-slate-400 font-bold uppercase tracking-wider mb-1">Final Score</div>
                   <div className="text-4xl font-mono font-black text-emerald-400 mb-2">{game.score}</div>
                   {gameMode === 'ranked' && game.score >= localBest && game.score > 0 && (
@@ -372,21 +430,33 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
                     <span>{game.lines} Lines</span>
                   </div>
                 </div>
-                <div className="flex flex-col gap-3 w-full max-w-xs">
-                  {evalResult.canRetroactivelySave && !hasSaved && gameMode === 'ranked' && (
+                <div className="flex flex-col gap-2.5 w-full max-w-xs">
+                  {evalResult.canRetroactivelySave && !hasSaved && gameMode === 'ranked' ? (
+                    <>
+                      <p className="text-xs font-semibold text-slate-300 mb-1">
+                        Wo soll dein Ergebnis gespeichert werden?
+                      </p>
+                      <button 
+                        onClick={handleSaveScoreToHallOfFame}
+                        className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-amber-950 font-black text-base rounded-xl shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2"
+                      >
+                        <span>🏆</span> In die Hall of Fame (& lokal)
+                      </button>
+                      <button 
+                        onClick={handleSaveLocalOnly}
+                        className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-sm rounded-xl border border-slate-700 transition-transform active:scale-95 flex items-center justify-center gap-2"
+                      >
+                        <span>📱</span> Nur lokal speichern
+                      </button>
+                    </>
+                  ) : (
                     <button 
-                      onClick={handleSaveScore}
-                      className="w-full py-4 bg-amber-500 hover:bg-amber-400 text-amber-950 font-black text-lg rounded-xl shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2"
+                      onClick={() => setView('lobby')}
+                      className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-transform active:scale-95"
                     >
-                      <span>✍️</span> In die Hall of Fame
+                      Zurück zur Lobby
                     </button>
                   )}
-                  <button 
-                    onClick={() => setView('lobby')}
-                    className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-transform active:scale-95"
-                  >
-                    {evalResult.canRetroactivelySave && !hasSaved && gameMode === 'ranked' ? 'Ohne Speichern zurück' : 'Zurück zur Lobby'}
-                  </button>
                 </div>
               </div>
             )}
