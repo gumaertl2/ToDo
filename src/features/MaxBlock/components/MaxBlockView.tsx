@@ -1,4 +1,5 @@
 // src/features/MaxBlock/components/MaxBlockView.tsx
+// [2026-10-24] - BUGFIX: Persönlichen Rekord ('localBest') automatisch mit den eigenen Hall-of-Fame-Scores ('maxBlockScores') synchronisiert, damit Rekorde geräteübergreifend (Mac <-> iPhone) stimmen.
 // [2026-10-24] - UX-IMPROVEMENT: Kopfzeile in Lobby und Spielansicht (Score | Level | Next) auf Spielbreite (max-w-md mx-auto) zentriert und '◀ Zurück' konsistent auf die linke Seite über dem Spiel positioniert.
 // [2026-10-23] - UX-FEATURE: Alert für unregistrierte Nutzer (Gäste) beim Versuch, den Score zu speichern, hinzugefügt.
 // [2026-10-23] - BUGFIX: Gast-Abstürze behoben. Firebase onSnapshot und fetch-Calls fangen nun Permission-Errors (fehlender Login) sanft ab, ohne die React-Komponente zu crashen.
@@ -57,6 +58,21 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
       console.error("Fehler beim Laden der MaxBlock Settings:", e);
     }
   }, []);
+
+  // Synchronisiere den lokalen Rekord mit den eigenen Einträgen aus der Hall of Fame (Geräte-Sync Mac <-> iPhone)
+  useEffect(() => {
+    if (!user || !maxBlockScores || maxBlockScores.length === 0) return;
+    const cloudBest = maxBlockScores
+      .filter(s => s.userId === user.id)
+      .reduce((max, s) => Math.max(max, s.score || 0), 0);
+
+    if (cloudBest > localBest) {
+      setLocalBest(cloudBest);
+      try {
+        localStorage.setItem(LOCAL_PB_KEY, cloudBest.toString());
+      } catch (e) {}
+    }
+  }, [user, maxBlockScores, localBest]);
 
   useEffect(() => {
     if (fetchMaxBlockScores) {
