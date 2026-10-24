@@ -1,4 +1,5 @@
 // src/features/MaxBlock/components/MaxBlockView.tsx
+// [2026-10-24] - UX-IMPROVEMENT: Kopfzeile in Lobby und Spielansicht (Score | Level | Next) auf Spielbreite (max-w-md mx-auto) zentriert und '◀ Zurück' konsistent auf die linke Seite über dem Spiel positioniert.
 // [2026-10-23] - UX-FEATURE: Alert für unregistrierte Nutzer (Gäste) beim Versuch, den Score zu speichern, hinzugefügt.
 // [2026-10-23] - BUGFIX: Gast-Abstürze behoben. Firebase onSnapshot und fetch-Calls fangen nun Permission-Errors (fehlender Login) sanft ab, ohne die React-Komponente zu crashen.
 // [2026-10-23] - FEATURE: MaxBlock-Schwierigkeitsgrade an Sudoku angeglichen (Leicht, Mittel, Schwer, Experte) inkl. individuellem Start-Level-Stepper für Experten.
@@ -169,15 +170,17 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
     <div className="fixed inset-0 h-[100dvh] z-[9999] flex flex-col bg-slate-100 overflow-hidden isolate">
       {view === 'lobby' && (
         <div className="flex-1 flex flex-col overflow-y-auto">
-          {/* Header 100% identisch zu Sudoku */}
-          <div className="bg-slate-900 text-white px-3 py-2.5 pt-[max(env(safe-area-inset-top),0.5rem)] flex items-center justify-between shadow-md sticky top-0 z-20">
-            <h1 className="text-base sm:text-lg font-bold tracking-wide">☕ {sessionTitle}</h1>
-            <button 
-              onClick={onClose} 
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg transition-colors shadow-sm"
-            >
-              ◀ Zurück
-            </button>
+          {/* Header 100% identisch zu Sudoku - Zentriert auf Spielbreite (max-w-md) mit Zurück-Button links */}
+          <div className="bg-slate-900 text-white px-3 sm:px-4 py-2.5 pt-[max(env(safe-area-inset-top),0.5rem)] shadow-md sticky top-0 z-20">
+            <div className="w-full max-w-md mx-auto flex items-center justify-between gap-2">
+              <button 
+                onClick={onClose} 
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg transition-colors shadow-sm shrink-0"
+              >
+                ◀ Zurück
+              </button>
+              <h1 className="text-sm sm:text-base font-bold tracking-wide truncate">☕ {sessionTitle}</h1>
+            </div>
           </div>
 
           {/* Main-Bereich extrem komprimiert */}
@@ -289,41 +292,43 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
 
       {view === 'playing' && (
         <div className="flex-1 h-[100dvh] flex flex-col text-white bg-slate-950">
-          <div className="bg-slate-900 pt-[max(env(safe-area-inset-top),0.5rem)] shadow-md z-10 border-b border-slate-800">
-            <div className="px-4 pb-1.5 flex justify-between items-center">
-              <button 
-                onClick={() => {
-                  if (window.confirm('Spiel wirklich abbrechen? Dein Fortschritt geht verloren.')) {
-                    setView('lobby');
-                  }
-                }}
-                className="text-slate-400 hover:text-white flex items-center gap-1 text-sm font-medium transition-colors"
-              >
-                ◀ Abbrechen
-              </button>
-              {gameMode === 'practice' && (
-                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest bg-emerald-900/30 px-2 py-0.5 rounded">Übungsmodus</span>
-              )}
-            </div>
-            
-            <div className="px-4 pb-2.5 flex items-start justify-between">
-              <div className="flex flex-col gap-0.5">
-                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Score</div>
-                <div className="text-xl font-mono font-black text-emerald-400 leading-none">{game.score}</div>
+          <div className="bg-slate-900 pt-[max(env(safe-area-inset-top),0.5rem)] shadow-md z-10 border-b border-slate-800 px-3 sm:px-4">
+            <div className="w-full max-w-md mx-auto">
+              <div className="pb-1.5 flex justify-between items-center">
+                <button 
+                  onClick={() => {
+                    if (window.confirm('Spiel wirklich abbrechen? Dein Fortschritt geht verloren.')) {
+                      setView('lobby');
+                    }
+                  }}
+                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg flex items-center gap-1 text-xs font-semibold transition-colors"
+                >
+                  ◀ Abbrechen
+                </button>
+                {gameMode === 'practice' && (
+                  <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest bg-emerald-900/30 px-2 py-0.5 rounded">Übungsmodus</span>
+                )}
               </div>
-              <div className="flex flex-col items-center gap-0.5">
-                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Level</div>
-                <div className="text-lg font-black text-white leading-none">{game.level}</div>
-                <div className="text-[9px] text-slate-500 font-medium">{game.lines} Lines</div>
-              </div>
-              <div className="flex flex-col items-end gap-0.5">
-                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Next</div>
-                <div className="flex gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800">
-                  {game.nextBlocks.map((type, i) => (
-                    <div key={i} className={`flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 ${i > 0 ? 'opacity-40 scale-75' : ''}`}>
-                      {renderMiniBlock(type)}
-                    </div>
-                  ))}
+              
+              <div className="pb-2.5 flex items-start justify-between">
+                <div className="flex flex-col gap-0.5">
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Score</div>
+                  <div className="text-xl font-mono font-black text-emerald-400 leading-none">{game.score}</div>
+                </div>
+                <div className="flex flex-col items-center gap-0.5">
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Level</div>
+                  <div className="text-lg font-black text-white leading-none">{game.level}</div>
+                  <div className="text-[9px] text-slate-500 font-medium">{game.lines} Lines</div>
+                </div>
+                <div className="flex flex-col items-end gap-0.5">
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Next</div>
+                  <div className="flex gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800">
+                    {game.nextBlocks.map((type, i) => (
+                      <div key={i} className={`flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 ${i > 0 ? 'opacity-40 scale-75' : ''}`}>
+                        {renderMiniBlock(type)}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>

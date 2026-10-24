@@ -1,4 +1,5 @@
 // src/features/Sudoku/hooks/useSudokuGame.ts
+// [2026-10-24] - UX-FIX: Beim Ausschalten des Notiz-Modus (isNotesMode true -> false) wird die Zellen-Auswahl (selectedCell) automatisch aufgehoben, um versehentliche Fehleingaben zu verhindern.
 // [2026-10-23] - FEATURE: 'rescueGame' Funktion hinzugefügt. Löscht falsche Eingaben, bestraft diese aber mit +60s pro Fehler.
 // [2026-10-23] - UX-FEATURE: Auto-Deselect nach Zahleneingabe für flüssigen Gelb-Modus & Toggle-Löschen deaktiviert.
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -44,6 +45,17 @@ export const useSudokuGame = () => {
     }
     return () => clearInterval(interval);
   }, [status]);
+
+  const handleSetIsNotesMode = useCallback((nextValue: boolean | ((prev: boolean) => boolean)) => {
+    setIsNotesMode(prev => {
+      const resolved = typeof nextValue === 'function' ? nextValue(prev) : nextValue;
+      if (prev && !resolved) {
+        setSelectedCell(null);
+        setActiveHighlightNumber(null);
+      }
+      return resolved;
+    });
+  }, []);
 
   const getRow = (index: number) => Math.floor(index / 9);
   const getCol = (index: number) => index % 9;
@@ -364,11 +376,11 @@ export const useSudokuGame = () => {
     pauseGame,
     resumeGame,
     handleSelectCell,
-    setIsNotesMode,
+    setIsNotesMode: handleSetIsNotesMode,
     setNumber,
     clearCell,
     useHint,
-    rescueGame, // NEU exportiert
+    rescueGame,
     toggleHighlightNumber,
     toggleRowMemo,
     toggleColMemo,

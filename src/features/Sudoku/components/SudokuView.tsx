@@ -1,4 +1,5 @@
 // src/features/Sudoku/components/SudokuView.tsx
+// [2026-10-24] - UX-IMPROVEMENT: Kopfzeile in Lobby und Spielansicht auf Spielbreite (max-w-md mx-auto) zentriert und '◀ Zurück' konsistent auf die linke Seite über dem Spiel positioniert.
 // [2026-10-23] - FEATURE: 'handleRescue' integriert. Prüft Fehler auf dem Brett und fragt vor dem Löschen per Confirm nach (inkl. Kosten-Vorschau).
 // [2026-10-23] - BUGFIX: Gast-Abstürze behoben. Firebase onSnapshot und fetch-Calls fangen nun Permission-Errors (fehlender Login) sanft ab, ohne die React-Komponente zu crashen.
 // [2026-10-23] - TWEAK: Layout-Paddings und Abstände extrem komprimiert, um Platz auf mobilen Geräten zu sparen.
@@ -167,38 +168,42 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
     <div className="fixed inset-0 h-[100dvh] z-[9999] flex flex-col bg-slate-100 overflow-hidden isolate">
       {view === 'lobby' && (
         <div className="flex-1 flex flex-col overflow-y-auto">
-          {/* Header */}
-          <div className="bg-slate-900 text-white px-3 py-2.5 pt-[max(env(safe-area-inset-top),0.5rem)] flex items-center justify-between shadow-md sticky top-0 z-20">
-            <div className="flex items-center gap-2">
-              <h1 className="text-base sm:text-lg font-bold tracking-wide">☕ {sessionTitle}</h1>
-              {isAdmin && !isEditingTitle && (
-                <button 
-                  onClick={() => { setTempTitle(sessionTitle); setIsEditingTitle(true); }}
-                  className="text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-slate-300 transition-colors shadow-sm"
-                >
-                  ✏️ Edit
-                </button>
-              )}
+          {/* Header - Zentriert auf Spielbreite (max-w-md) mit Zurück-Button links */}
+          <div className="bg-slate-900 text-white px-3 sm:px-4 py-2.5 pt-[max(env(safe-area-inset-top),0.5rem)] shadow-md sticky top-0 z-20">
+            <div className="w-full max-w-md mx-auto flex items-center justify-between gap-2">
+              <button 
+                onClick={onClose} 
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg transition-colors shadow-sm shrink-0"
+              >
+                ◀ Zurück
+              </button>
+              <div className="flex items-center gap-2 min-w-0">
+                <h1 className="text-sm sm:text-base font-bold tracking-wide truncate">☕ {sessionTitle}</h1>
+                {isAdmin && !isEditingTitle && (
+                  <button 
+                    onClick={() => { setTempTitle(sessionTitle); setIsEditingTitle(true); }}
+                    className="text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-slate-300 transition-colors shadow-sm shrink-0"
+                  >
+                    ✏️ Edit
+                  </button>
+                )}
+              </div>
             </div>
-            <button 
-              onClick={onClose} 
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg transition-colors shadow-sm"
-            >
-              ◀ Zurück
-            </button>
           </div>
 
           {isAdmin && isEditingTitle && (
-            <div className="bg-blue-900 text-white p-2 px-3 flex items-center gap-2 shadow-inner text-xs">
-              <input 
-                type="text" 
-                value={tempTitle} 
-                onChange={(e) => setTempTitle(e.target.value)}
-                className="flex-1 px-2 py-1 rounded text-slate-900 font-medium bg-white"
-                placeholder="Turniertitel..."
-              />
-              <button onClick={handleSaveTitle} className="bg-emerald-600 hover:bg-emerald-500 px-3 py-1 rounded font-bold">OK</button>
-              <button onClick={() => setIsEditingTitle(false)} className="bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded font-medium">Abbruch</button>
+            <div className="bg-blue-900 text-white p-2 px-3 sm:px-4 shadow-inner text-xs">
+              <div className="w-full max-w-md mx-auto flex items-center gap-2">
+                <input 
+                  type="text" 
+                  value={tempTitle} 
+                  onChange={(e) => setTempTitle(e.target.value)}
+                  className="flex-1 px-2 py-1 rounded text-slate-900 font-medium bg-white"
+                  placeholder="Turniertitel..."
+                />
+                <button onClick={handleSaveTitle} className="bg-emerald-600 hover:bg-emerald-500 px-3 py-1 rounded font-bold">OK</button>
+                <button onClick={() => setIsEditingTitle(false)} className="bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded font-medium">Abbruch</button>
+              </div>
             </div>
           )}
 
@@ -280,64 +285,66 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
         </div>
       )}
 
-      {/* Spielen-Ansicht bleibt unberührt */}
+      {/* Spielen-Ansicht */}
       {view === 'playing' && (
         <div className="flex-1 flex flex-col">
-          <div className="bg-slate-900 text-white p-3 pt-[max(env(safe-area-inset-top),0.5rem)] flex items-center justify-between shadow-md">
-            <button 
-              onClick={() => {
-                if(window.confirm('Spiel wirklich abbrechen?')) setView('lobby');
-              }} 
-              className="text-slate-300 hover:text-white flex items-center gap-1 text-sm font-medium"
-            >
-              ◀ Zurück
-            </button>
-            
-            <div className="flex flex-col items-center">
-              {gameMode === 'ranked' ? (
-                <>
-                  <div className={`font-mono text-xl font-bold tracking-wider ${game.hasUsedPause ? 'text-amber-400' : 'text-emerald-400'}`}>
-                    {formatTime(game.timer)}
+          <div className="bg-slate-900 text-white p-3 pt-[max(env(safe-area-inset-top),0.5rem)] shadow-md">
+            <div className="w-full max-w-md mx-auto flex items-center justify-between">
+              <button 
+                onClick={() => {
+                  if(window.confirm('Spiel wirklich abbrechen?')) setView('lobby');
+                }} 
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg transition-colors shadow-sm"
+              >
+                ◀ Zurück
+              </button>
+              
+              <div className="flex flex-col items-center">
+                {gameMode === 'ranked' ? (
+                  <>
+                    <div className={`font-mono text-xl font-bold tracking-wider ${game.hasUsedPause ? 'text-amber-400' : 'text-emerald-400'}`}>
+                      {formatTime(game.timer)}
+                    </div>
+                    {game.hasUsedPause && (
+                      <div className="text-[9px] font-bold text-amber-500 uppercase tracking-widest mt-0.5">
+                        Außer Wertung
+                      </div>
+                    )}
+                    {!game.hasUsedPause && game.penaltySeconds > 0 && (
+                      <div className="text-[10px] font-mono text-red-400 font-semibold flex gap-2">
+                        {game.errorCount > 0 && <span>❌ {game.errorCount} (+{game.errorCount * 60}s)</span>}
+                        {game.hintCount > 0 && <span>💡 {game.hintCount} (+{game.hintCount * 60}s)</span>}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center">
+                    {showPracticeTime ? (
+                      <div 
+                        onClick={() => setShowPracticeTime(false)}
+                        className="font-mono text-lg font-bold tracking-wider text-emerald-300 cursor-pointer"
+                      >
+                        {formatTime(game.timer)} 👁️
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setShowPracticeTime(true)}
+                        className="text-xs bg-slate-800 text-slate-300 px-3 py-1 rounded-lg font-medium"
+                      >
+                        ⏱️ Zeit
+                      </button>
+                    )}
                   </div>
-                  {game.hasUsedPause && (
-                    <div className="text-[9px] font-bold text-amber-500 uppercase tracking-widest mt-0.5">
-                      Außer Wertung
-                    </div>
-                  )}
-                  {!game.hasUsedPause && game.penaltySeconds > 0 && (
-                    <div className="text-[10px] font-mono text-red-400 font-semibold flex gap-2">
-                      {game.errorCount > 0 && <span>❌ {game.errorCount} (+{game.errorCount * 60}s)</span>}
-                      {game.hintCount > 0 && <span>💡 {game.hintCount} (+{game.hintCount * 60}s)</span>}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="flex flex-col items-center">
-                  {showPracticeTime ? (
-                    <div 
-                      onClick={() => setShowPracticeTime(false)}
-                      className="font-mono text-lg font-bold tracking-wider text-emerald-300 cursor-pointer"
-                    >
-                      {formatTime(game.timer)} 👁️
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setShowPracticeTime(true)}
-                      className="text-xs bg-slate-800 text-slate-300 px-3 py-1 rounded-lg font-medium"
-                    >
-                      ⏱️ Zeit
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            <button 
-              onClick={() => game.status === 'paused' ? game.resumeGame() : game.pauseGame()}
-              className="text-xl p-2 bg-slate-800 rounded-lg hover:bg-slate-700"
-            >
-              {game.status === 'paused' ? '▶️' : '⏸️'}
-            </button>
+              <button 
+                onClick={() => game.status === 'paused' ? game.resumeGame() : game.pauseGame()}
+                className="text-xl p-2 bg-slate-800 rounded-lg hover:bg-slate-700"
+              >
+                {game.status === 'paused' ? '▶️' : '⏸️'}
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 relative flex flex-col p-2 justify-center bg-slate-50 overflow-y-auto">
