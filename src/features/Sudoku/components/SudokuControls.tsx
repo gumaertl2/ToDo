@@ -1,4 +1,5 @@
 // src/features/Sudoku/components/SudokuControls.tsx
+// [2026-10-24] - TWEAK: Beschriftung für den Tipp-Button auf 'Tipp (+600s)' aktualisiert.
 // [2026-10-23] - FEATURE: '🛟 Retten' (Rescue) Button in die Werkzeugleiste integriert.
 // [2026-10-22] - FEATURE: SudokuControls UI. Ziffernblock in kompakter 9er-Reihe.
 import React from 'react';
@@ -64,7 +65,7 @@ export const SudokuControls: React.FC<SudokuControlsProps> = ({
           style={{ touchAction: 'manipulation' }}
         >
           <span className="text-lg sm:text-xl mb-0.5">🛟</span>
-          <span className="text-[11px] font-semibold text-slate-600">Retten</span>
+          <span className="text-[11px] font-semibold text-slate-600">Retten (+180s)</span>
         </button>
 
         <button
@@ -74,7 +75,7 @@ export const SudokuControls: React.FC<SudokuControlsProps> = ({
           style={{ touchAction: 'manipulation' }}
         >
           <span className="text-lg sm:text-xl mb-0.5">💡</span>
-          <span className="text-[11px] font-semibold text-slate-600">Tipp (+60s)</span>
+          <span className="text-[11px] font-semibold text-slate-600">Tipp (+600s)</span>
           <div className="absolute top-1 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
         </button>
 

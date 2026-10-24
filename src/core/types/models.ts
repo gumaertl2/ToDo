@@ -1,4 +1,5 @@
 // src/core/types/models.ts
+// [2026-10-24] - SCHEMA: Optionale Felder 'errorCount', 'hintCount' und 'rescueCount' zum 'ArcadeScore' für transparente Sudoku-Hall-of-Fame-Auswertung hinzugefügt.
 // [2026-10-23] - SCHEMA: 'ArcadeScore' für MAXBLOCK angepasst (Umbenennung von TETRIS, neue Felder level/lines, difficulty/timeInSeconds optional gemacht).
 // [2026-10-23] - SCHEMA: 'expert' zur Schwierigkeitsstufe im 'ArcadeScore' hinzugefügt, um Build-Fehler zu beheben.
 // [2026-10-22] - FEATURE: 'ArcadeScore' Modell für das Vereins-Sudoku (inkl. Hall of Fame Archivierung) hinzugefügt.
@@ -384,6 +385,9 @@ export interface ArcadeScore extends BaseDocument {
   userId: string;
   userName: string;
   timeInSeconds?: number;
+  errorCount?: number;
+  hintCount?: number;
+  rescueCount?: number;
   score?: number;
   level?: number;
   lines?: number;

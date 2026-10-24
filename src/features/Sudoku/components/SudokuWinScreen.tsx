@@ -1,4 +1,5 @@
 // src/features/Sudoku/components/SudokuWinScreen.tsx
+// [2026-10-24] - FEATURE: 'rescueCount' (Rettungsring-Einsätze) in der Strafzeit-Zusammenfassung auf dem Gewinnbildschirm ergänzt.
 // [2026-10-23] - BUGFIX: 'gameMode' restlos aus dem SudokuWinScreenProps Interface entfernt, um TS2741 Fehler zu beheben.
 import React, { useState } from 'react';
 import { formatTime } from './SudokuLeaderboard';
@@ -9,6 +10,7 @@ interface SudokuWinScreenProps {
   penaltySeconds: number;
   errorCount: number;
   hintCount: number;
+  rescueCount: number;
   hasUsedPause: boolean;
   evaluation: EvaluationResult;
   onClose: () => void;
@@ -20,6 +22,7 @@ export const SudokuWinScreen: React.FC<SudokuWinScreenProps> = ({
   penaltySeconds,
   errorCount,
   hintCount,
+  rescueCount,
   hasUsedPause,
   evaluation,
   onClose,
@@ -47,9 +50,13 @@ export const SudokuWinScreen: React.FC<SudokuWinScreenProps> = ({
       
       <div className="bg-emerald-700/50 px-6 py-3 rounded-2xl mb-6 border border-emerald-500/50 shadow-inner">
         <p className="text-3xl font-mono font-bold">{formatTime(timer)}</p>
-        {penaltySeconds > 0 && (
+        {penaltySeconds > 0 ? (
           <p className="text-[10px] uppercase tracking-widest text-emerald-200 mt-1 font-bold">
-            Inkl. {penaltySeconds}s Strafe ({errorCount} Fehler, {hintCount} Tipps)
+            Inkl. {penaltySeconds}s Strafe ({errorCount} ❌, {rescueCount} 🛟, {hintCount} 💡)
+          </p>
+        ) : (
+          <p className="text-[10px] uppercase tracking-widest text-emerald-200 mt-1 font-bold">
+            ✨ Fehlerfrei & ohne Hilfe gelöst!
           </p>
         )}
       </div>

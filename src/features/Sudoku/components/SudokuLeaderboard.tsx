@@ -1,3 +1,5 @@
+// src/features/Sudoku/components/SudokuLeaderboard.tsx
+// [2026-10-24] - FEATURE: 2-Klassen-Wertung ('Ohne Hilfe schlägt immer Mit Hilfe') sowie transparente Anzeige von Datum, ✨ Fehlerfrei oder ❌/🛟/💡-Badges in der Hall of Fame implementiert.
 // [2026-10-24] - FEATURE: Schwierigkeitsstufe 'expert' (Experte) in den Hall-of-Fame-Tabs und beim Admin-Saison-Reset ergänzt.
 // [2026-10-22] - FIX: Import von SudokuDifficulty auf 'type' umgestellt, um Vite SyntaxError beim Build zu beheben.
 // [2026-10-22] - FEATURE: SudokuLeaderboard UI. Zeigt die Top 10 Rangliste pro Schwierigkeitsgrad, den Sticky-Rank für den aktuellen Nutzer und den geschützten Admin-Saison-Reset.
@@ -10,6 +12,9 @@ export interface LeaderboardEntry {
   userName: string;
   timeInSeconds: number;
   date: number;
+  errorCount?: number;
+  hintCount?: number;
+  rescueCount?: number;
 }
 
 interface SudokuLeaderboardProps {
@@ -27,6 +32,10 @@ export const formatTime = (totalSeconds: number) => {
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
 
+const hasUsedHelp = (entry: LeaderboardEntry): boolean => {
+  return (entry.hintCount ?? 0) > 0 || (entry.rescueCount ?? 0) > 0;
+};
+
 export const SudokuLeaderboard: React.FC<SudokuLeaderboardProps> = ({
   scores,
   currentUserId,
@@ -35,8 +44,15 @@ export const SudokuLeaderboard: React.FC<SudokuLeaderboardProps> = ({
   isAdmin,
   onResetSeason
 }) => {
-  // Sortierung: Schnellste Zeit zuerst
-  const sortedScores = [...scores].sort((a, b) => a.timeInSeconds - b.timeInSeconds);
+  // 2-Klassen-Sortierung:
+  // 1. Läufe OHNE Hilfe (hintCount=0 & rescueCount=0) stehen IMMER vor Läufen MIT Hilfe.
+  // 2. Innerhalb derselben Klasse entscheidet die schnellste Zeit (inkl. Strafsekunden).
+  const sortedScores = [...scores].sort((a, b) => {
+    const aHelp = hasUsedHelp(a);
+    const bHelp = hasUsedHelp(b);
+    if (aHelp !== bHelp) return aHelp ? 1 : -1;
+    return a.timeInSeconds - b.timeInSeconds;
+  });
   const top10 = sortedScores.slice(0, 10);
   
   // Finde den Rang des aktuellen Nutzers (bestes Ergebnis)
@@ -62,6 +78,12 @@ export const SudokuLeaderboard: React.FC<SudokuLeaderboardProps> = ({
 
   const renderRow = (entry: LeaderboardEntry, index: number, isSticky = false) => {
     const isMe = entry.userId === currentUserId;
+    const errors = entry.errorCount ?? 0;
+    const hints = entry.hintCount ?? 0;
+    const rescues = entry.rescueCount ?? 0;
+    const usedHelp = hints > 0 || rescues > 0;
+    const isFlawless = errors === 0 && hints === 0 && rescues === 0;
+
     return (
       <div 
         key={isSticky ? `sticky-${entry.id}` : entry.id}
@@ -69,12 +91,37 @@ export const SudokuLeaderboard: React.FC<SudokuLeaderboardProps> = ({
       >
         <div className="flex items-center gap-3">
           <div className="w-8 text-center text-lg">{renderRank(index)}</div>
-          <div className={`font-medium ${isMe ? 'text-blue-800' : 'text-slate-700'}`}>
-            {entry.userName} {isMe && <span className="text-xs text-blue-500 ml-1">(Du)</span>}
+          <div className="flex flex-col">
+            <div className={`font-medium leading-tight ${isMe ? 'text-blue-800' : 'text-slate-700'}`}>
+              {entry.userName} {isMe && <span className="text-xs text-blue-500 ml-1">(Du)</span>}
+            </div>
+            {entry.date && (
+              <div className="text-[10px] text-slate-400 mt-0.5">
+                {new Date(entry.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+              </div>
+            )}
           </div>
         </div>
-        <div className={`font-mono font-bold ${isMe ? 'text-blue-700' : 'text-slate-900'}`}>
-          {formatTime(entry.timeInSeconds)}
+        <div className="flex flex-col items-end">
+          <div className={`font-mono font-bold leading-tight ${isMe ? 'text-blue-700' : 'text-slate-900'}`}>
+            {formatTime(entry.timeInSeconds)}
+          </div>
+          {isFlawless ? (
+            <div className="text-[10px] font-semibold text-emerald-600 mt-0.5">
+              ✨ Fehlerfrei
+            </div>
+          ) : (
+            <div
+              className={`text-[10px] font-semibold mt-0.5 flex items-center gap-1.5 ${
+                usedHelp ? 'text-amber-600' : 'text-rose-500'
+              }`}
+              title="❌ Tippfehler (+60s) | 🛟 Rettungsring (+180s) | 💡 Tipp (+600s)"
+            >
+              {errors > 0 && <span>❌ {errors}</span>}
+              {rescues > 0 && <span>🛟 {rescues}</span>}
+              {hints > 0 && <span>💡 {hints}</span>}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -82,7 +129,10 @@ export const SudokuLeaderboard: React.FC<SudokuLeaderboardProps> = ({
 
   return (
     <div className="w-full max-w-md mx-auto mt-6 bg-slate-50 rounded-2xl p-4 shadow-inner">
-      <h3 className="text-lg font-bold text-slate-800 text-center mb-4">🏆 Hall of Fame</h3>
+      <h3 className="text-lg font-bold text-slate-800 text-center mb-1">🏆 Hall of Fame</h3>
+      <p className="text-[11px] text-slate-400 text-center mb-4">
+        Ohne Hilfe (✨ / ❌) schlägt immer Läufe mit Hilfe (🛟 / 💡)
+      </p>
       
       {/* TABS für Schwierigkeitsgrade */}
       <div className="flex bg-slate-200 p-1 rounded-xl mb-4 gap-1">

@@ -1,6 +1,7 @@
 // src/features/Sudoku/hooks/useSudokuGame.ts
+// [2026-10-24] - FEATURE: Strafzeiten & Hilfen-Tracking geschärft: Tippfehler (❌ +60s), Rettungsring (🛟 +180s je falscher Zahl, eigener Zähler rescueCount), Tipp (💡 +600s je Tipp).
 // [2026-10-24] - UX-FIX: Beim Ausschalten des Notiz-Modus (isNotesMode true -> false) wird die Zellen-Auswahl (selectedCell) automatisch aufgehoben, um versehentliche Fehleingaben zu verhindern.
-// [2026-10-23] - FEATURE: 'rescueGame' Funktion hinzugefügt. Löscht falsche Eingaben, bestraft diese aber mit +60s pro Fehler.
+// [2026-10-23] - FEATURE: 'rescueGame' Funktion hinzugefügt. Löscht falsche Eingaben, bestraft diese aber mit Strafsekunden pro Fehler.
 // [2026-10-23] - UX-FEATURE: Auto-Deselect nach Zahleneingabe für flüssigen Gelb-Modus & Toggle-Löschen deaktiviert.
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getSudoku } from 'sudoku-gen';
@@ -28,6 +29,7 @@ export const useSudokuGame = () => {
   const [penaltySeconds, setPenaltySeconds] = useState<number>(0);
   const [errorCount, setErrorCount] = useState<number>(0);
   const [hintCount, setHintCount] = useState<number>(0);
+  const [rescueCount, setRescueCount] = useState<number>(0);
   const [isNotesMode, setIsNotesMode] = useState<boolean>(false);
   const [selectedCell, setSelectedCell] = useState<number | null>(null);
   const [activeHighlightNumber, setActiveHighlightNumber] = useState<number | null>(null);
@@ -122,6 +124,7 @@ export const useSudokuGame = () => {
     setPenaltySeconds(0);
     setErrorCount(0);
     setHintCount(0);
+    setRescueCount(0);
     setHasUsedPause(false);
     setSelectedCell(null);
     setActiveHighlightNumber(null);
@@ -256,15 +259,16 @@ export const useSudokuGame = () => {
     setBoard(evaluated.newBoard);
     checkWinCondition(evaluated.newBoard);
     
-    setTimer(prev => prev + 60);
-    setPenaltySeconds(prev => prev + 60);
+    // Tipp-Strafe: +600s (10 Minuten) & zählt als Hilfe
+    setTimer(prev => prev + 600);
+    setPenaltySeconds(prev => prev + 600);
     setHintCount(prev => prev + 1);
     
     setSelectedCell(null);
     setActiveHighlightNumber(null);
   }, [status, selectedCell, board, checkWinCondition]);
 
-  // CHIRURGISCHER EINGRIFF: Die neue Rescue-Funktion
+  // CHIRURGISCHER EINGRIFF: Die Rescue-Funktion (+180s je falscher Zahl & eigener Zähler rescueCount)
   const rescueGame = useCallback((): number => {
     if (status !== 'playing') return 0;
     
@@ -284,9 +288,9 @@ export const useSudokuGame = () => {
       const evaluated = calculateConflicts(nextBoard);
       setBoard(evaluated.newBoard);
       
-      setTimer(prev => prev + (localErrorCount * 60));
-      setPenaltySeconds(prev => prev + (localErrorCount * 60));
-      setErrorCount(prev => prev + localErrorCount);
+      setTimer(prev => prev + (localErrorCount * 180));
+      setPenaltySeconds(prev => prev + (localErrorCount * 180));
+      setRescueCount(prev => prev + localErrorCount);
       
       setSelectedCell(null);
       setActiveHighlightNumber(null);
@@ -363,6 +367,7 @@ export const useSudokuGame = () => {
     penaltySeconds,
     errorCount,
     hintCount,
+    rescueCount,
     isNotesMode,
     selectedCell,
     activeHighlightNumber,

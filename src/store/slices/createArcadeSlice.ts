@@ -1,4 +1,5 @@
 // src/store/slices/createArcadeSlice.ts
+// [2026-10-24] - FEATURE: saveSudokuScore um optionale Statistik-Felder (errorCount, hintCount, rescueCount) für die 2-Klassen-Wertung in der Hall of Fame erweitert.
 // [2026-10-24] - DSGVO-FIX: Zentrale Alias-Auflösung in saveSudokuScore, saveMaxBlockScore und im Listener implementiert, damit in der öffentlichen Hall of Fame garantiert nur der Vereins-Alias (oder Vorname) statt des vollen Nachnamens gespeichert und angezeigt wird.
 // [2026-10-23] - FEATURE: ArcadeSlice um MaxBlock erweitert (einheitlicher Listener, getrennte Arrays & Speicher-Routinen).
 // [2026-10-23] - FEATURE & OPTIMIZATION: Echte Firebase-Anbindung für ArcadeScores inkl. Quoten-Schutz (Early Return) und Optimistic UI Updates.
@@ -17,7 +18,16 @@ export interface ArcadeSlice {
   fetchSudokuScores: () => Promise<void>;
   fetchMaxBlockScores: () => Promise<void>;
   
-  saveSudokuScore: (scoreData: { userId: string; userName: string; timeInSeconds: number; difficulty: 'easy' | 'medium' | 'hard' | 'expert'; date: number }) => Promise<void>;
+  saveSudokuScore: (scoreData: {
+    userId: string;
+    userName: string;
+    timeInSeconds: number;
+    difficulty: 'easy' | 'medium' | 'hard' | 'expert';
+    date: number;
+    errorCount?: number;
+    hintCount?: number;
+    rescueCount?: number;
+  }) => Promise<void>;
   saveMaxBlockScore: (scoreData: { userId: string; userName: string; score: number; level: number; lines: number; date: number }) => Promise<void>;
   
   resetSudokuSeason: (difficulty: 'easy' | 'medium' | 'hard' | 'expert') => Promise<void>;

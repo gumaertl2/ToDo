@@ -1,6 +1,7 @@
 // src/features/Sudoku/utils/scoreEvaluator.ts
-// [2026-10-23] - BUGFIX: Null-Safing für optionales 'timeInSeconds' im ArcadeScore hinzugefügt, um Build-Fehler zu beheben[span_0](start_span)[span_0](end_span).
-// [2026-10-23] - FEATURE: Logik-Engine für Sudoku Gamification (Rang-Berechnung & Motivations-Sprüche)[span_1](start_span)[span_1](end_span).
+// [2026-10-24] - FEATURE: 2-Klassen-Wertung ('Ohne Hilfe schlägt immer Mit Hilfe') in die Rang- und Medaillen-Berechnung integriert.
+// [2026-10-23] - BUGFIX: Null-Safing für optionales 'timeInSeconds' im ArcadeScore hinzugefügt, um Build-Fehler zu beheben.
+// [2026-10-23] - FEATURE: Logik-Engine für Sudoku Gamification (Rang-Berechnung & Motivations-Sprüche).
 import type { ArcadeScore } from '../../../core/types/models';
 
 export interface EvaluationResult {
@@ -11,32 +12,57 @@ export interface EvaluationResult {
   canRetroactivelySave: boolean;
 }
 
+const hasUsedHelp = (score: { hintCount?: number; rescueCount?: number }): boolean => {
+  return (score.hintCount ?? 0) > 0 || (score.rescueCount ?? 0) > 0;
+};
+
 export const evaluateScore = (
   timeInSeconds: number,
   penaltySeconds: number,
   difficulty: 'easy' | 'medium' | 'hard' | 'expert',
   gameMode: 'ranked' | 'practice',
   hasUsedPause: boolean,
-  allScores: ArcadeScore[]
+  allScores: ArcadeScore[],
+  hintCount: number = 0,
+  rescueCount: number = 0
 ): EvaluationResult => {
-  // 1. Relevante Scores filtern und sortieren (ohne den aktuell laufenden, falls noch nicht gespeichert)
+  const currentUsedHelp = hintCount > 0 || rescueCount > 0;
+
+  // 1. Relevante Scores filtern und nach 2-Klassen-Regel sortieren:
+  // Klasse 1 (Ohne Hilfe: hintCount=0 & rescueCount=0) steht IMMER vor Klasse 2 (Mit Hilfe), danach zählt die Zeit.
   const activeScores = allScores
     .filter(s => s.game === 'SUDOKU' && s.difficulty === difficulty && !s.isArchived)
-    .sort((a, b) => (a.timeInSeconds ?? 0) - (b.timeInSeconds ?? 0));
+    .sort((a, b) => {
+      const aHelp = hasUsedHelp(a);
+      const bHelp = hasUsedHelp(b);
+      if (aHelp !== bHelp) return aHelp ? 1 : -1;
+      return (a.timeInSeconds ?? 0) - (b.timeInSeconds ?? 0);
+    });
 
-  // 2. Echten Rang berechnen
+  // 2. Echten Rang berechnen (unter Berücksichtigung der 2-Klassen-Regel)
   let rank = 1;
   for (const s of activeScores) {
+    const sHelp = hasUsedHelp(s);
     const sTime = s.timeInSeconds ?? 0;
-    if (timeInSeconds <= sTime) break; // <= damit man bei gleicher Zeit davor landet (neu ist besser)
+
+    if (!currentUsedHelp && sHelp) {
+      // Aktueller Lauf ist ohne Hilfe und trifft auf ersten Lauf mit Hilfe -> wir stehen davor!
+      break;
+    }
+    if (currentUsedHelp === sHelp && timeInSeconds <= sTime) {
+      // Gleiche Klasse (beide ohne oder beide mit Hilfe) und unsere Zeit ist schneller/gleich -> davor!
+      break;
+    }
     rank++;
   }
 
-  // 3. Potenziellen Rang berechnen (Was-wäre-wenn ohne Strafen)
+  // 3. Potenziellen Rang berechnen (Was-wäre-wenn: komplett ohne Strafen und ohne Hilfe in Klasse 1!)
   const rawTime = Math.max(0, timeInSeconds - penaltySeconds);
   let rawRank = 1;
   for (const s of activeScores) {
+    const sHelp = hasUsedHelp(s);
     const sTime = s.timeInSeconds ?? 0;
+    if (sHelp) break; // Ohne Hilfe schlägt jeden Lauf mit Hilfe
     if (rawTime <= sTime) break;
     rawRank++;
   }
@@ -48,8 +74,8 @@ export const evaluateScore = (
   else if (rank === 3) medal = 'bronze';
 
   // 5. Deltas berechnen (Abstand zu Platz 1, 2 und 3)
-  const deltaTo1 = activeScores[0] ? timeInSeconds - (activeScores[0].timeInSeconds ?? 0) : 0;
-  const deltaTo3 = activeScores[2] ? timeInSeconds - (activeScores[2].timeInSeconds ?? 0) : 0;
+  const deltaTo1 = activeScores[0] ? Math.max(1, timeInSeconds - (activeScores[0].timeInSeconds ?? 0)) : 0;
+  const deltaTo3 = activeScores[2] ? Math.max(1, timeInSeconds - (activeScores[2].timeInSeconds ?? 0)) : 0;
 
   // 6. Nachrichten generieren
   let message = '';
@@ -72,10 +98,12 @@ export const evaluateScore = (
     // Ranked Modus
     if (penaltySeconds > 0 && rawRank < rank) {
       // Der "Was-wäre-wenn" Motivator
-      if (rawRank <= 3) {
-        message = `Zu schnell geklickt! Deine reine Spielzeit war gigantisch. Ohne die ${penaltySeconds} Sekunden Strafe wärst du jetzt auf Platz ${rawRank} gelandet. Nächstes Mal mit mehr Schnitt und weniger Fehlern!`;
+      if (currentUsedHelp) {
+        message = `Mit ${hintCount > 0 ? 'Tipp' : 'Rettungsring'} sicher ins Ziel gebracht (Platz ${rank})! Ohne Hilfe und Strafzeit wärst du mit deiner reinen Spielzeit sogar auf Platz ${rawRank} gelandet!`;
+      } else if (rawRank <= 3) {
+        message = `Zu schnell geklickt! Deine reine Spielzeit war gigantisch. Ohne die ${penaltySeconds} Sekunden Fehlerstrafe wärst du jetzt auf Platz ${rawRank} gelandet. Nächstes Mal mit mehr Schnitt und weniger Fehlern!`;
       } else {
-        message = `Deine Fehler/Tipps haben dich ein bisschen Zeit gekostet (wie ein leichter Aufschlagfehler). Ohne Strafzeit hättest du direkt Platz ${rawRank} geholt. Du hast das absolut drauf!`;
+        message = `Deine Tippfehler haben dich ein bisschen Zeit gekostet (wie ein leichter Aufschlagfehler). Ohne Strafzeit hättest du direkt Platz ${rawRank} geholt. Du hast das absolut drauf!`;
       }
     } else {
       // Reguläres Podium & Top 10
@@ -84,7 +112,7 @@ export const evaluateScore = (
           ? '🏆 Matchball verwandelt! Du bist der erste Vereinsmeister in dieser Schwierigkeitsstufe!'
           : '🏆 Matchball verwandelt! Ein lupenreiner Topspin-Sieg – du bist der neue Vereinsmeister!';
       } else if (rank === 2) {
-        message = `🥈 Silber! Was für ein starker Auftritt. Nur noch winzige ${deltaTo1} Sekunden fehlen zum Meistertitel – im nächsten Satz holst du dir Gold!`;
+        message = `🥈 Silber! Was für ein starker Auftritt. Nur noch ${deltaTo1} Sekunden fehlen zum Meistertitel – im nächsten Satz holst du dir Gold!`;
       } else if (rank === 3) {
         message = '🥉 Bronze! Ein echter Kantenball ins Glück. Super Leistung, du hast dir das Treppchen absolut verdient!';
       } else if (rank === 4) {

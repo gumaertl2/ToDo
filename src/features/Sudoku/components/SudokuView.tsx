@@ -1,4 +1,5 @@
 // src/features/Sudoku/components/SudokuView.tsx
+// [2026-10-24] - FEATURE: Neue Strafzeiten (❌ +60s, 🛟 +180s je Zahl, 💡 +600s je Tipp) und Übergabe von errorCount, hintCount und rescueCount an Auswertung, WinScreen & Hall of Fame integriert.
 // [2026-10-24] - UX-IMPROVEMENT: Kopfzeile in Lobby und Spielansicht auf Spielbreite (max-w-md mx-auto) zentriert und '◀ Zurück' konsistent auf die linke Seite über dem Spiel positioniert.
 // [2026-10-23] - FEATURE: 'handleRescue' integriert. Prüft Fehler auf dem Brett und fragt vor dem Löschen per Confirm nach (inkl. Kosten-Vorschau).
 // [2026-10-23] - BUGFIX: Gast-Abstürze behoben. Firebase onSnapshot und fetch-Calls fangen nun Permission-Errors (fehlender Login) sanft ab, ohne die React-Komponente zu crashen.
@@ -85,7 +86,9 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
           game.difficulty,
           gameMode,
           game.hasUsedPause,
-          sudokuScores
+          sudokuScores,
+          game.hintCount,
+          game.rescueCount
         );
         setEvaluation(result);
 
@@ -95,7 +98,10 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
             userName: user.name,
             timeInSeconds: game.timer,
             difficulty: game.difficulty,
-            date: Date.now()
+            date: Date.now(),
+            errorCount: game.errorCount,
+            hintCount: game.hintCount,
+            rescueCount: game.rescueCount
           }).catch((e: any) => console.warn(e));
         }
       }
@@ -104,7 +110,21 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
         setEvaluation(null);
       }
     }
-  }, [game.status, game.timer, game.penaltySeconds, game.difficulty, gameMode, game.hasUsedPause, sudokuScores, user, saveSudokuScore, evaluation]);
+  }, [
+    game.status,
+    game.timer,
+    game.penaltySeconds,
+    game.difficulty,
+    game.errorCount,
+    game.hintCount,
+    game.rescueCount,
+    gameMode,
+    game.hasUsedPause,
+    sudokuScores,
+    user,
+    saveSudokuScore,
+    evaluation
+  ]);
 
   const handleRetroactiveSave = () => {
     if (user && gameMode === 'practice' && !game.hasUsedPause) {
@@ -113,7 +133,10 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
         userName: user.name,
         timeInSeconds: game.timer,
         difficulty: game.difficulty,
-        date: Date.now()
+        date: Date.now(),
+        errorCount: game.errorCount,
+        hintCount: game.hintCount,
+        rescueCount: game.rescueCount
       }).catch((e: any) => console.warn(e));
     }
   };
@@ -145,14 +168,14 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
     if (game.status !== 'playing') return;
     
     // Prüfen, ob überhaupt Fehler vorliegen
-    const errorCount = game.board.filter(c => !c.isFixed && c.value !== null && c.value !== c.solution).length;
+    const wrongCellsCount = game.board.filter(c => !c.isFixed && c.value !== null && c.value !== c.solution).length;
     
-    if (errorCount === 0) {
+    if (wrongCellsCount === 0) {
       window.alert('Keine Fehler gefunden! Alle bisher gesetzten Zahlen sind korrekt.');
       return;
     }
 
-    const confirmMsg = `Du hast ${errorCount} fehlerhafte Zahl(en) gesetzt. Soll ich sie vom Brett wischen?\n\n(Kosten: ${errorCount} Fehler / +${errorCount * 60}s Strafe)`;
+    const confirmMsg = `Du hast ${wrongCellsCount} fehlerhafte Zahl(en) gesetzt. Soll ich sie mit dem Rettungsring vom Brett wischen?\n\n(Kosten: 🛟 ${wrongCellsCount}x Rettung / +${wrongCellsCount * 180}s Strafe & Wertung "Mit Hilfe")`;
     if (window.confirm(confirmMsg)) {
       game.rescueGame();
     }
@@ -313,7 +336,8 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
                     {!game.hasUsedPause && game.penaltySeconds > 0 && (
                       <div className="text-[10px] font-mono text-red-400 font-semibold flex gap-2">
                         {game.errorCount > 0 && <span>❌ {game.errorCount} (+{game.errorCount * 60}s)</span>}
-                        {game.hintCount > 0 && <span>💡 {game.hintCount} (+{game.hintCount * 60}s)</span>}
+                        {game.rescueCount > 0 && <span>🛟 {game.rescueCount} (+{game.rescueCount * 180}s)</span>}
+                        {game.hintCount > 0 && <span>💡 {game.hintCount} (+{game.hintCount * 600}s)</span>}
                       </div>
                     )}
                   </>
@@ -354,6 +378,7 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
                 penaltySeconds={game.penaltySeconds}
                 errorCount={game.errorCount}
                 hintCount={game.hintCount}
+                rescueCount={game.rescueCount}
                 hasUsedPause={game.hasUsedPause}
                 evaluation={evaluation}
                 onClose={() => setView('lobby')}
