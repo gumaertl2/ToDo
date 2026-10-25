@@ -1,4 +1,5 @@
 // src/features/MaxBlock/components/MaxBlockView.tsx
+// [2026-10-25] - UX-FIX (iPadOS 26): Schwarze Lobby-Kopfzeile als statischen Block (shrink-0) vor den Scroll-Container (overflow-y-auto) gezogen, um den automatischen Top-Scroll-Edge-Blur (Milchglas-Effekt) von iPadOS 26 Safari auf der Kopfzeile zu verhindern.
 // [2026-10-24] - UX-FEATURE: Pause-Button (⏸️/▶️ inkl. Pause-Overlay ohne Ausschluss von der Hall of Fame) für Rangliste & Üben sowie explizite Speicher-Auswahl ('In die Hall of Fame' vs. 'Nur lokal speichern') am Spielende integriert.
 // [2026-10-24] - BUGFIX: Persönlichen Rekord ('localBest') automatisch mit den eigenen Hall-of-Fame-Scores ('maxBlockScores') synchronisiert, damit Rekorde geräteübergreifend (Mac <-> iPhone) stimmen.
 // [2026-10-24] - UX-IMPROVEMENT: Kopfzeile in Lobby und Spielansicht (Score | Level | Next) auf Spielbreite (max-w-md mx-auto) zentriert und '◀ Zurück' konsistent auf die linke Seite über dem Spiel positioniert.
@@ -218,9 +219,9 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
   return (
     <div className="fixed inset-0 h-[100dvh] z-[9999] flex flex-col bg-slate-100 overflow-hidden isolate">
       {view === 'lobby' && (
-        <div className="flex-1 flex flex-col overflow-y-auto">
-          {/* Header 100% identisch zu Sudoku - Zentriert auf Spielbreite (max-w-md) mit Zurück-Button links */}
-          <div className="bg-slate-900 text-white px-3 sm:px-4 py-2.5 pt-[max(env(safe-area-inset-top),0.5rem)] shadow-md sticky top-0 z-20">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {/* Header 100% identisch zu Sudoku - Außerhalb des Scroll-Containers (shrink-0), damit iPadOS 26 keinen Scroll-Edge-Blur darüberlegt */}
+          <div className="bg-slate-900 text-white px-3 sm:px-4 py-2.5 pt-[max(env(safe-area-inset-top),0.5rem)] shadow-md shrink-0 z-20">
             <div className="w-full max-w-md mx-auto flex items-center justify-between gap-2">
               <button 
                 onClick={onClose} 
@@ -232,108 +233,110 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
             </div>
           </div>
 
-          {/* Main-Bereich extrem komprimiert */}
-          <div className="p-3 sm:p-4 flex-1 w-full max-w-md mx-auto flex flex-col">
-            
-            {/* Game Tabs identisch zu Sudoku */}
-            <div className="flex gap-2 mb-3">
-              <button 
-                onClick={onClose}
-                className="flex-1 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-bold rounded-xl transition-colors active:scale-95"
-              >
-                📝 Sudoku
-              </button>
-              <button className="flex-1 py-2.5 bg-purple-600 text-white text-sm font-bold rounded-xl shadow-sm cursor-default">
-                🧱 MaxBlock
-              </button>
-            </div>
-
-            {/* Config Box extrem komprimiert */}
-            <div className="bg-white p-3 sm:p-4 rounded-2xl shadow-sm mb-3 border border-slate-200">
-              <h2 className="text-base font-bold text-slate-800 mb-3 text-center">Neues Spiel</h2>
+          {/* Scrollbarer Main-Bereich startet erst UNTERHALB der Kopfzeile */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="p-3 sm:p-4 w-full max-w-md mx-auto flex flex-col">
               
-              <div className="flex bg-slate-100 p-1 rounded-xl mb-3">
-                <button
-                  onClick={() => setGameMode('ranked')}
-                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                    gameMode === 'ranked' ? 'bg-white text-blue-700 shadow-sm border border-slate-200/50' : 'text-slate-500'
-                  }`}
+              {/* Game Tabs identisch zu Sudoku */}
+              <div className="flex gap-2 mb-3">
+                <button 
+                  onClick={onClose}
+                  className="flex-1 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-bold rounded-xl transition-colors active:scale-95"
                 >
-                  🏆 Rangliste
+                  📝 Sudoku
                 </button>
-                <button
-                  onClick={() => setGameMode('practice')}
-                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                    gameMode === 'practice' ? 'bg-white text-emerald-700 shadow-sm border border-slate-200/50' : 'text-slate-500'
-                  }`}
-                >
-                  🧘 Üben
+                <button className="flex-1 py-2.5 bg-purple-600 text-white text-sm font-bold rounded-xl shadow-sm cursor-default">
+                  🧱 MaxBlock
                 </button>
               </div>
 
-              {/* Sudoku-Style Schwierigkeits-Tabs */}
-              <div className="flex bg-slate-100 p-1 rounded-xl mb-3 gap-1">
-                {[
-                  { id: 'easy', label: 'Leicht' },
-                  { id: 'medium', label: 'Mittel' },
-                  { id: 'hard', label: 'Schwer' },
-                  { id: 'expert', label: 'Experte' }
-                ].map(diff => (
+              {/* Config Box extrem komprimiert */}
+              <div className="bg-white p-3 sm:p-4 rounded-2xl shadow-sm mb-3 border border-slate-200">
+                <h2 className="text-base font-bold text-slate-800 mb-3 text-center">Neues Spiel</h2>
+                
+                <div className="flex bg-slate-100 p-1 rounded-xl mb-3">
                   <button
-                    key={diff.id}
-                    onClick={() => handleDifficultyChange(diff.id as any)}
+                    onClick={() => setGameMode('ranked')}
                     className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                      difficulty === diff.id ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-700'
+                      gameMode === 'ranked' ? 'bg-white text-blue-700 shadow-sm border border-slate-200/50' : 'text-slate-500'
                     }`}
                   >
-                    {diff.label}
+                    🏆 Rangliste
                   </button>
-                ))}
+                  <button
+                    onClick={() => setGameMode('practice')}
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                      gameMode === 'practice' ? 'bg-white text-emerald-700 shadow-sm border border-slate-200/50' : 'text-slate-500'
+                    }`}
+                  >
+                    🧘 Üben
+                  </button>
+                </div>
+
+                {/* Sudoku-Style Schwierigkeits-Tabs */}
+                <div className="flex bg-slate-100 p-1 rounded-xl mb-3 gap-1">
+                  {[
+                    { id: 'easy', label: 'Leicht' },
+                    { id: 'medium', label: 'Mittel' },
+                    { id: 'hard', label: 'Schwer' },
+                    { id: 'expert', label: 'Experte' }
+                  ].map(diff => (
+                    <button
+                      key={diff.id}
+                      onClick={() => handleDifficultyChange(diff.id as any)}
+                      className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                        difficulty === diff.id ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      {diff.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Dynamischer Stepper (nur sichtbar bei 'Experte') */}
+                {difficulty === 'expert' && (
+                  <div className="flex items-center justify-center gap-3 mb-3 bg-slate-50 p-2 rounded-xl border border-slate-100 animate-in fade-in zoom-in duration-200">
+                    <button 
+                      onClick={() => handleExpertLevelChange(-1)}
+                      className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 text-slate-700 rounded shadow-sm hover:bg-slate-100 active:scale-95 font-bold"
+                    >
+                      -
+                    </button>
+                    <div className="text-sm font-bold text-slate-700 min-w-[70px] text-center">
+                      Level {expertLevel}
+                    </div>
+                    <button 
+                      onClick={() => handleExpertLevelChange(1)}
+                      className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 text-slate-700 rounded shadow-sm hover:bg-slate-100 active:scale-95 font-bold"
+                    >
+                      +
+                    </button>
+                  </div>
+                )}
+
+                {localBest > 0 && (
+                  <div className="text-center text-xs font-bold text-slate-500 mb-3">
+                    Dein Rekord: <span className="text-blue-600">{localBest} Pkt</span>
+                  </div>
+                )}
+
+                <button 
+                  onClick={handleStartGame}
+                  className={`w-full py-3 text-white font-black text-base rounded-xl shadow-sm transition-colors active:scale-95 ${
+                    gameMode === 'practice' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-blue-600 hover:bg-blue-500'
+                  }`}
+                >
+                  ▶ Starten {gameMode === 'practice' ? '(Entspannt)' : ''}
+                </button>
               </div>
 
-              {/* Dynamischer Stepper (nur sichtbar bei 'Experte') */}
-              {difficulty === 'expert' && (
-                <div className="flex items-center justify-center gap-3 mb-3 bg-slate-50 p-2 rounded-xl border border-slate-100 animate-in fade-in zoom-in duration-200">
-                  <button 
-                    onClick={() => handleExpertLevelChange(-1)}
-                    className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 text-slate-700 rounded shadow-sm hover:bg-slate-100 active:scale-95 font-bold"
-                  >
-                    -
-                  </button>
-                  <div className="text-sm font-bold text-slate-700 min-w-[70px] text-center">
-                    Level {expertLevel}
-                  </div>
-                  <button 
-                    onClick={() => handleExpertLevelChange(1)}
-                    className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 text-slate-700 rounded shadow-sm hover:bg-slate-100 active:scale-95 font-bold"
-                  >
-                    +
-                  </button>
-                </div>
-              )}
+              <MaxBlockLeaderboard currentUserId={user?.id} />
 
-              {localBest > 0 && (
-                <div className="text-center text-xs font-bold text-slate-500 mb-3">
-                  Dein Rekord: <span className="text-blue-600">{localBest} Pkt</span>
-                </div>
-              )}
-
-              <button 
-                onClick={handleStartGame}
-                className={`w-full py-3 text-white font-black text-base rounded-xl shadow-sm transition-colors active:scale-95 ${
-                  gameMode === 'practice' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-blue-600 hover:bg-blue-500'
-                }`}
-              >
-                ▶ Starten {gameMode === 'practice' ? '(Entspannt)' : ''}
-              </button>
-            </div>
-
-            <MaxBlockLeaderboard currentUserId={user?.id} />
-
-            {/* Steuerung ultradezent als Footer-Text ohne Riesen-Box */}
-            <div className="mt-4 text-[10px] text-slate-400 text-center leading-relaxed mb-6">
-              <strong>Steuerung Touch:</strong> Links tippen (Drehen), Rechts wischen (Bewegen/Drop), Doppeltipp Rechts (Hard-Drop).<br/>
-              <strong>Desktop:</strong> Pfeiltasten/WASD (Bewegen/Drehen), Leertaste (Hard-Drop), P (Pause).
+              {/* Steuerung ultradezent als Footer-Text ohne Riesen-Box */}
+              <div className="mt-4 text-[10px] text-slate-400 text-center leading-relaxed mb-6">
+                <strong>Steuerung Touch:</strong> Links tippen (Drehen), Rechts wischen (Bewegen/Drop), Doppeltipp Rechts (Hard-Drop).<br/>
+                <strong>Desktop:</strong> Pfeiltasten/WASD (Bewegen/Drehen), Leertaste (Hard-Drop), P (Pause).
+              </div>
             </div>
           </div>
         </div>

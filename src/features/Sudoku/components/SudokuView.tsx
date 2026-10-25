@@ -1,4 +1,5 @@
 // src/features/Sudoku/components/SudokuView.tsx
+// [2026-10-25] - UX-FIX (iPadOS 26): Schwarze Lobby-Kopfzeile als statischen Block (shrink-0) vor den Scroll-Container (overflow-y-auto) gezogen, um den automatischen Top-Scroll-Edge-Blur (Milchglas-Effekt) von iPadOS 26 Safari auf der Kopfzeile zu verhindern.
 // [2026-10-25] - FEATURE: 4 unabhängige Speicherplätze je Schwierigkeitsstufe in der Lobby-UI angebunden (💾-Indikator direkt auf den Stufen-Buttons, gezieltes Fortsetzen/Verwerfen pro Stufe).
 // [2026-10-25] - FEATURE: 'Weiterspielen'-Karte in der Lobby für gespeicherte Sudokus sowie erweitertes, blickdichtes Pause-Menü ('▶ Weiter spielen', '💾 Speichern & später weiterspielen', '🗑️ Spiel verwerfen') integriert.
 // [2026-10-24] - FEATURE: Neue Strafzeiten (❌ +60s, 🛟 +180s je Zahl, 💡 +600s je Tipp) und Übergabe von errorCount, hintCount und rescueCount an Auswertung, WinScreen & Hall of Fame integriert.
@@ -239,9 +240,9 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
   return (
     <div className="fixed inset-0 h-[100dvh] z-[9999] flex flex-col bg-slate-100 overflow-hidden isolate">
       {view === 'lobby' && (
-        <div className="flex-1 flex flex-col overflow-y-auto">
-          {/* Header - Zentriert auf Spielbreite (max-w-md) mit Zurück-Button links */}
-          <div className="bg-slate-900 text-white px-3 sm:px-4 py-2.5 pt-[max(env(safe-area-inset-top),0.5rem)] shadow-md sticky top-0 z-20">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {/* Header - Außerhalb des Scroll-Containers (shrink-0), damit iPadOS 26 keinen Scroll-Edge-Blur darüberlegt */}
+          <div className="bg-slate-900 text-white px-3 sm:px-4 py-2.5 pt-[max(env(safe-area-inset-top),0.5rem)] shadow-md shrink-0 z-20">
             <div className="w-full max-w-md mx-auto flex items-center justify-between gap-2">
               <button 
                 onClick={onClose} 
@@ -264,7 +265,7 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
           </div>
 
           {isAdmin && isEditingTitle && (
-            <div className="bg-blue-900 text-white p-2 px-3 sm:px-4 shadow-inner text-xs">
+            <div className="bg-blue-900 text-white p-2 px-3 sm:px-4 shadow-inner text-xs shrink-0">
               <div className="w-full max-w-md mx-auto flex items-center gap-2">
                 <input 
                   type="text" 
@@ -279,129 +280,131 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
             </div>
           )}
 
-          {/* Extrem komprimierter Main-Bereich */}
-          <div className="p-3 sm:p-4 flex-1 w-full max-w-md mx-auto flex flex-col">
-            
-            {/* Game Tabs */}
-            <div className="flex gap-2 mb-3">
-              <button className="flex-1 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl shadow-sm cursor-default">
-                📝 Sudoku
-              </button>
-              <button 
-                onClick={() => setShowMaxBlock(true)}
-                className="flex-1 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-bold rounded-xl transition-colors active:scale-95"
-              >
-                🧱 MaxBlock
-              </button>
-            </div>
-
-            {/* Config Box */}
-            <div className="bg-white p-3 sm:p-4 rounded-2xl shadow-sm mb-3 border border-slate-200">
-              <h2 className="text-base font-bold text-slate-800 mb-3 text-center">Sudoku wählen</h2>
+          {/* Scrollbarer Main-Bereich startet erst UNTERHALB der Kopfzeile */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="p-3 sm:p-4 w-full max-w-md mx-auto flex flex-col">
               
-              <div className="flex bg-slate-100 p-1 rounded-xl mb-3">
-                <button
-                  onClick={() => setGameMode('ranked')}
-                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                    gameMode === 'ranked' ? 'bg-white text-blue-700 shadow-sm border border-slate-200/50' : 'text-slate-500'
-                  }`}
-                >
-                  🏆 Rangliste
+              {/* Game Tabs */}
+              <div className="flex gap-2 mb-3">
+                <button className="flex-1 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl shadow-sm cursor-default">
+                  📝 Sudoku
                 </button>
-                <button
-                  onClick={() => setGameMode('practice')}
-                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                    gameMode === 'practice' ? 'bg-white text-emerald-700 shadow-sm border border-slate-200/50' : 'text-slate-500'
-                  }`}
+                <button 
+                  onClick={() => setShowMaxBlock(true)}
+                  className="flex-1 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-bold rounded-xl transition-colors active:scale-95"
                 >
-                  🧘 Üben
+                  🧱 MaxBlock
                 </button>
               </div>
 
-              <div className="flex bg-slate-100 p-1 rounded-xl mb-3 gap-1">
-                {([
-                  { id: 'easy', label: 'Leicht' },
-                  { id: 'medium', label: 'Mittel' },
-                  { id: 'hard', label: 'Schwer' },
-                  { id: 'expert', label: 'Experte' }
-                ] as { id: SudokuDifficulty; label: string }[]).map(diff => {
-                  const hasSavedSlot = Boolean(game.savedGamesByDifficulty[diff.id]);
-                  return (
-                    <button
-                      key={diff.id}
-                      onClick={() => setLobbyDifficulty(diff.id)}
-                      className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1 ${
-                        lobbyDifficulty === diff.id
-                          ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50'
-                          : 'text-slate-500'
-                      }`}
-                    >
-                      <span>{diff.label}</span>
-                      {hasSavedSlot && <span className="text-[10px]" title="Gespeichertes Spiel vorhanden">💾</span>}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Gespeichertes Spiel für die aktuell gewählte Stufe */}
-              {savedInfoForSelectedDiff && (
-                <div className="bg-blue-50 p-3 rounded-xl mb-3 border border-blue-200 animate-in fade-in duration-200">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-extrabold text-blue-800 flex items-center gap-1">
-                      <span>💾</span> {getDifficultyLabel(savedInfoForSelectedDiff.difficulty)} fortsetzen
-                    </span>
-                    <span className="text-xs font-mono font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-md">
-                      ⏱️ {formatTime(savedInfoForSelectedDiff.timer)}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-slate-600 mb-2.5 flex items-center justify-between">
-                    <span>
-                      Modus: <strong>{savedInfoForSelectedDiff.gameMode === 'practice' ? '🧘 Üben' : '🏆 Rangliste'}</strong>
-                    </span>
-                    <span className="font-semibold text-slate-500">
-                      {savedFilledCount}/81 Felder
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleResumeSavedGame(lobbyDifficulty)}
-                      className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-sm transition-colors active:scale-95"
-                    >
-                      ▶ Weiterspielen
-                    </button>
-                    <button
-                      onClick={() => handleDiscardSavedGame(lobbyDifficulty)}
-                      className="px-3 py-2.5 bg-white hover:bg-red-50 text-red-600 border border-red-200 font-bold text-xs rounded-xl transition-colors active:scale-95"
-                      title="Gespeichertes Spiel dieser Stufe löschen"
-                    >
-                      🗑️
-                    </button>
-                  </div>
+              {/* Config Box */}
+              <div className="bg-white p-3 sm:p-4 rounded-2xl shadow-sm mb-3 border border-slate-200">
+                <h2 className="text-base font-bold text-slate-800 mb-3 text-center">Sudoku wählen</h2>
+                
+                <div className="flex bg-slate-100 p-1 rounded-xl mb-3">
+                  <button
+                    onClick={() => setGameMode('ranked')}
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                      gameMode === 'ranked' ? 'bg-white text-blue-700 shadow-sm border border-slate-200/50' : 'text-slate-500'
+                    }`}
+                  >
+                    🏆 Rangliste
+                  </button>
+                  <button
+                    onClick={() => setGameMode('practice')}
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                      gameMode === 'practice' ? 'bg-white text-emerald-700 shadow-sm border border-slate-200/50' : 'text-slate-500'
+                    }`}
+                  >
+                    🧘 Üben
+                  </button>
                 </div>
-              )}
 
-              <button 
-                onClick={handleStartGame}
-                className={`w-full py-3 font-black text-base rounded-xl shadow-sm transition-colors active:scale-95 ${
-                  savedInfoForSelectedDiff
-                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm py-2.5'
-                    : 'bg-emerald-500 hover:bg-emerald-600 text-white'
-                }`}
-              >
-                {savedInfoForSelectedDiff
-                  ? `🔄 Neues "${getDifficultyLabel(lobbyDifficulty)}"-Spiel starten`
-                  : `▶ Starten ${gameMode === 'practice' ? '(Entspannt)' : ''}`}
-              </button>
+                <div className="flex bg-slate-100 p-1 rounded-xl mb-3 gap-1">
+                  {([
+                    { id: 'easy', label: 'Leicht' },
+                    { id: 'medium', label: 'Mittel' },
+                    { id: 'hard', label: 'Schwer' },
+                    { id: 'expert', label: 'Experte' }
+                  ] as { id: SudokuDifficulty; label: string }[]).map(diff => {
+                    const hasSavedSlot = Boolean(game.savedGamesByDifficulty[diff.id]);
+                    return (
+                      <button
+                        key={diff.id}
+                        onClick={() => setLobbyDifficulty(diff.id)}
+                        className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1 ${
+                          lobbyDifficulty === diff.id
+                            ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50'
+                            : 'text-slate-500'
+                        }`}
+                      >
+                        <span>{diff.label}</span>
+                        {hasSavedSlot && <span className="text-[10px]" title="Gespeichertes Spiel vorhanden">💾</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Gespeichertes Spiel für die aktuell gewählte Stufe */}
+                {savedInfoForSelectedDiff && (
+                  <div className="bg-blue-50 p-3 rounded-xl mb-3 border border-blue-200 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-extrabold text-blue-800 flex items-center gap-1">
+                        <span>💾</span> {getDifficultyLabel(savedInfoForSelectedDiff.difficulty)} fortsetzen
+                      </span>
+                      <span className="text-xs font-mono font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-md">
+                        ⏱️ {formatTime(savedInfoForSelectedDiff.timer)}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-600 mb-2.5 flex items-center justify-between">
+                      <span>
+                        Modus: <strong>{savedInfoForSelectedDiff.gameMode === 'practice' ? '🧘 Üben' : '🏆 Rangliste'}</strong>
+                      </span>
+                      <span className="font-semibold text-slate-500">
+                        {savedFilledCount}/81 Felder
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleResumeSavedGame(lobbyDifficulty)}
+                        className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-sm transition-colors active:scale-95"
+                      >
+                        ▶ Weiterspielen
+                      </button>
+                      <button
+                        onClick={() => handleDiscardSavedGame(lobbyDifficulty)}
+                        className="px-3 py-2.5 bg-white hover:bg-red-50 text-red-600 border border-red-200 font-bold text-xs rounded-xl transition-colors active:scale-95"
+                        title="Gespeichertes Spiel dieser Stufe löschen"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <button 
+                  onClick={handleStartGame}
+                  className={`w-full py-3 font-black text-base rounded-xl shadow-sm transition-colors active:scale-95 ${
+                    savedInfoForSelectedDiff
+                      ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm py-2.5'
+                      : 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                  }`}
+                >
+                  {savedInfoForSelectedDiff
+                    ? `🔄 Neues "${getDifficultyLabel(lobbyDifficulty)}"-Spiel starten`
+                    : `▶ Starten ${gameMode === 'practice' ? '(Entspannt)' : ''}`}
+                </button>
+              </div>
+
+              <SudokuLeaderboard 
+                scores={filteredScores}
+                currentUserId={user?.id}
+                difficulty={lobbyDifficulty}
+                onDifficultyChange={setLobbyDifficulty}
+                isAdmin={isAdmin}
+                onResetSeason={resetSudokuSeason}
+              />
             </div>
-
-            <SudokuLeaderboard 
-              scores={filteredScores}
-              currentUserId={user?.id}
-              difficulty={lobbyDifficulty}
-              onDifficultyChange={setLobbyDifficulty}
-              isAdmin={isAdmin}
-              onResetSeason={resetSudokuSeason}
-            />
           </div>
         </div>
       )}
