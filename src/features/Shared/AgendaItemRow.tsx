@@ -1,3 +1,4 @@
+// [2026-10-25] - UX-FIX: Kein Ansichten-Sprung und kein Verlust der Textmarkierung mehr in den Notizen. Im aufgeklappten Zustand wird direkt der RichTextEditor gerendert (inkl. "Notiztext leeren" & "Undo").
 // [2026-10-23] - UX-UPGRADE: Durchgehende "Familien-Klammer" in Warm-Amber (Gold-Orange) für Oberpunkte und ihre Unterpunkte (6. -> 6.1 -> 6.2). Blau bleibt exklusiv für den Zeilen-Fokus reserviert; doppelter Mittelstrich nach der Uhrzeit entfernt und durch eine durchgehende Baum-Leitlinie links ersetzt.
 // [2026-10-23] - UX-UPGRADE: Validierungs-Hervorhebung (hasValidationError) für unzugewiesene Aufgaben beim Sitzungsabschluss integriert (roter Rahmen + direkt klickbares Warn-Badge).
 // [2026-10-19] - UX-UPGRADE: Sofortiger Zeilen-Fokus via onClickCapture (verhindert hängenbleibenden Fokus durch stopPropagation in Kind-Elementen) sowie deutliche farbliche und strukturelle Abhebung von Unterpunkten (Indigo/Slate-Hierarchie) und aktiver Auswahl.
@@ -96,6 +97,8 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
   const hasDescription = !!item.description;
   const [editField, setEditField] = useState<'title' | 'description' | null>(null);
   const [editVal, setEditVal] = useState('');
+  const [descDraft, setDescDraft] = useState(item.description || '');
+  const [autoFocusNewDesc, setAutoFocusNewDesc] = useState(false);
   const [isEditingDate, setIsEditingDate] = useState(false);
   const [editDateVal, setEditDateVal] = useState(''); 
   const [isEditingDuration, setIsEditingDuration] = useState(false);
@@ -104,6 +107,11 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
   const [editRoutinePattern, setEditRoutinePattern] = useState(item.routinePattern || 'every_meeting');
   const [editRoutineEndDateStr, setEditRoutineEndDateStr] = useState(item.routineEndDate ? new Date(item.routineEndDate).toISOString().substring(0,10) : '');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
+  // Synchronisiere lokalen Notiz-Entwurf, wenn sich item.description von außen ändert
+  useEffect(() => {
+    setDescDraft(item.description || '');
+  }, [item.description]);
 
   const todayStr = new Date().toISOString().substring(0, 10);
 
@@ -169,9 +177,19 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
       if (finalTitle !== item.title) onSaveInline({ ...item, title: finalTitle }); 
       setEditField(null); 
     } else if (editField === 'description') { 
-      if (editVal.trim() !== item.description) onSaveInline({ ...item, description: editVal.trim() }); 
+      if (descDraft.trim() !== (item.description || '')) onSaveInline({ ...item, description: descDraft.trim() }); 
       setEditField(null); 
+      setAutoFocusNewDesc(false);
     }
+  };
+
+  const handleSaveDescriptionDraft = () => {
+    const finalDesc = descDraft.trim();
+    if (finalDesc !== (item.description || '')) {
+      onSaveInline({ ...item, description: finalDesc });
+    }
+    setEditField(null);
+    setAutoFocusNewDesc(false);
   };
 
   const handleInlineSaveDate = () => { 
@@ -366,7 +384,7 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
                 </div>
                 <div 
                   className={`shrink-0 mt-0.5 ml-2 cursor-pointer transition-all print:!hidden p-1 rounded-md ${isExpanded ? 'bg-blue-100 text-blue-700 shadow-inner' : (hasDescription ? 'bg-blue-50 text-blue-600 hover:bg-blue-100 shadow-sm' : 'text-gray-300 hover:text-blue-500')}`} 
-                  onClick={(e) => { e.stopPropagation(); if (isExpanded) { if (editField === 'description') handleInlineSaveText(); performScrollPreservedToggle(e, () => onToggleExpand(item.id)); } else { if (hasDescription) { performScrollPreservedToggle(e, () => onToggleExpand(item.id)); } else if (!isReadOnly) { setEditVal(item.description || ''); setEditField('description'); performScrollPreservedToggle(e, () => onToggleExpand(item.id)); } } }}
+                  onClick={(e) => { e.stopPropagation(); if (isExpanded) { handleSaveDescriptionDraft(); performScrollPreservedToggle(e, () => onToggleExpand(item.id)); } else { setDescDraft(item.description || ''); setAutoFocusNewDesc(!hasDescription && !isReadOnly); performScrollPreservedToggle(e, () => onToggleExpand(item.id)); } }}
                 >
                   <AlignLeft className="w-4 h-4" />
                 </div>
@@ -404,13 +422,34 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
       
       {isExpanded && (
         <div className={`px-3 pb-3 print:!pl-[60px] print:!pr-2 print:!pb-2 print:!pt-0 ${hasDescription ? 'print:!block' : 'print:!hidden'}`}> 
-          {editField === 'description' ? ( 
-            <div className="mt-2 mb-2" onClick={e => e.stopPropagation()}><RichTextEditor value={editVal} onChange={setEditVal} onBlur={handleInlineSaveText} autoFocus /></div> 
-          ) : ( 
-            <div onClick={(e) => { e.stopPropagation(); if(!isReadOnly) { setEditVal(item.description || ''); setEditField('description'); } }} className={`text-sm bg-gray-50 p-3 rounded border border-gray-100 shadow-inner print:!bg-white print:!p-0 ${isReadOnly ? '' : 'cursor-text hover:bg-gray-100'}`}> 
-              {item.description ? <RichTextRenderer text={item.description} searchQuery={searchQuery} /> : <span className="text-gray-400 italic text-xs">Klicken für Notizen...</span>} 
-            </div> 
-          )} 
+          {isReadOnly ? (
+            <div className="text-sm bg-gray-50 p-3 rounded border border-gray-100 shadow-inner print:!bg-white print:!p-0"> 
+              {item.description ? <RichTextRenderer text={item.description} searchQuery={searchQuery} /> : <span className="text-gray-400 italic text-xs">Keine Notizen vorhanden</span>} 
+            </div>
+          ) : (
+            <>
+              {/* Bei aktiver Volltextsuche zeigen wir zusätzlich den gelb hervorgehobenen Suchtreffer an */}
+              {searchQuery && searchQuery.trim().length > 0 && item.description && (
+                <div className="mb-1.5 text-sm bg-yellow-50/60 p-2 rounded border border-yellow-200 print:!hidden">
+                  <RichTextRenderer text={item.description} searchQuery={searchQuery} />
+                </div>
+              )}
+              <div className="mt-1 mb-1 print:!hidden" onClick={e => e.stopPropagation()}>
+                <RichTextEditor
+                  value={descDraft}
+                  onChange={setDescDraft}
+                  onBlur={handleSaveDescriptionDraft}
+                  placeholder="Notizen oder Beschreibung hier eingeben..."
+                  autoFocus={autoFocusNewDesc}
+                />
+              </div>
+              {item.description && (
+                <div className="hidden print:!block text-sm print:!bg-white print:!p-0">
+                  <RichTextRenderer text={item.description} />
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>

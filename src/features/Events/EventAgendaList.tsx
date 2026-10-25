@@ -1,3 +1,4 @@
+// [2026-10-25] - UX-IMPROVEMENT: Reihenfolge in der Werkzeugleiste optimiert: Lupe -> Blaues Fokus-Feld inkl. vorangestellter Agendapunktnummer (z. B. '1. Begrüßung...') -> '++ Punkt' -> Zeilen-Werkzeuge (Einrücken, Unterpunkt, Punkt darunter, Bearbeiten, Löschen).
 // [2026-10-23] - UX-UPGRADE: Komplette Werkzeugleiste in EventAgendaList konsolidiert: 1) Redundantes Einzel-'+' entfernt, 2) '++ Punkt' (Neuer Punkt am Ende) nach vorne zu den Erstell-Werkzeugen gezogen, 3) '+/-' durch klaren 'S | M | X' Detailstufen-Schalter ersetzt, 4) Sortier-Filter als reines Icon-Popover umgesetzt, 5) Reparatur, Drucken, Protokolle, Veröffentlichen & Vorlagen rechts in die Leiste integriert.
 // [2026-10-23] - RECHTE & PAPIERKORB-FIX: Exklusives Admin-Löschrecht (roleProfileId === 'pro-admin') für alle unerledigten (<100%), zugewiesenen oder vererbten Aufgaben durchgesetzt + Nutzung von moveToTrash (inkl. Unterpunkt-Kaskade & deletedBy-Stempel).
 // [2026-10-23] - UX-UPGRADE: Automatische Aufklapp-, Scroll- und Fokus-Automatik für unzugewiesene Aufgaben (validationErrorIds) integriert, rekursive Hierarchie-Auflösung für verschachtelte Unterpunkte ergänzt und Schutz gegen das Einrücken von Hauptpunkten mit eigenen Unterpunkten eingebaut.
@@ -515,17 +516,21 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
     dueDate: 'Nach Erledigungsdatum'
   };
 
+  const selectedFocusLabel = selectedItem
+    ? `${selectedItem.displayIndexStr && selectedItem.displayIndexStr !== '-' ? `${selectedItem.displayIndexStr} ` : ''}${selectedItem.title || 'Neuer Punkt'}`
+    : '';
+
   // CHIRURGISCHER EINGRIFF: overflow-visible md:overflow-hidden erlaubt das Wachsen auf dem iPhone und behält den Split-Screen auf Desktop
   return (
     <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-visible md:overflow-hidden landscape:h-auto landscape:overflow-visible landscape:border-none landscape:shadow-none lg:!h-full lg:!overflow-hidden lg:!border lg:!border-gray-200 lg:!shadow-sm lg:!rounded-xl print:!shadow-none print:!border-none print:!rounded-none print:!overflow-visible print:!block">
       <div className="px-2.5 py-1.5 border-b border-gray-200 bg-gray-50 flex justify-between items-center flex-wrap lg:flex-nowrap gap-1.5 sticky top-0 z-30 landscape:bg-white landscape:py-1.5 lg:!bg-gray-50 lg:!py-1.5 print:!bg-transparent print:!border-b-2 print:!border-black print:!px-0 print:!pt-0">
         
-        {/* LINKS: Volltextsuche + Neuer Punkt am Ende (++ Punkt) + Zeilen-Werkzeuge */}
+        {/* LINKS: 1. Lupe -> 2. Blaues Fokus-Feld (inkl. Punktnummer) -> 3. ++ Punkt -> 4. Zeilen-Werkzeuge */}
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
           {/* Nur beim Drucken sichtbare klassische Überschrift */}
           <h2 className="hidden print:!block text-lg font-bold text-black">Agenda & Protokoll</h2>
 
-          {/* OPTION C & A: Smartes Volltext-Suchfeld */}
+          {/* 1. LUPE / Smartes Volltext-Suchfeld */}
           {onSearchChange && (
             <div className="print:!hidden shrink-0">
               {showFullSearchInput ? (
@@ -575,7 +580,17 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
             </div>
           )}
 
-          {/* ++ PUNKT: Neuen Punkt am Ende des Protokolls anfügen (nach vorne gezogen) */}
+          {/* 2. BLAUES FOKUS-FELD (mit vorangestellter Agendapunktnummer) */}
+          {!isReadOnly && selectedItem && (
+            <span
+              className="hidden md:inline-block text-xs font-bold text-blue-800 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded truncate max-w-[130px] xl:max-w-[180px] shadow-2xs animate-in fade-in print:!hidden"
+              title={selectedFocusLabel}
+            >
+              {selectedFocusLabel}
+            </span>
+          )}
+
+          {/* 3. ++ PUNKT: Neuen Punkt am Ende des Protokolls anfügen */}
           {!isReadOnly && (
             <button
               onClick={onAddNewItem}
@@ -587,13 +602,9 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
             </button>
           )}
           
-          {/* Zeilen-Werkzeuge für den aktuell ausgewählten Punkt (ohne das redundante erste '+') */}
+          {/* 4. ZEILEN-WERKZEUGE für den aktuell ausgewählten Punkt */}
           {!isReadOnly && selectedItem && (
-            <div className="hidden md:flex items-center gap-1 border-l border-gray-300 pl-2 ml-0.5 min-w-0 animate-in fade-in slide-in-from-left-1 print:!hidden">
-              <span className="text-xs font-bold text-blue-800 mr-0.5 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded truncate max-w-[110px] xl:max-w-[160px] shadow-2xs" title={selectedItem.title || 'Neuer Punkt'}>
-                {selectedItem.title || 'Neuer Punkt'}
-              </span>
-              
+            <div className="hidden md:flex items-center gap-1 min-w-0 animate-in fade-in slide-in-from-left-1 print:!hidden">
               <button onClick={() => handleToggleSubItem(selectedItem)} className="w-7 h-7 flex items-center justify-center bg-white border border-gray-200 shadow-2xs rounded-md hover:bg-gray-50 text-blue-600 transition-colors shrink-0" title={selectedItem.isSubItem ? "Zum Hauptpunkt machen (Ausrücken)" : "Zum Unterpunkt machen (Einrücken)"}>
                 {selectedItem.isSubItem ? <ArrowLeftToLine className="w-3.5 h-3.5" /> : <ArrowRightToLine className="w-3.5 h-3.5" />}
               </button>

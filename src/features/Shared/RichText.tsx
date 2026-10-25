@@ -1,3 +1,4 @@
+// [2026-10-25] - UX-FEATURE: 1-Klick "Notiztext leeren"-Button mit direkter "Text wiederherstellen (Undo)"-Funktion (bis zum Verlassen des Feldes via onBlur) in der Notiz-Werkzeugleiste ergänzt.
 // [2026-06-01] - UX-FEATURE: Highlighting für Fundstellen (Volltextsuche) nahtlos in den originalen Renderer integriert, ohne die Formatierungs- oder Indentation-Logik zu beeinträchtigen.
 // [2026-05-29] - BUGFIX: Whitespace/Indentation in Print. 'whitespace-pre-wrap' ergänzt und Einrückungs-Level bei Listenpunkten berechnet, damit Formatierungen im Ausdruck nicht verloren gehen.
 // 2026-04-17 11:15 - FIX: Toolbar Focus-Klau behoben & Auto-Save stabilisiert
@@ -6,8 +7,8 @@
 // 2026-04-23 18:00 - UX-FEATURE: Auto-Resize für die Textarea eingebaut (passt sich dem Inhalt an)
 // 2026-05-09 11:30 - UX-FIX: Cursor springt bei autoFocus in der Textarea nun immer ans Ende des Textes
 // src/features/Shared/RichText.tsx
-import React, { useRef, useEffect } from 'react';
-import { Bold, Italic, List } from 'lucide-react';
+import React, { useRef, useEffect, useState } from 'react';
+import { Bold, Italic, List, Eraser, RotateCcw } from 'lucide-react';
 
 interface EditorProps {
   value: string;
@@ -20,6 +21,7 @@ interface EditorProps {
 
 export const RichTextEditor: React.FC<EditorProps> = ({ value, onChange, onBlur, placeholder, disabled, autoFocus }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [undoBuffer, setUndoBuffer] = useState<string | null>(null);
 
   // Auto-Resize Logik
   const adjustHeight = () => {
@@ -76,6 +78,24 @@ export const RichTextEditor: React.FC<EditorProps> = ({ value, onChange, onBlur,
     }, 10);
   };
 
+  const handleClearText = () => {
+    if (disabled || !value) return;
+    setUndoBuffer(value);
+    onChange('');
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  };
+
+  const handleUndoClear = () => {
+    if (disabled || undoBuffer === null) return;
+    onChange(undoBuffer);
+    setUndoBuffer(null);
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter') {
       if (!textareaRef.current || disabled) return;
@@ -127,37 +147,65 @@ export const RichTextEditor: React.FC<EditorProps> = ({ value, onChange, onBlur,
     <div className={`border border-gray-300 rounded-lg overflow-hidden flex flex-col bg-white focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 ${disabled ? 'bg-gray-50 opacity-80' : ''}`}>
       
       <div 
-        className="bg-gray-50 border-b border-gray-200 p-1 flex items-center gap-1"
+        className="bg-gray-50 border-b border-gray-200 p-1 flex items-center justify-between gap-1"
         onMouseDown={(e) => e.preventDefault()}
       >
-        <button
-          type="button"
-          onClick={() => insertFormatting('**', '**')}
-          disabled={disabled}
-          className="p-1.5 text-gray-600 hover:bg-gray-200 rounded disabled:opacity-50 transition-colors"
-          title="Fett (Markierten Text)"
-        >
-          <Bold className="w-4 h-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => insertFormatting('_', '_')}
-          disabled={disabled}
-          className="p-1.5 text-gray-600 hover:bg-gray-200 rounded disabled:opacity-50 transition-colors"
-          title="Kursiv (Markierten Text)"
-        >
-          <Italic className="w-4 h-4" />
-        </button>
-        <div className="w-px h-4 bg-gray-300 mx-1" />
-        <button
-          type="button"
-          onClick={() => insertFormatting('\n- ', '')}
-          disabled={disabled}
-          className="p-1.5 text-gray-600 hover:bg-gray-200 rounded disabled:opacity-50 transition-colors"
-          title="Spiegelstrich / Liste"
-        >
-          <List className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => insertFormatting('**', '**')}
+            disabled={disabled}
+            className="p-1.5 text-gray-600 hover:bg-gray-200 rounded disabled:opacity-50 transition-colors"
+            title="Fett (Markierten Text)"
+          >
+            <Bold className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => insertFormatting('_', '_')}
+            disabled={disabled}
+            className="p-1.5 text-gray-600 hover:bg-gray-200 rounded disabled:opacity-50 transition-colors"
+            title="Kursiv (Markierten Text)"
+          >
+            <Italic className="w-4 h-4" />
+          </button>
+          <div className="w-px h-4 bg-gray-300 mx-1" />
+          <button
+            type="button"
+            onClick={() => insertFormatting('\n- ', '')}
+            disabled={disabled}
+            className="p-1.5 text-gray-600 hover:bg-gray-200 rounded disabled:opacity-50 transition-colors"
+            title="Spiegelstrich / Liste"
+          >
+            <List className="w-4 h-4" />
+          </button>
+        </div>
+
+        {!disabled && (
+          <div className="flex items-center">
+            {undoBuffer !== null ? (
+              <button
+                type="button"
+                onClick={handleUndoClear}
+                className="flex items-center gap-1 px-2 py-1 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition-colors shadow-xs"
+                title="Gelöschten Notiztext sofort wiederherstellen"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Text wiederherstellen (Undo)</span>
+              </button>
+            ) : value && value.trim().length > 0 ? (
+              <button
+                type="button"
+                onClick={handleClearText}
+                className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-500 hover:text-amber-700 hover:bg-amber-50 rounded transition-colors"
+                title="Gesamten Beschreibungstext in diesem Feld leeren (ohne Papierkorb)"
+              >
+                <Eraser className="w-3.5 h-3.5" />
+                <span>Notiztext leeren</span>
+              </button>
+            ) : null}
+          </div>
+        )}
       </div>
       
       <textarea
@@ -166,6 +214,7 @@ export const RichTextEditor: React.FC<EditorProps> = ({ value, onChange, onBlur,
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
         onBlur={() => {
+          setUndoBuffer(null);
           if (onBlur) onBlur();
         }}
         disabled={disabled}
