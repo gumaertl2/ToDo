@@ -1,4 +1,6 @@
 // src/features/Sudoku/hooks/useSudokuGame.ts
+// [2026-10-25] - FEATURE: Auto-Save auf 4 unabhängige Speicherplätze (1 Slot je Schwierigkeitsstufe: easy, medium, hard, expert) erweitert, damit z.B. ein Experten-Sudoku pausiert bleiben kann, während man zwischendurch ein leichtes Sudoku spielt.
+// [2026-10-25] - FEATURE: Auto-Save & Resume im localStorage integriert, damit laufende oder pausierte Sudokus (inkl. Notizen, Zeilen-/Spalten-Memos, Zeit und Modus) auch über Nacht oder nach App-Neustart erhalten bleiben. Pause-Funktion vergibt kein 'Außer Wertung' mehr.
 // [2026-10-24] - FEATURE: Strafzeiten & Hilfen-Tracking geschärft: Tippfehler (❌ +60s), Rettungsring (🛟 +180s je falscher Zahl, eigener Zähler rescueCount), Tipp (💡 +600s je Tipp).
 // [2026-10-24] - UX-FIX: Beim Ausschalten des Notiz-Modus (isNotesMode true -> false) wird die Zellen-Auswahl (selectedCell) automatisch aufgehoben, um versehentliche Fehleingaben zu verhindern.
 // [2026-10-23] - FEATURE: 'rescueGame' Funktion hinzugefügt. Löscht falsche Eingaben, bestraft diese aber mit Strafsekunden pro Fehler.
@@ -8,6 +10,7 @@ import { getSudoku } from 'sudoku-gen';
 
 export type SudokuDifficulty = 'easy' | 'medium' | 'hard' | 'expert';
 export type GameStatus = 'idle' | 'playing' | 'paused' | 'won';
+export type SudokuGameMode = 'ranked' | 'practice';
 
 export interface CellData {
   index: number;
@@ -21,10 +24,65 @@ export interface CellData {
   isConflict: boolean;
 }
 
+export interface SavedSudokuGame {
+  board: CellData[];
+  difficulty: SudokuDifficulty;
+  gameMode: SudokuGameMode;
+  timer: number;
+  penaltySeconds: number;
+  errorCount: number;
+  hintCount: number;
+  rescueCount: number;
+  activeRowMemos: number[];
+  activeColMemos: number[];
+  savedAt: number;
+}
+
+export type SavedSudokuMap = Partial<Record<SudokuDifficulty, SavedSudokuGame>>;
+
+const SUDOKU_SAVE_MAP_KEY = 'papatodo_sudoku_saved_games_by_diff';
+const LEGACY_SUDOKU_SAVE_KEY = 'papatodo_sudoku_saved_game';
+
+const isValidSavedGame = (item: any): item is SavedSudokuGame => {
+  return Boolean(item && Array.isArray(item.board) && item.board.length === 81 && item.difficulty);
+};
+
+const loadSavedGamesMapFromStorage = (): SavedSudokuMap => {
+  const result: SavedSudokuMap = {};
+  try {
+    const rawMap = localStorage.getItem(SUDOKU_SAVE_MAP_KEY);
+    if (rawMap) {
+      const parsedMap = JSON.parse(rawMap);
+      if (parsedMap && typeof parsedMap === 'object') {
+        (['easy', 'medium', 'hard', 'expert'] as SudokuDifficulty[]).forEach((diff) => {
+          if (isValidSavedGame(parsedMap[diff])) {
+            result[diff] = parsedMap[diff];
+          }
+        });
+      }
+    }
+
+    // Automatische Migration eines evtl. vorhandenen Einzel-Spielstands
+    const rawLegacy = localStorage.getItem(LEGACY_SUDOKU_SAVE_KEY);
+    if (rawLegacy) {
+      const parsedLegacy = JSON.parse(rawLegacy);
+      if (isValidSavedGame(parsedLegacy) && !result[parsedLegacy.difficulty]) {
+        result[parsedLegacy.difficulty] = parsedLegacy;
+        localStorage.setItem(SUDOKU_SAVE_MAP_KEY, JSON.stringify(result));
+      }
+      localStorage.removeItem(LEGACY_SUDOKU_SAVE_KEY);
+    }
+  } catch (e) {
+    console.warn('Konnte gespeicherte Sudokus nicht laden:', e);
+  }
+  return result;
+};
+
 export const useSudokuGame = () => {
   const [board, setBoard] = useState<CellData[]>([]);
   const [status, setStatus] = useState<GameStatus>('idle');
   const [difficulty, setDifficulty] = useState<SudokuDifficulty>('medium');
+  const [savedGameMode, setSavedGameMode] = useState<SudokuGameMode>('ranked');
   const [timer, setTimer] = useState<number>(0);
   const [penaltySeconds, setPenaltySeconds] = useState<number>(0);
   const [errorCount, setErrorCount] = useState<number>(0);
@@ -38,6 +96,10 @@ export const useSudokuGame = () => {
   const [activeRowMemos, setActiveRowMemos] = useState<number[]>([]);
   const [activeColMemos, setActiveColMemos] = useState<number[]>([]);
 
+  const [savedGamesByDifficulty, setSavedGamesByDifficulty] = useState<SavedSudokuMap>(() =>
+    loadSavedGamesMapFromStorage()
+  );
+
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
     if (status === 'playing') {
@@ -47,6 +109,101 @@ export const useSudokuGame = () => {
     }
     return () => clearInterval(interval);
   }, [status]);
+
+  // Auto-Save in den jeweiligen Schwierigkeits-Slot bei jeder Änderung während des Spiels oder in der Pause
+  useEffect(() => {
+    if ((status === 'playing' || status === 'paused') && board.length === 81) {
+      const payload: SavedSudokuGame = {
+        board,
+        difficulty,
+        gameMode: savedGameMode,
+        timer,
+        penaltySeconds,
+        errorCount,
+        hintCount,
+        rescueCount,
+        activeRowMemos,
+        activeColMemos,
+        savedAt: Date.now()
+      };
+      setSavedGamesByDifficulty((prev) => {
+        const next: SavedSudokuMap = { ...prev, [difficulty]: payload };
+        try {
+          localStorage.setItem(SUDOKU_SAVE_MAP_KEY, JSON.stringify(next));
+        } catch (e) {
+          console.warn('Auto-Save für Sudoku fehlgeschlagen:', e);
+        }
+        return next;
+      });
+    } else if (status === 'won') {
+      setSavedGamesByDifficulty((prev) => {
+        if (!prev[difficulty]) return prev;
+        const next: SavedSudokuMap = { ...prev };
+        delete next[difficulty];
+        try {
+          localStorage.setItem(SUDOKU_SAVE_MAP_KEY, JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+    }
+  }, [
+    status,
+    board,
+    difficulty,
+    savedGameMode,
+    timer,
+    penaltySeconds,
+    errorCount,
+    hintCount,
+    rescueCount,
+    activeRowMemos,
+    activeColMemos
+  ]);
+
+  const clearSavedGame = useCallback((targetDifficulty?: SudokuDifficulty) => {
+    const diffToClear = targetDifficulty || difficulty;
+    setSavedGamesByDifficulty((prev) => {
+      const next: SavedSudokuMap = { ...prev };
+      delete next[diffToClear];
+      try {
+        localStorage.setItem(SUDOKU_SAVE_MAP_KEY, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+    if (!targetDifficulty || targetDifficulty === difficulty) {
+      setStatus('idle');
+    }
+  }, [difficulty]);
+
+  const resumeSavedGame = useCallback((targetDifficulty?: SudokuDifficulty): SavedSudokuGame | null => {
+    const currentMap = loadSavedGamesMapFromStorage();
+    setSavedGamesByDifficulty(currentMap);
+
+    const diffToResume = targetDifficulty || difficulty;
+    const saved = currentMap[diffToResume] || Object.values(currentMap)[0] || null;
+    if (!saved) return null;
+
+    setBoard(saved.board);
+    setDifficulty(saved.difficulty);
+    setSavedGameMode(saved.gameMode || 'ranked');
+    setTimer(saved.timer || 0);
+    setPenaltySeconds(saved.penaltySeconds || 0);
+    setErrorCount(saved.errorCount || 0);
+    setHintCount(saved.hintCount || 0);
+    setRescueCount(saved.rescueCount || 0);
+    setActiveRowMemos(saved.activeRowMemos || []);
+    setActiveColMemos(saved.activeColMemos || []);
+    setHasUsedPause(false);
+    setIsNotesMode(false);
+    setSelectedCell(null);
+    setActiveHighlightNumber(null);
+    setStatus('playing');
+    return saved;
+  }, [difficulty]);
+
+  const savedGameInfo = useMemo<SavedSudokuGame | null>(() => {
+    return savedGamesByDifficulty[difficulty] || Object.values(savedGamesByDifficulty)[0] || null;
+  }, [savedGamesByDifficulty, difficulty]);
 
   const handleSetIsNotesMode = useCallback((nextValue: boolean | ((prev: boolean) => boolean)) => {
     setIsNotesMode(prev => {
@@ -92,7 +249,7 @@ export const useSudokuGame = () => {
     }
   }, []);
 
-  const startGame = useCallback((selectedDifficulty: SudokuDifficulty) => {
+  const startGame = useCallback((selectedDifficulty: SudokuDifficulty, selectedGameMode: SudokuGameMode = 'ranked') => {
     const rawSudoku = getSudoku(selectedDifficulty);
     const newBoard: CellData[] = [];
 
@@ -119,6 +276,7 @@ export const useSudokuGame = () => {
 
     setBoard(newBoard);
     setDifficulty(selectedDifficulty);
+    setSavedGameMode(selectedGameMode);
     setStatus('playing');
     setTimer(0);
     setPenaltySeconds(0);
@@ -126,18 +284,23 @@ export const useSudokuGame = () => {
     setHintCount(0);
     setRescueCount(0);
     setHasUsedPause(false);
+    setIsNotesMode(false);
     setSelectedCell(null);
     setActiveHighlightNumber(null);
     setActiveRowMemos([]);
     setActiveColMemos([]);
   }, []);
 
-  const pauseGame = () => {
+  // Pause ist regulär erlaubt (Brett wird im Pause-Modus verdeckt) und führt NICHT mehr zu 'Außer Wertung'
+  const pauseGame = useCallback(() => {
     setStatus('paused');
-    setHasUsedPause(true);
-  };
+    setSelectedCell(null);
+    setActiveHighlightNumber(null);
+  }, []);
   
-  const resumeGame = () => setStatus('playing');
+  const resumeGame = useCallback(() => {
+    setStatus('playing');
+  }, []);
 
   const clearConflicts = useCallback((currentBoard: CellData[]) => {
     let changed = false;
@@ -377,9 +540,13 @@ export const useSudokuGame = () => {
     missingInRows,
     missingInCols,
     hasUsedPause,
+    savedGameInfo,
+    savedGamesByDifficulty,
     startGame,
     pauseGame,
     resumeGame,
+    resumeSavedGame,
+    clearSavedGame,
     handleSelectCell,
     setIsNotesMode: handleSetIsNotesMode,
     setNumber,
