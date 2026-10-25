@@ -1,4 +1,4 @@
-// [2026-10-25] - UX-FIX: Kein Ansichten-Sprung und kein Verlust der Textmarkierung mehr in den Notizen. Im aufgeklappten Zustand wird direkt der RichTextEditor gerendert (inkl. "Notiztext leeren" & "Undo").
+// [2026-10-25] - UX-FIX: Kein Ansichten-Sprung und kein Verlust der Textmarkierung mehr in den Notizen. Im aufgeklappten Zustand wird direkt der RichTextEditor gerendert (inkl. "Notiztext leeren" & "Undo"); beim Verlassen (onBlur) klappt ein leeres Notizfeld automatisch wieder ein.
 // [2026-10-23] - UX-UPGRADE: Durchgehende "Familien-Klammer" in Warm-Amber (Gold-Orange) für Oberpunkte und ihre Unterpunkte (6. -> 6.1 -> 6.2). Blau bleibt exklusiv für den Zeilen-Fokus reserviert; doppelter Mittelstrich nach der Uhrzeit entfernt und durch eine durchgehende Baum-Leitlinie links ersetzt.
 // [2026-10-23] - UX-UPGRADE: Validierungs-Hervorhebung (hasValidationError) für unzugewiesene Aufgaben beim Sitzungsabschluss integriert (roter Rahmen + direkt klickbares Warn-Badge).
 // [2026-10-19] - UX-UPGRADE: Sofortiger Zeilen-Fokus via onClickCapture (verhindert hängenbleibenden Fokus durch stopPropagation in Kind-Elementen) sowie deutliche farbliche und strukturelle Abhebung von Unterpunkten (Indigo/Slate-Hierarchie) und aktiver Auswahl.
@@ -183,13 +183,16 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
     }
   };
 
-  const handleSaveDescriptionDraft = () => {
+  const handleSaveDescriptionDraft = (autoCollapseIfEmpty = true) => {
     const finalDesc = descDraft.trim();
     if (finalDesc !== (item.description || '')) {
       onSaveInline({ ...item, description: finalDesc });
     }
     setEditField(null);
     setAutoFocusNewDesc(false);
+    if (autoCollapseIfEmpty && finalDesc === '' && isExpanded) {
+      onToggleExpand(item.id);
+    }
   };
 
   const handleInlineSaveDate = () => { 
@@ -384,7 +387,8 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
                 </div>
                 <div 
                   className={`shrink-0 mt-0.5 ml-2 cursor-pointer transition-all print:!hidden p-1 rounded-md ${isExpanded ? 'bg-blue-100 text-blue-700 shadow-inner' : (hasDescription ? 'bg-blue-50 text-blue-600 hover:bg-blue-100 shadow-sm' : 'text-gray-300 hover:text-blue-500')}`} 
-                  onClick={(e) => { e.stopPropagation(); if (isExpanded) { handleSaveDescriptionDraft(); performScrollPreservedToggle(e, () => onToggleExpand(item.id)); } else { setDescDraft(item.description || ''); setAutoFocusNewDesc(!hasDescription && !isReadOnly); performScrollPreservedToggle(e, () => onToggleExpand(item.id)); } }}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => { e.stopPropagation(); if (isExpanded) { handleSaveDescriptionDraft(false); performScrollPreservedToggle(e, () => onToggleExpand(item.id)); } else { setDescDraft(item.description || ''); setAutoFocusNewDesc(!hasDescription && !isReadOnly); performScrollPreservedToggle(e, () => onToggleExpand(item.id)); } }}
                 >
                   <AlignLeft className="w-4 h-4" />
                 </div>
@@ -438,7 +442,7 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
                 <RichTextEditor
                   value={descDraft}
                   onChange={setDescDraft}
-                  onBlur={handleSaveDescriptionDraft}
+                  onBlur={() => handleSaveDescriptionDraft(true)}
                   placeholder="Notizen oder Beschreibung hier eingeben..."
                   autoFocus={autoFocusNewDesc}
                 />
