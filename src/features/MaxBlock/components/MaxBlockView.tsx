@@ -1,5 +1,6 @@
 // src/features/MaxBlock/components/MaxBlockView.tsx
-// [2026-10-25] - UX-FIX (iPadOS 26): Schwarze Lobby-Kopfzeile als statischen Block (shrink-0) vor den Scroll-Container (overflow-y-auto) gezogen, um den automatischen Top-Scroll-Edge-Blur (Milchglas-Effekt) von iPadOS 26 Safari auf der Kopfzeile zu verhindern.
+// [2026-10-25] - UX-FIX (iPadOS 26 vs. iPhone): 36px Top-Spacer ('hidden sm:block sm:h-9') ausschließlich ab Tablet-Größe (sm:) über die Kopfzeile gesetzt. Auf dem iPad rutscht die Kopfzeile damit komplett unter den 36px-Milchglas-Streifen der 🔴🟡🟢-Fensterampel (100% scharf), während auf dem iPhone (<640px) kein einziger Pixel für das Spielfeld verloren geht.
+// [2026-10-25] - UX-FIX (iPadOS 26): Schwarze Lobby-Kopfzeile als statischen Block (shrink-0) vor den Scroll-Container (overflow-y-auto) gezogen.
 // [2026-10-24] - UX-FEATURE: Pause-Button (⏸️/▶️ inkl. Pause-Overlay ohne Ausschluss von der Hall of Fame) für Rangliste & Üben sowie explizite Speicher-Auswahl ('In die Hall of Fame' vs. 'Nur lokal speichern') am Spielende integriert.
 // [2026-10-24] - BUGFIX: Persönlichen Rekord ('localBest') automatisch mit den eigenen Hall-of-Fame-Scores ('maxBlockScores') synchronisiert, damit Rekorde geräteübergreifend (Mac <-> iPhone) stimmen.
 // [2026-10-24] - UX-IMPROVEMENT: Kopfzeile in Lobby und Spielansicht (Score | Level | Next) auf Spielbreite (max-w-md mx-auto) zentriert und '◀ Zurück' konsistent auf die linke Seite über dem Spiel positioniert.
@@ -220,8 +221,11 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
     <div className="fixed inset-0 h-[100dvh] z-[9999] flex flex-col bg-slate-100 overflow-hidden isolate">
       {view === 'lobby' && (
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          {/* Header 100% identisch zu Sudoku - Außerhalb des Scroll-Containers (shrink-0), damit iPadOS 26 keinen Scroll-Edge-Blur darüberlegt */}
-          <div className="bg-slate-900 text-white px-3 sm:px-4 py-2.5 pt-[max(env(safe-area-inset-top),0.5rem)] shadow-md shrink-0 z-20">
+          {/* iPadOS 26 Fenster-Ampel-Zone (nur ab sm:/Tablet sichtbar, auf dem iPhone 0px!) */}
+          <div className="hidden sm:block sm:h-9 shrink-0 bg-slate-100" />
+
+          {/* Header 100% identisch zu Sudoku - Auf dem iPhone ganz oben, auf dem iPad sauber unterhalb der 36px-Milchglas-Ampelzone */}
+          <div className="bg-slate-900 text-white px-3 sm:px-4 py-2.5 pt-[max(env(safe-area-inset-top),0.5rem)] sm:pt-2.5 shadow-md shrink-0 z-20">
             <div className="w-full max-w-md mx-auto flex items-center justify-between gap-2">
               <button 
                 onClick={onClose} 
@@ -344,7 +348,10 @@ export const MaxBlockView: React.FC<MaxBlockViewProps> = ({ onClose }) => {
 
       {view === 'playing' && (
         <div className="flex-1 h-[100dvh] flex flex-col text-white bg-slate-950">
-          <div className="bg-slate-900 pt-[max(env(safe-area-inset-top),0.5rem)] shadow-md z-10 border-b border-slate-800 px-3 sm:px-4">
+          {/* iPadOS 26 Fenster-Ampel-Zone (nur ab sm:/Tablet sichtbar, auf dem iPhone 0px!) */}
+          <div className="hidden sm:block sm:h-9 shrink-0 bg-slate-900" />
+
+          <div className="bg-slate-900 pt-[max(env(safe-area-inset-top),0.5rem)] sm:pt-1.5 shadow-md z-10 border-b border-slate-800 px-3 sm:px-4">
             <div className="w-full max-w-md mx-auto">
               <div className="pb-1.5 flex justify-between items-center">
                 <button 

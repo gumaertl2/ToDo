@@ -1,5 +1,5 @@
 // src/features/Sudoku/components/SudokuView.tsx
-// [2026-10-25] - UX-FIX (iPadOS 26): Schwarze Lobby-Kopfzeile als statischen Block (shrink-0) vor den Scroll-Container (overflow-y-auto) gezogen, um den automatischen Top-Scroll-Edge-Blur (Milchglas-Effekt) von iPadOS 26 Safari auf der Kopfzeile zu verhindern.
+// [2026-10-25] - UX-FIX (iPadOS 26 vs. iPhone): 36px Top-Spacer ('hidden sm:block sm:h-9') ausschließlich ab Tablet-Größe (sm:) über die Kopfzeile gesetzt. Auf dem iPad rutscht die Kopfzeile damit komplett unter den 36px-Milchglas-Streifen der 🔴🟡🟢-Fensterampel (100% scharf), während auf dem iPhone (<640px) kein einziger Pixel Platz verloren geht.
 // [2026-10-25] - FEATURE: 4 unabhängige Speicherplätze je Schwierigkeitsstufe in der Lobby-UI angebunden (💾-Indikator direkt auf den Stufen-Buttons, gezieltes Fortsetzen/Verwerfen pro Stufe).
 // [2026-10-25] - FEATURE: 'Weiterspielen'-Karte in der Lobby für gespeicherte Sudokus sowie erweitertes, blickdichtes Pause-Menü ('▶ Weiter spielen', '💾 Speichern & später weiterspielen', '🗑️ Spiel verwerfen') integriert.
 // [2026-10-24] - FEATURE: Neue Strafzeiten (❌ +60s, 🛟 +180s je Zahl, 💡 +600s je Tipp) und Übergabe von errorCount, hintCount und rescueCount an Auswertung, WinScreen & Hall of Fame integriert.
@@ -241,8 +241,11 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
     <div className="fixed inset-0 h-[100dvh] z-[9999] flex flex-col bg-slate-100 overflow-hidden isolate">
       {view === 'lobby' && (
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          {/* Header - Außerhalb des Scroll-Containers (shrink-0), damit iPadOS 26 keinen Scroll-Edge-Blur darüberlegt */}
-          <div className="bg-slate-900 text-white px-3 sm:px-4 py-2.5 pt-[max(env(safe-area-inset-top),0.5rem)] shadow-md shrink-0 z-20">
+          {/* iPadOS 26 Fenster-Ampel-Zone (nur ab sm:/Tablet sichtbar, auf dem iPhone 0px!) */}
+          <div className="hidden sm:block sm:h-9 shrink-0 bg-slate-100" />
+
+          {/* Header - Auf dem iPhone ganz oben, auf dem iPad sauber unterhalb der 36px-Milchglas-Ampelzone */}
+          <div className="bg-slate-900 text-white px-3 sm:px-4 py-2.5 pt-[max(env(safe-area-inset-top),0.5rem)] sm:pt-2.5 shadow-md shrink-0 z-20">
             <div className="w-full max-w-md mx-auto flex items-center justify-between gap-2">
               <button 
                 onClick={onClose} 
@@ -412,7 +415,10 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
       {/* Spielen-Ansicht */}
       {view === 'playing' && (
         <div className="flex-1 flex flex-col">
-          <div className="bg-slate-900 text-white p-3 pt-[max(env(safe-area-inset-top),0.5rem)] shadow-md">
+          {/* iPadOS 26 Fenster-Ampel-Zone (nur ab sm:/Tablet sichtbar, auf dem iPhone 0px!) */}
+          <div className="hidden sm:block sm:h-9 shrink-0 bg-slate-100" />
+
+          <div className="bg-slate-900 text-white p-3 pt-[max(env(safe-area-inset-top),0.5rem)] sm:pt-3 shadow-md">
             <div className="w-full max-w-md mx-auto flex items-center justify-between">
               <button 
                 onClick={handleSaveAndReturnToLobby} 
