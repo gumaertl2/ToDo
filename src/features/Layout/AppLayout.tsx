@@ -1,4 +1,4 @@
-// [2026-10-26] - UX-NAVIGATION: Mobile-Leiste auf 5 primäre Icons erweitert (Start, Kalender, User, nuScore, Erinnerungen + Menü-Button) und Menübezeichnungen auf prägnante Einzelbegriffe gekürzt.
+// [2026-10-26] - UX-NAVIGATION: Feste Top-5-Reihenfolge (Start, Kalender, User, nuScore, Erinnerungen) garantiert immer in der primären Mobile-Leiste; Sitzungen, Dashboard und Meine ToDos folgen danach im Menü.
 // [2026-10-22] - FEATURE: Easter-Egg Arcade-Hub integriert (Doppelklick auf Desktop-Logo oder Mobile-Home-Button öffnet das Vereins-Sudoku).
 // [2026-10-18] - FIX: TypeScript Type-Narrowing für sub.reminderSenderUserId in verschachtelter forEach-Schleife (TS2345 bei Vercel Build) behoben.
 // [2026-10-18] - SYNC: Badge-Zähler (reminderCounts) in der Seitenleiste 1:1 mit useRemindersData synchronisiert (Erledigt-Filter, Überfällig-Regel für offene Aufgaben, Strikte Mitternachtsregel für Termine & auto-Absender-Auflösung).
@@ -350,15 +350,17 @@ export const AppLayout: React.FC = () => {
     }
   }, [reminderCounts, taskCounts, canViewAllReminders]);
 
+  // Die ersten 5 Einträge (Start, Kalender, User, nuScore, Erinnerungen) bilden immer die feste Mobile-Hauptleiste.
+  // Alle weiteren Punkte (Sitzungen, Dashboard, Meine ToDos) erscheinen auf dem Handy im ☰-Menü.
   const allMainNavItems = [
     { to: '/', icon: Home, label: 'Start', show: true },
     { to: '/calendar', icon: CalendarDays, label: 'Kalender', show: perms?.viewCalendar },
     { to: '/users', icon: Users, label: 'User', show: perms?.viewUsers },
     { to: '/team-pins', icon: Key, label: 'nuScore', show: perms?.viewTeamPins || user?.permissions?.viewTeamPins },
-    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', show: perms?.viewDashboard },
-    { to: '/todos', icon: CheckSquare, label: 'Meine ToDos', show: perms?.viewTasks },
     { to: '/reminders', icon: MessageCircle, label: 'Erinnerungen', show: perms?.viewReminders },
     { to: '/events', icon: Calendar, label: 'Sitzungen', show: perms?.viewEvents },
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', show: perms?.viewDashboard },
+    { to: '/todos', icon: CheckSquare, label: 'Meine ToDos', show: perms?.viewTasks },
   ];
 
   const mainNavItems = allMainNavItems.filter(item => item.show);
@@ -442,10 +444,10 @@ export const AppLayout: React.FC = () => {
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         className={`hidden lg:flex flex-col bg-white shadow-md transition-all duration-300 ease-in-out relative z-40 shrink-0
-          ${isExpanded ? 'w-64' : 'w-[76px]'}
+          ${isExpanded ? 'w-48' : 'w-[76px]'}
           print:!hidden print:!absolute print:!w-0 print:!h-0 print:!overflow-hidden print:!m-0 print:!p-0`}
       >
-        <div className="p-4 border-b border-gray-200 flex items-center justify-between h-[73px] overflow-hidden shrink-0">
+        <div className="px-3 py-4 border-b border-gray-200 flex items-center justify-between h-[73px] overflow-hidden shrink-0">
           <div className={`transition-all duration-300 whitespace-nowrap overflow-hidden ${isExpanded ? 'opacity-100 w-full' : 'opacity-0 w-0'}`}>
             <NavLink 
               to="/" 
@@ -453,21 +455,21 @@ export const AppLayout: React.FC = () => {
               className="flex items-center hover:opacity-80 transition-opacity group cursor-pointer" 
               title={`Verbundene DB: ${projectId} (Doppelklick für Arcade)`}
             >
-              <Home className="w-5 h-5 text-blue-600 mr-2 group-hover:text-blue-700 transition-colors" strokeWidth={2.5} />
-              <h1 className="text-xl font-bold text-blue-600 group-hover:text-blue-700 transition-colors select-none">PapaToDo</h1>
+              <Home className="w-5 h-5 text-blue-600 mr-1.5 group-hover:text-blue-700 transition-colors shrink-0" strokeWidth={2.5} />
+              <h1 className="text-lg font-bold text-blue-600 group-hover:text-blue-700 transition-colors select-none">PapaToDo</h1>
             </NavLink>
-            <div className="text-sm text-gray-500 mt-0.5 truncate">Hallo {user?.name || 'Mitglied'}</div>
+            <div className="text-xs text-gray-500 mt-0.5 truncate">Hallo {user?.name || 'Mitglied'}</div>
           </div>
           <button
             onClick={() => setIsPinned(!isPinned)}
             className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors shrink-0"
             title={isPinned ? "Menü abpinnen" : "Menü anpinnen"}
           >
-            {isPinned ? <PinOff className="w-5 h-5" /> : <Pin className="w-5 h-5" />}
+            {isPinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
           </button>
         </div>
         
-        <nav className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-1 custom-scrollbar">
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden p-2.5 space-y-1 custom-scrollbar">
           {mainNavItems.map(renderDesktopNavItem)}
           
           {setupNavItems.length > 0 && (
@@ -484,7 +486,7 @@ export const AppLayout: React.FC = () => {
           )}
         </nav>
         
-        <div className="p-3 border-t border-gray-200 overflow-hidden shrink-0 space-y-1">
+        <div className="p-2.5 border-t border-gray-200 overflow-hidden shrink-0 space-y-1">
           <button
             onClick={() => setIsProfileModalOpen(true)}
             title={!isExpanded ? "Mein Profil" : undefined}
@@ -507,8 +509,9 @@ export const AppLayout: React.FC = () => {
             </span>
           </button>
           
-          <div className={`text-center text-[10px] text-gray-400 font-medium transition-all duration-300 mt-2 ${isExpanded ? 'opacity-100 block' : 'opacity-0 hidden'}`}>
-            Build: {appVersion} • DB: {projectId}
+          <div className={`text-center text-[10px] leading-tight text-gray-400 font-medium transition-all duration-300 mt-1.5 ${isExpanded ? 'opacity-100 block' : 'opacity-0 hidden'}`}>
+            <div className="truncate">Build: {appVersion}</div>
+            <div className="truncate">DB: {projectId}</div>
           </div>
         </div>
       </aside>

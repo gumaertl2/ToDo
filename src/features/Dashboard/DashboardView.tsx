@@ -1,3 +1,4 @@
+// [2026-10-26] - BUGFIX: Synchronized pendingWhatsAppReminders calculation with useDashboardData and AppLayout (past-event upper bound todayStart <= eventDateStart and isHistorical filter).
 // [2026-05-28] - BUGFIX: Stacking Context (Z-Index) für das Protokoll-Dropdown repariert. Dynamischer Z-Index hebt nun die geöffnete Kachel über die nachfolgenden, damit das Dropdown nicht von darunterliegenden Texten überlagert wird.
 // [2026-05-28] - BUGFIX: JSX Parse Error behoben. Ein fehlerhaft platzierter JSX-Kommentar direkt nach einem return-Statement wurde in einen normalen JS-Kommentar umgewandelt.
 // [2026-05-28] - BUGFIX: Dashboard CSS-Clipping. 'overflow-hidden' von den Dashboard-Containern und Event-Kacheln entfernt, da dieses das absolut positionierte 'Protokoll'-Dropdown abgeschnitten und unsichtbar gemacht hat.
@@ -115,7 +116,7 @@ export const DashboardView: React.FC = () => {
           const eventStart = new Date(ce.startTime);
           const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
           const stichtag = eventDateStart - (ce.reminderLeadDays * MS_PER_DAY);
-          if (todayStart >= stichtag) count++;
+          if (todayStart >= stichtag && todayStart <= eventDateStart) count++;
         }
       });
     }
@@ -123,7 +124,7 @@ export const DashboardView: React.FC = () => {
     // 2. Aufgaben & Agenda-Punkte
     if (tasks) {
       tasks.forEach(t => {
-        if (t.isTemplate) return;
+        if (t.isTemplate || t.isHistorical) return;
         
         // CHIRURGISCHER EINGRIFF: Schutzschilde aus AppLayout synchronisiert
         if (t.status === 'ERLEDIGT' || t.status === 'TRASH' || t.progress === 100) return;
@@ -145,7 +146,7 @@ export const DashboardView: React.FC = () => {
           const taskDue = new Date(t.dueDate);
           const taskDateStart = new Date(taskDue.getFullYear(), taskDue.getMonth(), taskDue.getDate()).getTime();
           const stichtag = taskDateStart - (t.reminderLeadDays * MS_PER_DAY);
-          if (todayStart >= stichtag) count++;
+          if (todayStart >= stichtag && todayStart <= taskDateStart) count++;
         }
       });
     }
@@ -162,7 +163,7 @@ export const DashboardView: React.FC = () => {
           const eventStart = new Date(ev.plannedStartTime);
           const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
           const stichtag = eventDateStart - (ev.reminderLeadDays * MS_PER_DAY);
-          if (todayStart >= stichtag) count++;
+          if (todayStart >= stichtag && todayStart <= eventDateStart) count++;
         }
       });
     }
@@ -176,7 +177,7 @@ export const DashboardView: React.FC = () => {
               const eventStart = new Date(cachedEv.startTime);
               const eventDateStart = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate()).getTime();
               const stichtag = eventDateStart - (sub.reminderLeadDays! * MS_PER_DAY);
-              if (todayStart >= stichtag) count++;
+              if (todayStart >= stichtag && todayStart <= eventDateStart) count++;
             }
           });
         }
