@@ -1,4 +1,5 @@
 // src/features/Sudoku/hooks/useSudokuGame.ts
+// [2026-10-26] - UX-FIX: Automatische Notizen-Bereinigung in Nachbarzellen (Zeile/Spalte/Block) bei Zahleneingabe und Tipps deaktiviert, damit manuelle Paar-Notizen (Naked Pairs / Snyder-Notation) niemals ungewollt vom System verändert werden.
 // [2026-10-25] - FEATURE: Auto-Save auf 4 unabhängige Speicherplätze (1 Slot je Schwierigkeitsstufe: easy, medium, hard, expert) erweitert, damit z.B. ein Experten-Sudoku pausiert bleiben kann, während man zwischendurch ein leichtes Sudoku spielt.
 // [2026-10-25] - FEATURE: Auto-Save & Resume im localStorage integriert, damit laufende oder pausierte Sudokus (inkl. Notizen, Zeilen-/Spalten-Memos, Zeit und Modus) auch über Nacht oder nach App-Neustart erhalten bleiben. Pause-Funktion vergibt kein 'Außer Wertung' mehr.
 // [2026-10-24] - FEATURE: Strafzeiten & Hilfen-Tracking geschärft: Tippfehler (❌ +60s), Rettungsring (🛟 +180s je falscher Zahl, eigener Zähler rescueCount), Tipp (💡 +600s je Tipp).
@@ -356,15 +357,6 @@ export const useSudokuGame = () => {
     } else {
       if (cell.value !== num) {
         newBoard[selectedCell] = { ...cell, value: num, notes: [] };
-        
-        newBoard = newBoard.map(c => {
-          if (c.index !== selectedCell && !c.isFixed && (c.row === cell.row || c.col === cell.col || c.block === cell.block)) {
-            if (c.notes.includes(num)) {
-              return { ...c, notes: c.notes.filter(n => n !== num) };
-            }
-          }
-          return c;
-        });
 
         const evaluated = calculateConflicts(newBoard);
         newBoard = evaluated.newBoard;
@@ -410,13 +402,6 @@ export const useSudokuGame = () => {
     const correctValue = cell.solution;
     let newBoard = [...board];
     newBoard[selectedCell] = { ...cell, value: correctValue, notes: [] };
-    
-    newBoard = newBoard.map(c => {
-      if (c.index !== selectedCell && !c.isFixed && (c.row === cell.row || c.col === cell.col || c.block === cell.block)) {
-        return { ...c, notes: c.notes.filter(n => n !== correctValue) };
-      }
-      return c;
-    });
     
     const evaluated = calculateConflicts(newBoard);
     setBoard(evaluated.newBoard);
