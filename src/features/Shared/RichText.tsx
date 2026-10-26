@@ -1,10 +1,12 @@
+// [2026-10-26] - UX-FEATURE: Button "↳ Als Unterpunkt" in der Notiz-Werkzeugleiste ergänzt (ruft extractSelectionOrBlockFromEditor aus noteExtractorUtils.ts auf).
 // [2026-10-25] - UX-UPGRADE: Ruhige, ablenkungsfreie WYSIWYG-Werkzeugleiste (Fett, Kursiv, Unterstrichen | Aufzählungspunkte, Nummerierte Liste | Notiztext leeren & Undo) ohne bunte Farbpunkte; sauberer hängender Einzug für Punkte und Nummerierungen.
 // [2026-10-25] - UX-FEATURE: 1-Klick "Notiztext leeren"-Button mit direkter "Text wiederherstellen (Undo)"-Funktion (bis zum Verlassen des Feldes via onBlur) in der Notiz-Werkzeugleiste ergänzt.
 // [2026-06-01] - UX-FEATURE: Highlighting für Fundstellen (Volltextsuche) nahtlos in den originalen Renderer integriert, ohne die Formatierungs- oder Indentation-Logik zu beeinträchtigen.
 // [2026-05-29] - BUGFIX: Whitespace/Indentation in Print. 'whitespace-pre-wrap' ergänzt und Einrückungs-Level bei Listenpunkten berechnet, damit Formatierungen im Ausdruck nicht verloren gehen.
 // src/features/Shared/RichText.tsx
 import React, { useRef, useEffect, useState } from 'react';
-import { Bold, Italic, Underline, List, ListOrdered, Eraser, RotateCcw } from 'lucide-react';
+import { Bold, Italic, Underline, List, ListOrdered, Eraser, RotateCcw, CornerDownRight } from 'lucide-react';
+import { extractSelectionOrBlockFromEditor } from './noteExtractorUtils';
 
 interface EditorProps {
   value: string;
@@ -14,6 +16,7 @@ interface EditorProps {
   disabled?: boolean;
   autoFocus?: boolean;
   searchQuery?: string;
+  onExtractSubItem?: (extractedText: string, remainingMarkdown: string) => void;
 }
 
 const escapeHtml = (str: string): string =>
@@ -203,7 +206,8 @@ export const RichTextEditor: React.FC<EditorProps> = ({
   onBlur,
   placeholder,
   disabled,
-  autoFocus
+  autoFocus,
+  onExtractSubItem
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const isFocusedRef = useRef<boolean>(false);
@@ -253,6 +257,16 @@ export const RichTextEditor: React.FC<EditorProps> = ({
     syncFromDom();
   };
 
+  const handleExtractToSubItem = () => {
+    if (disabled || !editorRef.current || !onExtractSubItem) return;
+    const result = extractSelectionOrBlockFromEditor(editorRef.current, htmlToMarkdown);
+    if (!result) {
+      alert('Bitte markiere zuerst den gewünschten Textabschnitt im Notizfeld oder setze den Cursor in den Aufzählungspunkt, den du als Unterpunkt auslagern möchtest.');
+      return;
+    }
+    onExtractSubItem(result.extractedText, result.remainingMarkdown);
+  };
+
   const handleClearText = () => {
     if (disabled || !value) return;
     setUndoBuffer(value);
@@ -290,7 +304,7 @@ export const RichTextEditor: React.FC<EditorProps> = ({
         className="bg-gray-50 border-b border-gray-200 p-1 flex items-center justify-between gap-1 flex-wrap"
         onMouseDown={(e) => e.preventDefault()}
       >
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5 flex-wrap">
           <button
             type="button"
             onClick={() => execEditorCommand('bold')}
@@ -337,6 +351,21 @@ export const RichTextEditor: React.FC<EditorProps> = ({
           >
             <ListOrdered className="w-4 h-4" />
           </button>
+
+          {!disabled && onExtractSubItem && !isEmpty && (
+            <>
+              <div className="w-px h-4 bg-gray-300 mx-1" />
+              <button
+                type="button"
+                onClick={handleExtractToSubItem}
+                className="flex items-center gap-1 px-2 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded transition-colors shadow-xs"
+                title="Markierten Text oder aktuellen Aufzählungspunkt in einen neuen Unterpunkt auslagern"
+              >
+                <CornerDownRight className="w-3.5 h-3.5" />
+                <span>Als Unterpunkt</span>
+              </button>
+            </>
+          )}
         </div>
 
         {!disabled && (

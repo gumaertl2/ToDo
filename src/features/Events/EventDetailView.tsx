@@ -1,3 +1,4 @@
+// [2026-10-26] - FEATURE: "Als Unterpunkt auslagern" (onExtractSubItem) in EventDetailView angebunden. Öffnet ItemFormModal mit vorausgefülltem Unterpunkt-Entwurf (buildDraftSubItemFromExtractedText) und kürzt den Originaltext erst beim tatsächlichen Speichern im Modal.
 // [2026-10-26] - ROLLOVER-HARDENING: 1) Oberpunkte (auch AGENDA/INFO/BESCHLUSS ohne isRoutine), die unfertige Aufgaben-Unterpunkte (< 100%) enthalten, werden beim Sitzungsabschluss automatisch ins nächste Meeting übertragen. 2) Bereits zu 100% erledigte einmalige Unteraufgaben (!isRoutine) unter Routine-Agendapunkten werden nicht mehr als 0% OFFEN wiederbelebt. 3) Unfertige Einmal-Aufgaben behalten beim Übertrag ihr echtes Fälligkeitsdatum (kein ungewolltes Verschieben durch leadTimeValue/leadTimeUnit).
 // [2026-10-23] - UX-UPGRADE: Alle Sitzungs-Werkzeuge (pastEvents, isLibraryVisible, onPrint, onSearchChange) an die konsolidierte EventAgendaList-Toolbar übergeben.
 // [2026-10-23] - ROLLOVER & BLOODLINE-HARDENING: 1) deduplicatedAgenda ignoriert TRASH-Elemente, damit gelöschte Punkte niemals aktive Zwillinge verdrängen. 2) Rekursives Mit-Kopieren aller Unterpunkte (auch mehrstufiger) unter ihren neuen Oberpunkt beim Sitzungsabschluss. 3) Volltextsuche berücksichtigt den gesamten Unterpunkt-Baum.
@@ -26,6 +27,7 @@ import { useClubStore } from '../../store/useClubStore';
 import { doc, collection } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { ItemFormModal } from '../Shared/ItemFormModal';
+import { buildDraftSubItemFromExtractedText } from '../Shared/noteExtractorUtils';
 import { EventFormModal } from './EventFormModal';
 import { TaskHistoryModal } from '../Tasks/TaskHistoryModal';
 import { EventDetailHeader } from './EventDetailHeader';
@@ -46,6 +48,11 @@ export const EventDetailView: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditEventModalOpen, setIsEditEventModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<AgendaItem | null>(null);
+  const [pendingExtraction, setPendingExtraction] = useState<{
+    sourceItem: AgendaItem;
+    remainingMarkdown: string;
+    draftSubItem: Partial<AgendaItem>;
+  } | null>(null);
   const [returnToTask, setReturnToTask] = useState<AgendaItem | null>(null);
   const [historyTask, setHistoryTask] = useState<Task | null>(null);
   const [isLibraryVisible, setIsLibraryVisible] = useState(false); 
@@ -478,7 +485,8 @@ export const EventDetailView: React.FC = () => {
     }); 
   };
 
-  const editingParentTask = editingItem?.parentItemId ? eventAgenda.find(t => t.id === editingItem.parentItemId) : undefined;
+  const activeParentItemId = editingItem?.parentItemId || pendingExtraction?.draftSubItem?.parentItemId;
+  const editingParentTask = activeParentItemId ? eventAgenda.find(t => t.id === activeParentItemId) : undefined;
 
   // CHIRURGISCHER EINGRIFF: Für Mobile wird hier 'block min-h-screen' gesetzt. Damit wird das unsichtbare 'h-full' Korsett zerstört und die Ansicht wächst natürlich nach unten. Ab 'md:' (Tablet/Desktop) greift wieder das vertraute 'flex h-full' Layout.
   return (
@@ -514,8 +522,14 @@ export const EventDetailView: React.FC = () => {
           isLibraryVisible={isLibraryVisible}
           onToggleLibrary={() => setIsLibraryVisible(!isLibraryVisible)}
           onPrint={handlePrint}
-          onAddNewItem={() => { setEditingItem(null); setIsModalOpen(true); }}
-          onEditItem={i => { setEditingItem(i); setIsModalOpen(true); }}
+          onAddNewItem={() => { setEditingItem(null); setPendingExtraction(null); setIsModalOpen(true); }}
+          onEditItem={i => { setEditingItem(i); setPendingExtraction(null); setIsModalOpen(true); }}
+          onExtractSubItem={(sourceItem, extractedText, remainingMarkdown) => {
+            const draftSubItem = buildDraftSubItemFromExtractedText(sourceItem, extractedText, users, currentEvent);
+            setEditingItem(null);
+            setPendingExtraction({ sourceItem, remainingMarkdown, draftSubItem });
+            setIsModalOpen(true);
+          }}
           onOpenHistory={i => setHistoryTask(i)}
           onPlanNextMeeting={() => { if (validateBeforeClose()) setIsEventModalOpen(true); }}
           onFinishEvent={async () => { 
@@ -540,14 +554,15 @@ export const EventDetailView: React.FC = () => {
 
       {isModalOpen && (
         <ItemFormModal 
-          key={editingItem ? editingItem.id : `new-${Date.now()}`} 
+          key={editingItem ? editingItem.id : (pendingExtraction ? `extract-${pendingExtraction.sourceItem.id}` : `new-${Date.now()}`)} 
           isOpen={true} 
-          existingItem={editingItem || { eventId: eventId, type: 'AGENDA' }} 
+          existingItem={editingItem || pendingExtraction?.draftSubItem || { eventId: eventId, type: 'AGENDA' }} 
           parentItemContext={editingParentTask} 
           isReadOnly={isReadOnly}
           onNavigateToParent={() => { 
             if (editingParentTask) { 
               setReturnToTask(editingItem); 
+              setPendingExtraction(null);
               setEditingItem(editingParentTask); 
             } 
           }}
@@ -561,6 +576,7 @@ export const EventDetailView: React.FC = () => {
           onClose={() => { 
             if (editingItem?.id) handleClearPreview(editingItem.id); 
             setIsModalOpen(false); 
+            setPendingExtraction(null);
             setReturnToTask(null); 
           }} 
           onDurationPreview={(val) => { 
@@ -591,9 +607,19 @@ export const EventDetailView: React.FC = () => {
               eventId, 
               ...( !editingItem ? { createdAt: Date.now(), protocolIndex: newProtocolIndex } : {}) 
             }); 
+
+            if (pendingExtraction) {
+              const currentSourceItem = eventAgenda.find(i => i.id === pendingExtraction.sourceItem.id) || pendingExtraction.sourceItem;
+              await saveAgendaItem({
+                ...currentSourceItem,
+                description: pendingExtraction.remainingMarkdown,
+              });
+            }
+
             if (editingItem?.id) handleClearPreview(editingItem.id); 
             if (eventId) fetchEventAgenda(eventId); 
             setIsModalOpen(false); 
+            setPendingExtraction(null);
             setReturnToTask(null); 
           }} 
         />

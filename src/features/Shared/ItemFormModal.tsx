@@ -1,3 +1,4 @@
+// [2026-10-26] - BUGFIX & UX-UPGRADE: 1) isSubItem und parentItemId beim Speichern (handleSave) konsequent in das Payload übernommen, damit neu ausgelagerte/erstellte Unterpunkte nicht als Hauptpunkte am Ende landen. 2) Unteraufgaben unterstützen im Dropdown nun sowohl '📌 Festes Datum' (mit freiem Kalender-Datumswähler) als auch die relativen Regeln ('Am gleichen Tag', 'Tage DAVOR', 'Tage DANACH').
 // [2026-06-01] - BUGFIX: 'undefined' Bug bei abgewählten Checkboxen behoben. Wenn WhatsApp-Erinnerungen, Routinen oder Fälligkeitsdaten deaktiviert wurden, hat der Payload-Filter (undefined-Strip) verhindert, dass die Werte in Firestore gelöscht wurden. Sie werden nun explizit als 'null' übergeben, um die Felder in der Datenbank zu leeren.
 // [2026-06-01] - BUGFIX: WhatsApp-Narrensicherung (Poka-Yoke) strikt auf E-Mail-Abgleich korrigiert. Der fehleranfällige Namens-Check wurde auf PO-Wunsch entfernt. Die Automatik greift nur noch, wenn die E-Mail des Gast-Users keinem App-User zugeordnet werden kann.
 // [2026-06-01] - UX-FIX: Container-Wächter integriert. Zeigt eine Warnung (window.confirm) an, wenn man einen Hauptpunkt mit 100% speichern will, dessen Unterpunkte noch offen sind.
@@ -64,28 +65,40 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
   const [reminderSenderUserId, setReminderSenderUserId] = useState(existingItem?.reminderSenderUserId || '');
   const [reminderLeadDays, setReminderLeadDays] = useState(existingItem?.reminderLeadDays?.toString() || '7');
 
+  const formatToLocalInputDate = (ms: number) => {
+    const d = new Date(ms);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
   const [dueDateStr, setDueDateStr] = useState(
     existingItem?.dueDate 
-      ? new Date(existingItem.dueDate).toISOString().substring(0,10) 
-      : (parentEvent?.plannedStartTime && !isProtocolMode ? new Date(parentEvent.plannedStartTime).toISOString().substring(0,10) : '')
+      ? formatToLocalInputDate(existingItem.dueDate)
+      : (parentEvent?.plannedStartTime && (!isProtocolMode || isSubtask) ? formatToLocalInputDate(parentEvent.plannedStartTime) : '')
   );
 
-  const [leadTimeUnit, setLeadTimeUnit] = useState<'days_before' | 'days_after' | 'same_day'>(
-    existingItem?.leadTimeUnit || 'same_day'
+  // Wenn bei einem Unterpunkt bereits eine relative Regel (leadTimeUnit) hinterlegt ist oder es eine Vorlage ist,
+  // nutze diese Regel; ansonsten starte bei echten Sitzungs-Unterpunkten standardmäßig mit 'fixed_date' (📌 Festes Datum).
+  const [leadTimeUnit, setLeadTimeUnit] = useState<'fixed_date' | 'days_before' | 'days_after' | 'same_day'>(
+    existingItem?.leadTimeUnit 
+      ? existingItem.leadTimeUnit 
+      : (existingItem?.isTemplate ? 'same_day' : 'fixed_date')
   );
   const [leadTimeValue, setLeadTimeValue] = useState<number>(existingItem?.leadTimeValue || 1);
   
   const [routinePattern, setRoutinePattern] = useState<'none' | 'every_meeting' | 'weekly' | 'monthly' | 'quarterly' | 'half_yearly' | 'yearly'>(
     existingItem?.isRoutine ? (existingItem.routinePattern || 'every_meeting') : 'none'
   );
-  const [routineEndDateStr, setRoutineEndDateStr] = useState(existingItem?.routineEndDate ? new Date(existingItem.routineEndDate).toISOString().substring(0,10) : '');
+  const [routineEndDateStr, setRoutineEndDateStr] = useState(existingItem?.routineEndDate ? formatToLocalInputDate(existingItem.routineEndDate) : '');
 
   const isRoutine = routinePattern !== 'none';
   const [approvedBy, setApprovedBy] = useState<string[]>(existingItem?.approvedBy || []);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  const todayStr = new Date().toISOString().substring(0, 10);
+  const todayStr = formatToLocalInputDate(Date.now());
   const modalRef = useRef<HTMLDivElement>(null);
 
   const hasAutoSetReminder = useRef(false);
@@ -141,6 +154,8 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
 
   if (!isOpen) return null;
 
+  const effectiveParentBaseDateMs = parentItemContext?.dueDate || parentEvent?.plannedStartTime;
+
   const calculatePreviewDate = (baseDateMs: number | undefined, unit: string, val: number) => {
     if (!baseDateMs) {
       if (unit === 'same_day') return "Nächste Sitzung";
@@ -151,7 +166,7 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
     const d = new Date(baseDateMs);
     if (unit === 'days_before') d.setDate(d.getDate() - val);
     if (unit === 'days_after') d.setDate(d.getDate() + val); 
-    return d.toLocaleDateString();
+    return d.toLocaleDateString('de-DE');
   };
 
   const toggleArray = (arr: string[], setArr: (val: string[]) => void, id: string) => {
@@ -184,7 +199,7 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
         payload.isRoutine = false;
       }
       
-      if (type === 'AUFGABE' && isSubtask) {
+      if (type === 'AUFGABE' && isSubtask && leadTimeUnit !== 'fixed_date') {
         payload.leadTimeUnit = leadTimeUnit;
         payload.leadTimeValue = leadTimeUnit === 'same_day' ? 0 : leadTimeValue;
       }
@@ -223,43 +238,53 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
 
     try {
       setIsSubmitting(true);
+      const resolvedParentId = isSubtask ? (existingItem?.parentItemId || parentItemContext?.id || null) : null;
+
       const payload: Partial<AgendaItem> = {
         type, title: title.trim(), description: description.trim(),
         requestedBy: requestedBy.trim(), durationEstimate,
         assigneeUserIds, assigneeGroupIds, assigneeHelperIds,
+        isSubItem: isSubtask,
+        parentItemId: resolvedParentId as any,
         // CHIRURGISCHER EINGRIFF: Explizit `null` übergeben, damit Firestore das Feld wirklich löscht
         reminderSenderUserId: reminderSenderUserId || null as any,
         reminderLeadDays: reminderSenderUserId ? parseInt(reminderLeadDays, 10) : null as any,
       };
       if (existingItem?.id) payload.id = existingItem.id;
+      if (existingItem?.protocolIndex !== undefined) payload.protocolIndex = existingItem.protocolIndex;
       
       if (type === 'AUFGABE') {
         if (isSubtask) {
-          payload.leadTimeUnit = leadTimeUnit;
-          payload.leadTimeValue = leadTimeUnit === 'same_day' ? 0 : leadTimeValue;
           payload.mustBeDoneBeforeEvent = false;
           payload.isDueNextMeeting = false;
-          
-          if (parentItemContext?.dueDate) {
-            const baseDate = new Date(parentItemContext.dueDate);
-            if (leadTimeUnit === 'same_day') payload.dueDate = baseDate.getTime();
-            else if (leadTimeUnit === 'days_before') { baseDate.setDate(baseDate.getDate() - payload.leadTimeValue); payload.dueDate = baseDate.getTime(); }
-            else if (leadTimeUnit === 'days_after') { baseDate.setDate(baseDate.getDate() + payload.leadTimeValue); payload.dueDate = baseDate.getTime(); } 
+
+          if (leadTimeUnit === 'fixed_date') {
+            payload.leadTimeUnit = null as any;
+            payload.leadTimeValue = null as any;
+            payload.dueDate = dueDateStr ? new Date(dueDateStr).getTime() : (null as any);
           } else {
-            payload.dueDate = null as any;
+            payload.leadTimeUnit = leadTimeUnit;
+            payload.leadTimeValue = leadTimeUnit === 'same_day' ? 0 : leadTimeValue;
+
+            if (effectiveParentBaseDateMs) {
+              const baseDate = new Date(effectiveParentBaseDateMs);
+              if (leadTimeUnit === 'same_day') payload.dueDate = baseDate.getTime();
+              else if (leadTimeUnit === 'days_before') { baseDate.setDate(baseDate.getDate() - payload.leadTimeValue); payload.dueDate = baseDate.getTime(); }
+              else if (leadTimeUnit === 'days_after') { baseDate.setDate(baseDate.getDate() + payload.leadTimeValue); payload.dueDate = baseDate.getTime(); } 
+            } else {
+              payload.dueDate = null as any;
+            }
           }
         } else {
           payload.isDueNextMeeting = isDueNextMeeting;
           payload.mustBeDoneBeforeEvent = false;
-        }
-        
-        payload.status = status;
-        payload.progress = progress;
-        if (!isSubtask) {
           if (dueDateStr && !isDueNextMeeting) payload.dueDate = new Date(dueDateStr).getTime();
           // CHIRURGISCHER EINGRIFF: Fälligkeitsdatum sauber auf null setzen
           if (isDueNextMeeting || !dueDateStr) payload.dueDate = null as any;
         }
+        
+        payload.status = status;
+        payload.progress = progress;
         payload.reminderSentAt = existingItem?.reminderSentAt;
       }
       
@@ -429,22 +454,40 @@ export const ItemFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, existi
                   ) : (
                     <>
                       <div className="col-span-1">
-                        <label className="block text-xs font-bold text-gray-800 mb-1 truncate">Abweichung (Haupttermin)</label>
+                        <label className="block text-xs font-bold text-gray-800 mb-1 truncate">Fälligkeit / Abweichung (Haupttermin)</label>
                         <div className="flex gap-2 items-center">
                           <select value={leadTimeUnit} onChange={(e) => setLeadTimeUnit(e.target.value as any)} disabled={isReadOnly} className="w-full p-1.5 text-sm border border-gray-300 rounded bg-white disabled:bg-gray-50 font-bold text-gray-800">
+                            <option value="fixed_date">📌 Festes Datum</option>
                             <option value="same_day">Am gleichen Tag</option>
                             <option value="days_before">Tage DAVOR</option>
                             <option value="days_after">Tage DANACH</option>
                           </select>
-                          {leadTimeUnit !== 'same_day' && <input type="number" min="1" max="365" value={leadTimeValue} onChange={(e) => setLeadTimeValue(Number(e.target.value))} disabled={isReadOnly} className="w-16 p-1.5 text-sm border border-gray-300 rounded bg-white disabled:bg-gray-50 text-center font-bold" />}
+                          {leadTimeUnit !== 'same_day' && leadTimeUnit !== 'fixed_date' && (
+                            <input type="number" min="1" max="365" value={leadTimeValue} onChange={(e) => setLeadTimeValue(Number(e.target.value))} disabled={isReadOnly} className="w-16 p-1.5 text-sm border border-gray-300 rounded bg-white disabled:bg-gray-50 text-center font-bold" />
+                          )}
                         </div>
                       </div>
-                      <div className="col-span-1 pb-1">
-                        <div className="text-[11px] font-medium text-gray-600 bg-white/50 p-1.5 rounded border border-gray-200/50 flex items-center h-[34px] overflow-hidden">
-                          <span className="truncate w-full">
-                            Vorschau: <strong className="text-gray-900">{calculatePreviewDate(parentItemContext?.dueDate, leadTimeUnit, leadTimeValue)}</strong>
-                          </span>
-                        </div>
+                      <div className="col-span-1">
+                        {leadTimeUnit === 'fixed_date' ? (
+                          <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Fällig am</label>
+                            <input
+                              type="date"
+                              value={dueDateStr}
+                              onChange={e => setDueDateStr(e.target.value)}
+                              disabled={isReadOnly}
+                              className="w-full p-1.5 text-sm border border-gray-300 rounded bg-white disabled:bg-gray-50 font-bold text-gray-800"
+                            />
+                          </div>
+                        ) : (
+                          <div className="pb-1">
+                            <div className="text-[11px] font-medium text-gray-600 bg-white/50 p-1.5 rounded border border-gray-200/50 flex items-center h-[34px] overflow-hidden">
+                              <span className="truncate w-full">
+                                Vorschau: <strong className="text-gray-900">{calculatePreviewDate(effectiveParentBaseDateMs, leadTimeUnit, leadTimeValue)}</strong>
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </>
                   )}

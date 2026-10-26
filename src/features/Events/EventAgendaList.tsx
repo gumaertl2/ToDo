@@ -1,3 +1,4 @@
+// [2026-10-26] - UX-FEATURE: Callback onExtractSubItem durchgereicht an AgendaItemRow, damit markierter Notiztext als Unterpunkt ausgelagert werden kann (und der übergeordnete Punkt automatisch aufgeklappt wird).
 // [2026-10-25] - UX-IMPROVEMENT: Reihenfolge in der Werkzeugleiste optimiert: Lupe -> Blaues Fokus-Feld inkl. vorangestellter Agendapunktnummer (z. B. '1. Begrüßung...') -> '++ Punkt' -> Zeilen-Werkzeuge (Einrücken, Unterpunkt, Punkt darunter, Bearbeiten, Löschen).
 // [2026-10-23] - UX-UPGRADE: Komplette Werkzeugleiste in EventAgendaList konsolidiert: 1) Redundantes Einzel-'+' entfernt, 2) '++ Punkt' (Neuer Punkt am Ende) nach vorne zu den Erstell-Werkzeugen gezogen, 3) '+/-' durch klaren 'S | M | X' Detailstufen-Schalter ersetzt, 4) Sortier-Filter als reines Icon-Popover umgesetzt, 5) Reparatur, Drucken, Protokolle, Veröffentlichen & Vorlagen rechts in die Leiste integriert.
 // [2026-10-23] - RECHTE & PAPIERKORB-FIX: Exklusives Admin-Löschrecht (roleProfileId === 'pro-admin') für alle unerledigten (<100%), zugewiesenen oder vererbten Aufgaben durchgesetzt + Nutzung von moveToTrash (inkl. Unterpunkt-Kaskade & deletedBy-Stempel).
@@ -36,6 +37,7 @@ interface EventAgendaListProps {
   onPrint?: () => void;
   onAddNewItem: () => void;
   onEditItem: (item: AgendaItem) => void;
+  onExtractSubItem?: (sourceItem: AgendaItem, extractedText: string, remainingMarkdown: string) => void;
   onOpenHistory: (item: Task) => void;
   onPlanNextMeeting: () => void;
   onFinishEvent: () => void;
@@ -46,7 +48,7 @@ interface EventAgendaListProps {
 export const EventAgendaList: React.FC<EventAgendaListProps> = ({
   eventId, currentEvent, eventAgenda, isReadOnly, tempDurations, searchQuery = '', onSearchChange, validationErrorIds = [],
   pastEvents = [], isLibraryVisible = false, onToggleLibrary, onPrint,
-  onAddNewItem, onEditItem, onOpenHistory,
+  onAddNewItem, onEditItem, onExtractSubItem, onOpenHistory,
   onPlanNextMeeting, onFinishEvent, onDurationPreview, onClearPreview
 }) => {
   const { moveAgendaItem, saveAgendaItem, moveToTrash, fetchEventAgenda, updateEvent, repairEventAgendaOrder, user, users, groups, roleProfiles } = useClubStore();
@@ -873,6 +875,17 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
                     
                     onInsertBelow={!isReadOnly && sortBy === 'default' ? (mode) => handleInsertBelow(item, mode) : undefined}
                     onToggleSubItem={!isReadOnly && sortBy === 'default' ? () => handleToggleSubItem(item) : undefined}
+                    onExtractSubItem={
+                      !isReadOnly && onExtractSubItem
+                        ? (sourceItem, extractedText, remainingMarkdown) => {
+                            const parentToExpand = sourceItem.isSubItem && sourceItem.parentItemId ? sourceItem.parentItemId : sourceItem.id;
+                            if (collapsedParents.has(parentToExpand)) {
+                              toggleParent(parentToExpand);
+                            }
+                            onExtractSubItem(sourceItem, extractedText, remainingMarkdown);
+                          }
+                        : undefined
+                    }
                     
                     effectiveDuration={item.effectiveDuration}
                     onDurationPreview={(val) => onDurationPreview(item.id, val)}

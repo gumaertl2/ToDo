@@ -1,3 +1,4 @@
+// [2026-10-26] - UX-FEATURE: Callback onExtractSubItem durchgereicht an RichTextEditor, damit markierte Notizabschnitte oder Aufzählungspunkte direkt als Unterpunkte ausgelagert werden können.
 // [2026-10-25] - UX-FIX: Kein Ansichten-Sprung und kein Verlust der Textmarkierung mehr in den Notizen. Im aufgeklappten Zustand wird direkt der RichTextEditor gerendert (inkl. "Notiztext leeren" & "Undo"); beim Verlassen (onBlur) klappt ein leeres Notizfeld automatisch wieder ein.
 // [2026-10-23] - UX-UPGRADE: Durchgehende "Familien-Klammer" in Warm-Amber (Gold-Orange) für Oberpunkte und ihre Unterpunkte (6. -> 6.1 -> 6.2). Blau bleibt exklusiv für den Zeilen-Fokus reserviert; doppelter Mittelstrich nach der Uhrzeit entfernt und durch eine durchgehende Baum-Leitlinie links ersetzt.
 // [2026-10-23] - UX-UPGRADE: Validierungs-Hervorhebung (hasValidationError) für unzugewiesene Aufgaben beim Sitzungsabschluss integriert (roter Rahmen + direkt klickbares Warn-Badge).
@@ -71,6 +72,7 @@ interface AgendaItemRowProps {
   onSaveInline: (item: AgendaItem) => void; 
   onInsertBelow?: (mode: 'sibling' | 'subitem') => void; 
   onToggleSubItem?: () => void; 
+  onExtractSubItem?: (sourceItem: AgendaItem, extractedText: string, remainingMarkdown: string) => void;
   parentContextTitle?: string; 
   isTemplateMode?: boolean; 
   isReadOnly?: boolean; 
@@ -88,7 +90,7 @@ interface AgendaItemRowProps {
 export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({ 
   item, index, displayIndexStr, positionOptions, totalItems, subItemCount, isSubItemsCollapsed, 
   onToggleSubItems, startTimeStr, isExpanded, onToggleExpand, onMove, onEdit, onOpenHistory, 
-  onDelete, onRestoreFromTrash, onPermanentDelete, canDeleteAnyItem, onSaveInline, onInsertBelow, onToggleSubItem, parentContextTitle, isTemplateMode = false, 
+  onDelete, onRestoreFromTrash, onPermanentDelete, canDeleteAnyItem, onSaveInline, onInsertBelow, onToggleSubItem, onExtractSubItem, parentContextTitle, isTemplateMode = false, 
   isReadOnly = false, isOvertime = false, effectiveDuration, onDurationPreview, isSelected, onSelect,
   searchQuery, showMinimalDesktopActions = false, showTimeCategory = false, hasValidationError = false
 }) => {
@@ -445,6 +447,13 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
                   onBlur={() => handleSaveDescriptionDraft(true)}
                   placeholder="Notizen oder Beschreibung hier eingeben..."
                   autoFocus={autoFocusNewDesc}
+                  onExtractSubItem={
+                    onExtractSubItem
+                      ? (extractedText, remainingMarkdown) => {
+                          onExtractSubItem({ ...item, description: descDraft }, extractedText, remainingMarkdown);
+                        }
+                      : undefined
+                  }
                 />
               </div>
               {item.description && (
