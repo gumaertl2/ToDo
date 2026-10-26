@@ -1,4 +1,4 @@
-// [2026-10-26] - ROLLOVER-FIX: Oberpunkte (auch AGENDA/INFO/BESCHLUSS ohne isRoutine), die unfertige Aufgaben-Unterpunkte (< 100%) enthalten, werden beim Sitzungsabschluss automatisch samt ihrer offenen Unteraufgaben (inkl. Fortschritt) ins nächste Meeting übertragen.
+// [2026-10-26] - ROLLOVER-HARDENING: 1) Oberpunkte (auch AGENDA/INFO/BESCHLUSS ohne isRoutine), die unfertige Aufgaben-Unterpunkte (< 100%) enthalten, werden beim Sitzungsabschluss automatisch ins nächste Meeting übertragen. 2) Bereits zu 100% erledigte einmalige Unteraufgaben (!isRoutine) unter Routine-Agendapunkten werden nicht mehr als 0% OFFEN wiederbelebt. 3) Unfertige Einmal-Aufgaben behalten beim Übertrag ihr echtes Fälligkeitsdatum (kein ungewolltes Verschieben durch leadTimeValue/leadTimeUnit).
 // [2026-10-23] - UX-UPGRADE: Alle Sitzungs-Werkzeuge (pastEvents, isLibraryVisible, onPrint, onSearchChange) an die konsolidierte EventAgendaList-Toolbar übergeben.
 // [2026-10-23] - ROLLOVER & BLOODLINE-HARDENING: 1) deduplicatedAgenda ignoriert TRASH-Elemente, damit gelöschte Punkte niemals aktive Zwillinge verdrängen. 2) Rekursives Mit-Kopieren aller Unterpunkte (auch mehrstufiger) unter ihren neuen Oberpunkt beim Sitzungsabschluss. 3) Volltextsuche berücksichtigt den gesamten Unterpunkt-Baum.
 // [2026-10-23] - UX-UPGRADE: validateBeforeClose markiert unzugewiesene Aufgaben automatisch rot (validationErrorIds), klappt deren Oberpunkte auf, scrollt direkt hin und ignoriert Unterpunkte von bereits zu 100% erledigten Oberpunkten.
@@ -681,16 +681,25 @@ export const EventDetailView: React.FC = () => {
               let nextProtocolIndex = 0;
 
               // Rekursiver Kopierer für alle Unterpunkte eines übernommenen Oberpunkts:
-              // - Wenn fullSubtreeCopy === true (Routine-Oberpunkt oder offene Ober-Aufgabe): Kopiert den gesamten Unterbaum.
-              //   Dabei behalten unfertige Aufgaben-Unterpunkte IMMER ihren Fortschritt (z.B. 50% / 60%)!
+              // - Wenn parentIsUnfinishedTask === true (ein unfertiges Aufgaben-Projekt wandert als Ganzes weiter):
+              //   Alle Unterpunkte (auch erledigte Schritte des Projekts) wandern 1:1 inkl. Status mit.
+              // - Wenn fullSubtreeCopy === true (Routine-Agendapunkt wie "Erwachsene: Trainingssituation"):
+              //   Routine-Unterpunkte und INFO/AGENDA-Unterpunkte wandern mit, ebenso noch offene Einmal-Aufgaben (< 100%).
+              //   Bereits zu 100% erledigte einmalige Unteraufgaben (!isRoutine) werden NICHT als 0% OFFEN wiederbelebt!
               // - Wenn fullSubtreeCopy === false (Nicht-Routine-Oberpunkt, der nur wegen offener Unteraufgaben mitgenommen wird):
               //   Kopiert nur die noch offenen Unteraufgaben (und deren Zweige), nicht die bereits zu 100% erledigten Geschwister!
-              const copySubtreeRecursive = async (oldParentId: string, newParentId: string, fullSubtreeCopy: boolean) => {
+              const copySubtreeRecursive = async (
+                oldParentId: string,
+                newParentId: string,
+                fullSubtreeCopy: boolean,
+                parentIsUnfinishedTask: boolean
+              ) => {
                 const directChildren = activeRolloverSource
                   .filter(item => item.isSubItem && item.parentItemId === oldParentId)
                   .sort(byOrder);
 
                 for (const child of directChildren) {
+                  const childIsRoutine = child.isRoutine === true || String(child.isRoutine) === 'true';
                   const childIsFinished = child.progress === 100 || child.status === 'ERLEDIGT';
                   const childIsUnfinishedTask = child.type === 'AUFGABE' && !childIsFinished;
                   const childHasOpenDescendants = hasUnfinishedTaskInSubtree(child.id);
@@ -699,15 +708,26 @@ export const EventDetailView: React.FC = () => {
                     continue;
                   }
 
+                  // Unter einem Routine-Agendapunkt (wie "Erwachsene: Trainingssituation") dürfen einmalige Aufgaben,
+                  // die bereits zu 100% erledigt wurden, NICHT wieder als 0% OFFEN für die nächste Sitzung wiederbelebt werden!
+                  if (fullSubtreeCopy && !parentIsUnfinishedTask && child.type === 'AUFGABE' && childIsFinished && !childIsRoutine && !childHasOpenDescendants) {
+                    continue;
+                  }
+
                   const { id: childId, ...childRest } = child;
                   const newChildId = doc(collection(db, 'agenda_items')).id;
                   idMap.set(childId, newChildId);
 
-                  // Eine noch offene Unteraufgabe behält ihren Fortschritt (z.B. 50% oder 60%)!
-                  const keepChildProgress = childIsUnfinishedTask;
+                  // Fortschritt beibehalten bei unfertigen Aufgaben oder wenn der gesamte Oberpunkt eine unfertige Aufgabe ist
+                  const keepChildProgress = childIsUnfinishedTask || (parentIsUnfinishedTask && child.type === 'AUFGABE');
 
                   let newChildDueDate = child.dueDate;
-                  if (data.plannedStartTime && child.leadTimeValue !== undefined && child.leadTimeUnit) {
+                  if (child.type === 'AUFGABE' && childIsUnfinishedTask && !childIsRoutine) {
+                     // Unfertige Einmal-Aufgabe: Echtes Fälligkeitsdatum beibehalten (nur bei "Fällig nächste Sitzung" auf neues Sitzungsdatum setzen)
+                     if (child.isDueNextMeeting && data.plannedStartTime) {
+                        newChildDueDate = data.plannedStartTime;
+                     }
+                  } else if (data.plannedStartTime && child.leadTimeValue !== undefined && child.leadTimeUnit) {
                      const baseDate = new Date(data.plannedStartTime);
                      if (child.leadTimeUnit === 'same_day') {
                          newChildDueDate = baseDate.getTime();
@@ -718,7 +738,7 @@ export const EventDetailView: React.FC = () => {
                          baseDate.setDate(baseDate.getDate() + child.leadTimeValue);
                          newChildDueDate = baseDate.getTime();
                      }
-                  } else if (child.type === 'AUFGABE' && child.isDueNextMeeting && data.plannedStartTime) {
+                  } else if (child.type !== 'AUFGABE' && data.plannedStartTime) {
                      newChildDueDate = data.plannedStartTime;
                   }
 
@@ -747,7 +767,7 @@ export const EventDetailView: React.FC = () => {
                   await saveAgendaItem(safeChildPayload);
                   delay += 50;
 
-                  await copySubtreeRecursive(childId, newChildId, fullSubtreeCopy);
+                  await copySubtreeRecursive(childId, newChildId, fullSubtreeCopy, parentIsUnfinishedTask || childIsUnfinishedTask);
                 }
               };
 
@@ -795,7 +815,7 @@ export const EventDetailView: React.FC = () => {
                 await saveAgendaItem(safePayload);
                 delay += 50;
 
-                await copySubtreeRecursive(id, newId, fullSubtreeCopy);
+                await copySubtreeRecursive(id, newId, fullSubtreeCopy, keepProgress);
               }
             } 
             
