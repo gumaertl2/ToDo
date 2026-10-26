@@ -1,3 +1,4 @@
+// [2026-10-26] - BUGFIX: nuScore Scanner nutzt nun den reinen Original-Titel (ohne vorangestelltes Abo-Kürzel wie H1/H3) und prüft Orts-/Vereinsnamen mit Wortgrenzen, damit "Puchheim" nicht mit "Puchheim-Ort" verwechselt wird.
 // [2026-10-13] - FEATURE: nuScore Scanner sucht nun nach den Vereinsnamen (Heim vs Gast) statt nach dem Datum, wodurch die Codes auch bei Spielverlegungen robust gefunden werden.
 // [2026-10-13] - BUGFIX: sanitizeId durch generateStableEventId ersetzt, um Kader- und Logistik-Daten aus der Schattenakte wieder korrekt zu verknüpfen.
 // [2026-10-12] - FEATURE: Zentralen Ranglisten-Link (global_ranking) als Pokal-Icon (Trophy) in der Detailansicht integriert (SSOT für den gesamten Verein).
@@ -233,42 +234,73 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
   };
   // ---------------------
 
-  // --- NEUER NUSCORE SCANNER (Namen statt Datum!) ---
+  // --- NEUER NUSCORE SCANNER (Namen statt Datum, ohne Abo-Präfix & mit Wortgrenzen!) ---
   const teamPin = teamContext ? teamPins.find(p => p.teamName === teamContext.name) : null;
   const globalRankingUrl = teamPins.find(p => p.id === 'global_ranking')?.rankingUrl;
 
+  // Nutze primär den reinen Original-Titel aus dem ICS-Feed (ohne "🚌 " und ohne Abo-Präfix "H3 ")
+  const rawMatchTitle = cachedEvent?.title || event.sourceEvent?.title || event.title;
+
   const extractCodeByTeams = (text: string | undefined, eventTitle: string) => {
-    if (!text) return null;
+    if (!text || !eventTitle) return null;
     
-    // Bereinige Titel von Emojis und Zusätzen in Klammern
-    const cleanTitle = eventTitle.replace(/[\u{1F300}-\u{1F9FF}]/gu, '').replace(/\s\([^)]+\)$/, '').trim();
+    // 1. Bereinige Titel von Emojis, Zusätzen in Klammern und evtl. vorangestelltem Abo-Namen (z.B. "H3 ")
+    let cleanTitle = eventTitle
+      .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '')
+      .replace(/\s\([^)]+\)$/, '')
+      .trim();
+
+    if (sub?.name) {
+      const prefix = sub.name.trim();
+      if (prefix && cleanTitle.toLowerCase().startsWith(prefix.toLowerCase() + ' ')) {
+        cleanTitle = cleanTitle.slice(prefix.length).trim();
+      }
+    }
     
-    // Splitte in Heim vs Gast
+    // 2. Splitte in Heim vs Gast
     const parts = cleanTitle.split(/\s+vs\.?\s+|\s+-\s+/i);
     if (parts.length < 2) return null; // Kein Spiel, vermutlich Training
     
     const homeTeam = parts[0].trim().toLowerCase();
     const awayTeam = parts[1].trim().toLowerCase();
     
-    // Filtere unnötige Präfixe heraus, um wirklich nur signifikante Namen zu suchen
-    const getKeywords = (name: string) => name.split(/\s+/).filter(w => w.length > 3 && !['tsv', 'ttc', 'sc', 'fc', 'sv', 'ttv', 'mtv', 'vfl', 'spvgg', 'djk'].includes(w));
+    // 3. Filtere unnötige Vereinspräfixe heraus, behalte signifikante Orts-/Vereinsnamen (inkl. Bindestrich wie "puchheim-ort")
+    const getKeywords = (name: string) =>
+      name
+        .split(/\s+/)
+        .filter(w => w.length > 3 && !['tsv', 'ttc', 'sc', 'fc', 'sv', 'ttv', 'mtv', 'vfl', 'spvgg', 'djk'].includes(w));
     
     const homeKw = getKeywords(homeTeam);
     const awayKw = getKeywords(awayTeam);
+
+    const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // Prüft, ob ein Keyword als eigenständiges Wort in der Zeile steht (damit "puchheim" NICHT in "puchheim-ort" matcht!)
+    const indexOfWholeWord = (lineLower: string, word: string): number => {
+      const regex = new RegExp(`(?:^|\\s)(${escapeRegExp(word)})(?=\\s|$)`, 'i');
+      const m = regex.exec(lineLower);
+      if (!m || m.index === undefined) return -1;
+      return m.index + (m[0].startsWith(' ') ? 1 : 0);
+    };
 
     const lines = text.split('\n');
     
     const match = lines.find(line => {
       const l = line.toLowerCase();
       
-      const hasHome = homeKw.length > 0 ? homeKw.some(w => l.includes(w)) : l.includes(homeTeam);
-      const hasAway = awayKw.length > 0 ? awayKw.some(w => l.includes(w)) : l.includes(awayTeam);
+      const homeIndices = homeKw.length > 0
+        ? homeKw.map(w => indexOfWholeWord(l, w)).filter(i => i >= 0)
+        : [l.indexOf(homeTeam)].filter(i => i >= 0);
+
+      const awayIndices = awayKw.length > 0
+        ? awayKw.map(w => indexOfWholeWord(l, w)).filter(i => i >= 0)
+        : [l.indexOf(awayTeam)].filter(i => i >= 0);
       
-      if (hasHome && hasAway) {
-         // Prüfe Heimrecht: Das Heimteam muss vor dem Gastteam im String stehen
-         const hIdx = homeKw.length > 0 ? Math.min(...homeKw.map(w => l.indexOf(w)).filter(i => i >= 0)) : l.indexOf(homeTeam);
-         const aIdx = awayKw.length > 0 ? Math.min(...awayKw.map(w => l.indexOf(w)).filter(i => i >= 0)) : l.indexOf(awayTeam);
-         return hIdx < aIdx;
+      if (homeIndices.length > 0 && awayIndices.length > 0) {
+        // Prüfe Heimrecht: Das Heimteam muss vor dem Gastteam im String stehen
+        const hIdx = Math.min(...homeIndices);
+        const aIdx = Math.min(...awayIndices);
+        return hIdx < aIdx;
       }
       return false;
     });
@@ -280,8 +312,8 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
     return null;
   };
 
-  const gameCode = teamPin ? extractCodeByTeams(teamPin.gameEntryPinsText, event.title) : null;
-  const signaturePin = teamPin ? extractCodeByTeams(teamPin.signaturePinsText, event.title) : null;
+  const gameCode = teamPin ? extractCodeByTeams(teamPin.gameEntryPinsText, rawMatchTitle) : null;
+  const signaturePin = teamPin ? extractCodeByTeams(teamPin.signaturePinsText, rawMatchTitle) : null;
   
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
