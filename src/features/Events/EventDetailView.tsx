@@ -1,4 +1,4 @@
-// [2026-10-26] - ROLLOVER-FIX & AUTO-HEAL: 1) Oberpunkte (auch AGENDA/INFO/BESCHLUSS ohne isRoutine), die unfertige Aufgaben-Unterpunkte (< 100%) enthalten, werden beim Sitzungsabschluss automatisch samt ihrer offenen Unteraufgaben ins nächste Meeting übertragen. 2) Einmalige Auto-Heilung stellt den in der 3. Abteilungsleitungssitzung (wkcSmViiUFuKHzoz8zq4) fehlenden Punkt "To Do's noch nicht abgeschlossen" samt den beiden offenen Aufgaben (DSGVO 50%, Google Workspace 60%) an Position 2 wieder her.
+// [2026-10-26] - ROLLOVER-FIX: Oberpunkte (auch AGENDA/INFO/BESCHLUSS ohne isRoutine), die unfertige Aufgaben-Unterpunkte (< 100%) enthalten, werden beim Sitzungsabschluss automatisch samt ihrer offenen Unteraufgaben (inkl. Fortschritt) ins nächste Meeting übertragen.
 // [2026-10-23] - UX-UPGRADE: Alle Sitzungs-Werkzeuge (pastEvents, isLibraryVisible, onPrint, onSearchChange) an die konsolidierte EventAgendaList-Toolbar übergeben.
 // [2026-10-23] - ROLLOVER & BLOODLINE-HARDENING: 1) deduplicatedAgenda ignoriert TRASH-Elemente, damit gelöschte Punkte niemals aktive Zwillinge verdrängen. 2) Rekursives Mit-Kopieren aller Unterpunkte (auch mehrstufiger) unter ihren neuen Oberpunkt beim Sitzungsabschluss. 3) Volltextsuche berücksichtigt den gesamten Unterpunkt-Baum.
 // [2026-10-23] - UX-UPGRADE: validateBeforeClose markiert unzugewiesene Aufgaben automatisch rot (validationErrorIds), klappt deren Oberpunkte auf, scrollt direkt hin und ignoriert Unterpunkte von bereits zu 100% erledigten Oberpunkten.
@@ -19,7 +19,7 @@
 // [2026-05-25] - ARCHITEKTUR-FIX: Unterpunkte werden nun sauber mit ihrem neuen Oberpunkt verknüpft (keine Waisen mehr). Fortschritte von unfertigen Aufgaben bleiben erhalten, Info-Routinen starten sauber neu.
 // [2026-05-16] - BUGFIX: Druck-Funktion (handlePrint) filtert nun TRASH heraus und zeigt Typ-Präfixe (A:, I:) an.
 // src/features/Events/EventDetailView.tsx
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Users, X, ShieldAlert, ArrowLeft } from 'lucide-react';
 import { useClubStore } from '../../store/useClubStore';
@@ -61,7 +61,6 @@ export const EventDetailView: React.FC = () => {
   const [isAttendanceConfirmed, setIsAttendanceConfirmed] = useState(false);
   
   const [tempDurations, setTempDurations] = useState<Record<string, number>>({});
-  const autoHealedEventRef = useRef<string | null>(null);
 
   useEffect(() => {
     setValidationErrorIds([]);
@@ -72,137 +71,6 @@ export const EventDetailView: React.FC = () => {
       fetchTasks(); 
     }
   }, [eventId, fetchEventDetails, fetchEventAgenda, fetchTemplatesAndRoutines, fetchTasks]);
-
-  // EINMALIGE AUTO-HEILUNG: Stellt in der 3. Abteilungsleitungssitzung (wkcSmViiUFuKHzoz8zq4)
-  // den Punkt "To Do's noch nicht abgeschlossen" samt den beiden offenen Unteraufgaben (50% & 60%) wieder her,
-  // falls diese beim Abschluss der 2. Sitzung wegen des fehlenden Subtree-Checks übersprungen wurden.
-  useEffect(() => {
-    if (eventId !== 'wkcSmViiUFuKHzoz8zq4') return;
-    if (!currentEvent || currentEvent.id !== 'wkcSmViiUFuKHzoz8zq4' || currentEvent.status === 'ABGESCHLOSSEN') return;
-    if (eventAgenda.length === 0 || !eventAgenda.every(i => i.eventId === 'wkcSmViiUFuKHzoz8zq4')) return;
-    if (autoHealedEventRef.current === eventId) return;
-
-    const hasParent = eventAgenda.some(
-      i => i.status !== 'TRASH' && (i.baseItemId === 'gEKwzMSmCDzQd47gOZmz' || i.title === "To Do's noch nicht abgeschlossen")
-    );
-    const hasDsgvo = eventAgenda.some(
-      i => i.status !== 'TRASH' && (i.baseItemId === 'item-1790765322070-0v0gjzi' || i.title.includes('DSGVO und polizeiliche'))
-    );
-    const hasWorkspace = eventAgenda.some(
-      i => i.status !== 'TRASH' && (i.baseItemId === 'pMrmHzzkMT5irloqtlgS' || i.title.includes('Nutzung Google Workspace'))
-    );
-
-    if (hasParent && hasDsgvo && hasWorkspace) {
-      autoHealedEventRef.current = eventId;
-      return;
-    }
-
-    autoHealedEventRef.current = eventId;
-
-    const healMissingCarryoverItems = async () => {
-      const parentItem = eventAgenda.find(
-        i => i.status !== 'TRASH' && (i.baseItemId === 'gEKwzMSmCDzQd47gOZmz' || i.title === "To Do's noch nicht abgeschlossen")
-      );
-      const parentId = parentItem ? parentItem.id : doc(collection(db, 'agenda_items')).id;
-      const nowMs = Date.now();
-      const plannedStart = currentEvent.plannedStartTime || 1800469800000;
-
-      if (!parentItem) {
-        await saveAgendaItem({
-          id: parentId,
-          schemaVersion: '1.0',
-          eventId: 'wkcSmViiUFuKHzoz8zq4',
-          title: "To Do's noch nicht abgeschlossen",
-          description: '',
-          type: 'AGENDA',
-          status: 'OFFEN',
-          progress: 0,
-          isRoutine: false,
-          isSubItem: false,
-          parentItemId: null as any,
-          protocolIndex: 0.5,
-          durationEstimate: 15,
-          requestedBy: 'Jörg Herlan',
-          assigneeUserIds: [],
-          assigneeGroupIds: [],
-          assigneeHelperIds: [],
-          dueDate: plannedStart,
-          baseItemId: 'gEKwzMSmCDzQd47gOZmz',
-          isHistorical: false,
-          createdAt: nowMs
-        } as any);
-      }
-
-      if (!hasDsgvo) {
-        const dsgvoDue = new Date(plannedStart);
-        dsgvoDue.setDate(dsgvoDue.getDate() + 40);
-        await saveAgendaItem({
-          id: doc(collection(db, 'agenda_items')).id,
-          schemaVersion: '1.0',
-          eventId: 'wkcSmViiUFuKHzoz8zq4',
-          title: 'DSGVO und polizeiliche Führungszeugnisse bzw. Ersatzversion',
-          description: '- Bei der DSVGO fehlen nur noch Dirk und Thomas. Jugendliche sind wg. Datenschutz außen vor, deswegen können die anderen Mitglieder die Jugend auch nicht sehen. \n- Polizeiliches Führungszeugnis: einige fehlen (Stand, s. PapatoDo/Mitgliederliste, Symbol, links neben dem Namen, bei Mitglieder und Helfer): Jörg stellt Max das Formular zur Verfügung, damit er die Unterschriften einsammeln kann.',
-          type: 'AUFGABE',
-          status: 'IN_ARBEIT',
-          progress: 50,
-          isRoutine: false,
-          isSubItem: true,
-          parentItemId: parentId,
-          protocolIndex: 0.51,
-          durationEstimate: 5,
-          requestedBy: 'Jörg Herlan',
-          assigneeUserIds: ['user-1776698234572', 'user-1777010496558'],
-          assigneeGroupIds: [],
-          assigneeHelperIds: [],
-          leadTimeValue: 40,
-          leadTimeUnit: 'days_after',
-          dueDate: dsgvoDue.getTime(),
-          mustBeDoneBeforeEvent: false,
-          isDueNextMeeting: false,
-          baseItemId: 'item-1790765322070-0v0gjzi',
-          isHistorical: false,
-          createdAt: nowMs + 10
-        } as any);
-      }
-
-      if (!hasWorkspace) {
-        const wsDue = new Date(plannedStart);
-        wsDue.setDate(wsDue.getDate() + 40);
-        await saveAgendaItem({
-          id: doc(collection(db, 'agenda_items')).id,
-          schemaVersion: '1.0',
-          eventId: 'wkcSmViiUFuKHzoz8zq4',
-          title: 'Nutzung Google Workspace für Abteilungsleitung',
-          description: 'Ablage von Dateien/ Vorlagen/ Abteilungsemailadressen/ Videocalls nutzbar. \n- Markus hat Ordner angelegt ("Vorlagen"), in dem wir Dateien hinterlegen können, wie Einladungen, Einkaufsliste Grillen, etc..\n- Frage diskutiert, ob wir die persönlichen Email-Adressen brauchen? Eher nicht.\n- Markus testet mit Maxi\n- alle stellen die Dateien ein, die von allgemeinem Interesse sind.',
-          type: 'AUFGABE',
-          status: 'IN_ARBEIT',
-          progress: 60,
-          isRoutine: false,
-          isSubItem: true,
-          parentItemId: parentId,
-          protocolIndex: 0.52,
-          durationEstimate: 2,
-          requestedBy: 'Sabine Hopmann',
-          assigneeUserIds: ['user-1777010630643', 'user-1776947754137', 'user-1776698234572'],
-          assigneeGroupIds: [],
-          assigneeHelperIds: [],
-          leadTimeValue: 40,
-          leadTimeUnit: 'days_after',
-          dueDate: wsDue.getTime(),
-          mustBeDoneBeforeEvent: false,
-          isDueNextMeeting: false,
-          baseItemId: 'pMrmHzzkMT5irloqtlgS',
-          isHistorical: false,
-          createdAt: nowMs + 20
-        } as any);
-      }
-
-      await fetchEventAgenda('wkcSmViiUFuKHzoz8zq4');
-      await fetchTasks();
-    };
-
-    healMissingCarryoverItems();
-  }, [eventId, currentEvent, eventAgenda, saveAgendaItem, fetchEventAgenda, fetchTasks]);
 
   const invitedUserIds = useMemo(() => {
     if (!currentEvent) return [];
