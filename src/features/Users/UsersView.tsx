@@ -1,3 +1,4 @@
+// [2026-10-26] - UX-UPDATE: Standard-Tab beim Öffnen auf "mitglieder" gesetzt (damit Telefonnummern/Kontaktdaten auch für Admins sofort sichtbar sind) und Tab-Bezeichnung von "Mitglieder & Helfer" auf "Mitglieder" verkürzt.
 // [2026-07-23] - UX-CLEANUP: Domain-Language angepasst ("App-Nutzer" -> "Vorstand", "Gast" -> "Mitglied").
 // [2026-07-23] - BUGFIX: Ungenutzte Variablen (Trash2, handleSafeDeleteHelper) nach DSGVO-Cleanup entfernt (TS6133 Fix).
 // [2026-05-25] - BUGFIX: 'parentItemContext' an ItemFormModal durchgereicht. Klicks auf Unterpunkte im Tab "Rollen & Ämter" zeigen nun im Modal wieder korrekt den Link zum übergeordneten Oberpunkt (Agenda-Container) an.
@@ -40,7 +41,7 @@ export const UsersView: React.FC = () => {
     allAgendaItems 
   } = useClubStore(); // CHIRURGISCHER EINGRIFF: deleteHelper entfernt
   
-  const [activeTab, setActiveTab] = useState<'appusers' | 'mitglieder' | 'teams' | 'rollen' | 'ehrungen'>('appusers');
+  const [activeTab, setActiveTab] = useState<'appusers' | 'mitglieder' | 'teams' | 'rollen' | 'ehrungen'>('mitglieder');
   
   const [isHelperModalOpen, setIsHelperModalOpen] = useState(false);
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
@@ -113,7 +114,7 @@ export const UsersView: React.FC = () => {
   };
 
   const availableTabs = [
-    { id: 'mitglieder', label: 'Mitglieder & Helfer', show: true }, 
+    { id: 'mitglieder', label: 'Mitglieder', show: true }, 
     { id: 'teams', label: 'Teams & Gruppen', show: true }, 
     { id: 'ehrungen', label: 'Ehrungen & Jubiläen', show: !!perms.viewEhrungen },
     // CHIRURGISCHER EINGRIFF: 'App-Nutzer' zu 'Vorstand' geändert

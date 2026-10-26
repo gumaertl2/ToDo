@@ -1,3 +1,4 @@
+// [2026-10-26] - UX-NAVIGATION: Menübezeichnungen in der Navigation vereinheitlicht und auf prägnante Einzelbegriffe gekürzt (Kalender, User, nuScore, Erinnerungen, Sitzungen | Vorlagen, Statistik, Handbuch).
 // [2026-10-22] - FEATURE: Easter-Egg Arcade-Hub integriert (Doppelklick auf Desktop-Logo oder Mobile-Home-Button öffnet das Vereins-Sudoku).
 // [2026-10-18] - FIX: TypeScript Type-Narrowing für sub.reminderSenderUserId in verschachtelter forEach-Schleife (TS2345 bei Vercel Build) behoben.
 // [2026-10-18] - SYNC: Badge-Zähler (reminderCounts) in der Seitenleiste 1:1 mit useRemindersData synchronisiert (Erledigt-Filter, Überfällig-Regel für offene Aufgaben, Strikte Mitternachtsregel für Termine & auto-Absender-Auflösung).
@@ -351,21 +352,21 @@ export const AppLayout: React.FC = () => {
 
   const allMainNavItems = [
     { to: '/', icon: Home, label: 'Start', show: true },
-    { to: '/calendar', icon: CalendarDays, label: 'Vereinskalender', show: perms?.viewCalendar },
+    { to: '/calendar', icon: CalendarDays, label: 'Kalender', show: perms?.viewCalendar },
+    { to: '/users', icon: Users, label: 'User', show: perms?.viewUsers },
+    { to: '/team-pins', icon: Key, label: 'nuScore', show: perms?.viewTeamPins || user?.permissions?.viewTeamPins },
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', show: perms?.viewDashboard },
-    { to: '/team-pins', icon: Key, label: 'Team-PINs', show: perms?.viewTeamPins || user?.permissions?.viewTeamPins },
     { to: '/todos', icon: CheckSquare, label: 'Meine ToDos', show: perms?.viewTasks },
     { to: '/reminders', icon: MessageCircle, label: 'Erinnerungen', show: perms?.viewReminders },
-    { to: '/events', icon: Calendar, label: 'Projekte & Sitzungen', show: perms?.viewEvents },
+    { to: '/events', icon: Calendar, label: 'Sitzungen', show: perms?.viewEvents },
   ];
 
   const mainNavItems = allMainNavItems.filter(item => item.show);
 
   const allSetupNavItems = [
-    { to: '/users', icon: Users, label: 'User & Gruppen', show: perms?.viewUsers },
-    { to: '/templates', icon: ClipboardList, label: 'Vorlagen & Routinen', show: perms?.viewTemplates },
-    { to: '/reports', icon: BarChart2, label: 'Reports & Statistik', show: perms?.viewReports },
-    { to: '/help', icon: BookOpen, label: 'Handbuch & Hilfe', show: true }, 
+    { to: '/templates', icon: ClipboardList, label: 'Vorlagen', show: perms?.viewTemplates },
+    { to: '/reports', icon: BarChart2, label: 'Statistik', show: perms?.viewReports },
+    { to: '/help', icon: BookOpen, label: 'Handbuch', show: true }, 
   ];
 
   const setupNavItems = allSetupNavItems.filter(item => item.show);
