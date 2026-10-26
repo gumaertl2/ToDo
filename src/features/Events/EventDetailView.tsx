@@ -1,4 +1,5 @@
-// [2026-10-23] - UX-UPGRADE: Alle Sitzungs-Werkzeuge (pastEvents, isLibraryVisible, onToggleLibrary, onPrint, onSearchChange) an die konsolidierte EventAgendaList-Toolbar übergeben.
+// [2026-10-26] - ROLLOVER-FIX & AUTO-HEAL: 1) Oberpunkte (auch AGENDA/INFO/BESCHLUSS ohne isRoutine), die unfertige Aufgaben-Unterpunkte (< 100%) enthalten, werden beim Sitzungsabschluss automatisch samt ihrer offenen Unteraufgaben ins nächste Meeting übertragen. 2) Einmalige Auto-Heilung stellt den in der 3. Abteilungsleitungssitzung (wkcSmViiUFuKHzoz8zq4) fehlenden Punkt "To Do's noch nicht abgeschlossen" samt den beiden offenen Aufgaben (DSGVO 50%, Google Workspace 60%) an Position 2 wieder her.
+// [2026-10-23] - UX-UPGRADE: Alle Sitzungs-Werkzeuge (pastEvents, isLibraryVisible, onPrint, onSearchChange) an die konsolidierte EventAgendaList-Toolbar übergeben.
 // [2026-10-23] - ROLLOVER & BLOODLINE-HARDENING: 1) deduplicatedAgenda ignoriert TRASH-Elemente, damit gelöschte Punkte niemals aktive Zwillinge verdrängen. 2) Rekursives Mit-Kopieren aller Unterpunkte (auch mehrstufiger) unter ihren neuen Oberpunkt beim Sitzungsabschluss. 3) Volltextsuche berücksichtigt den gesamten Unterpunkt-Baum.
 // [2026-10-23] - UX-UPGRADE: validateBeforeClose markiert unzugewiesene Aufgaben automatisch rot (validationErrorIds), klappt deren Oberpunkte auf, scrollt direkt hin und ignoriert Unterpunkte von bereits zu 100% erledigten Oberpunkten.
 // [2026-10-19] - HARDENING: Rollover-Logik, Hierarchie-Indexierung, Blutlinien-Deduplizierung (!isHistorical) und 24h-Zeitformatierung (de-DE) gehärtet.
@@ -18,7 +19,7 @@
 // [2026-05-25] - ARCHITEKTUR-FIX: Unterpunkte werden nun sauber mit ihrem neuen Oberpunkt verknüpft (keine Waisen mehr). Fortschritte von unfertigen Aufgaben bleiben erhalten, Info-Routinen starten sauber neu.
 // [2026-05-16] - BUGFIX: Druck-Funktion (handlePrint) filtert nun TRASH heraus und zeigt Typ-Präfixe (A:, I:) an.
 // src/features/Events/EventDetailView.tsx
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Users, X, ShieldAlert, ArrowLeft } from 'lucide-react';
 import { useClubStore } from '../../store/useClubStore';
@@ -60,6 +61,7 @@ export const EventDetailView: React.FC = () => {
   const [isAttendanceConfirmed, setIsAttendanceConfirmed] = useState(false);
   
   const [tempDurations, setTempDurations] = useState<Record<string, number>>({});
+  const autoHealedEventRef = useRef<string | null>(null);
 
   useEffect(() => {
     setValidationErrorIds([]);
@@ -70,6 +72,137 @@ export const EventDetailView: React.FC = () => {
       fetchTasks(); 
     }
   }, [eventId, fetchEventDetails, fetchEventAgenda, fetchTemplatesAndRoutines, fetchTasks]);
+
+  // EINMALIGE AUTO-HEILUNG: Stellt in der 3. Abteilungsleitungssitzung (wkcSmViiUFuKHzoz8zq4)
+  // den Punkt "To Do's noch nicht abgeschlossen" samt den beiden offenen Unteraufgaben (50% & 60%) wieder her,
+  // falls diese beim Abschluss der 2. Sitzung wegen des fehlenden Subtree-Checks übersprungen wurden.
+  useEffect(() => {
+    if (eventId !== 'wkcSmViiUFuKHzoz8zq4') return;
+    if (!currentEvent || currentEvent.id !== 'wkcSmViiUFuKHzoz8zq4' || currentEvent.status === 'ABGESCHLOSSEN') return;
+    if (eventAgenda.length === 0 || !eventAgenda.every(i => i.eventId === 'wkcSmViiUFuKHzoz8zq4')) return;
+    if (autoHealedEventRef.current === eventId) return;
+
+    const hasParent = eventAgenda.some(
+      i => i.status !== 'TRASH' && (i.baseItemId === 'gEKwzMSmCDzQd47gOZmz' || i.title === "To Do's noch nicht abgeschlossen")
+    );
+    const hasDsgvo = eventAgenda.some(
+      i => i.status !== 'TRASH' && (i.baseItemId === 'item-1790765322070-0v0gjzi' || i.title.includes('DSGVO und polizeiliche'))
+    );
+    const hasWorkspace = eventAgenda.some(
+      i => i.status !== 'TRASH' && (i.baseItemId === 'pMrmHzzkMT5irloqtlgS' || i.title.includes('Nutzung Google Workspace'))
+    );
+
+    if (hasParent && hasDsgvo && hasWorkspace) {
+      autoHealedEventRef.current = eventId;
+      return;
+    }
+
+    autoHealedEventRef.current = eventId;
+
+    const healMissingCarryoverItems = async () => {
+      const parentItem = eventAgenda.find(
+        i => i.status !== 'TRASH' && (i.baseItemId === 'gEKwzMSmCDzQd47gOZmz' || i.title === "To Do's noch nicht abgeschlossen")
+      );
+      const parentId = parentItem ? parentItem.id : doc(collection(db, 'agenda_items')).id;
+      const nowMs = Date.now();
+      const plannedStart = currentEvent.plannedStartTime || 1800469800000;
+
+      if (!parentItem) {
+        await saveAgendaItem({
+          id: parentId,
+          schemaVersion: '1.0',
+          eventId: 'wkcSmViiUFuKHzoz8zq4',
+          title: "To Do's noch nicht abgeschlossen",
+          description: '',
+          type: 'AGENDA',
+          status: 'OFFEN',
+          progress: 0,
+          isRoutine: false,
+          isSubItem: false,
+          parentItemId: null as any,
+          protocolIndex: 0.5,
+          durationEstimate: 15,
+          requestedBy: 'Jörg Herlan',
+          assigneeUserIds: [],
+          assigneeGroupIds: [],
+          assigneeHelperIds: [],
+          dueDate: plannedStart,
+          baseItemId: 'gEKwzMSmCDzQd47gOZmz',
+          isHistorical: false,
+          createdAt: nowMs
+        } as any);
+      }
+
+      if (!hasDsgvo) {
+        const dsgvoDue = new Date(plannedStart);
+        dsgvoDue.setDate(dsgvoDue.getDate() + 40);
+        await saveAgendaItem({
+          id: doc(collection(db, 'agenda_items')).id,
+          schemaVersion: '1.0',
+          eventId: 'wkcSmViiUFuKHzoz8zq4',
+          title: 'DSGVO und polizeiliche Führungszeugnisse bzw. Ersatzversion',
+          description: '- Bei der DSVGO fehlen nur noch Dirk und Thomas. Jugendliche sind wg. Datenschutz außen vor, deswegen können die anderen Mitglieder die Jugend auch nicht sehen. \n- Polizeiliches Führungszeugnis: einige fehlen (Stand, s. PapatoDo/Mitgliederliste, Symbol, links neben dem Namen, bei Mitglieder und Helfer): Jörg stellt Max das Formular zur Verfügung, damit er die Unterschriften einsammeln kann.',
+          type: 'AUFGABE',
+          status: 'IN_ARBEIT',
+          progress: 50,
+          isRoutine: false,
+          isSubItem: true,
+          parentItemId: parentId,
+          protocolIndex: 0.51,
+          durationEstimate: 5,
+          requestedBy: 'Jörg Herlan',
+          assigneeUserIds: ['user-1776698234572', 'user-1777010496558'],
+          assigneeGroupIds: [],
+          assigneeHelperIds: [],
+          leadTimeValue: 40,
+          leadTimeUnit: 'days_after',
+          dueDate: dsgvoDue.getTime(),
+          mustBeDoneBeforeEvent: false,
+          isDueNextMeeting: false,
+          baseItemId: 'item-1790765322070-0v0gjzi',
+          isHistorical: false,
+          createdAt: nowMs + 10
+        } as any);
+      }
+
+      if (!hasWorkspace) {
+        const wsDue = new Date(plannedStart);
+        wsDue.setDate(wsDue.getDate() + 40);
+        await saveAgendaItem({
+          id: doc(collection(db, 'agenda_items')).id,
+          schemaVersion: '1.0',
+          eventId: 'wkcSmViiUFuKHzoz8zq4',
+          title: 'Nutzung Google Workspace für Abteilungsleitung',
+          description: 'Ablage von Dateien/ Vorlagen/ Abteilungsemailadressen/ Videocalls nutzbar. \n- Markus hat Ordner angelegt ("Vorlagen"), in dem wir Dateien hinterlegen können, wie Einladungen, Einkaufsliste Grillen, etc..\n- Frage diskutiert, ob wir die persönlichen Email-Adressen brauchen? Eher nicht.\n- Markus testet mit Maxi\n- alle stellen die Dateien ein, die von allgemeinem Interesse sind.',
+          type: 'AUFGABE',
+          status: 'IN_ARBEIT',
+          progress: 60,
+          isRoutine: false,
+          isSubItem: true,
+          parentItemId: parentId,
+          protocolIndex: 0.52,
+          durationEstimate: 2,
+          requestedBy: 'Sabine Hopmann',
+          assigneeUserIds: ['user-1777010630643', 'user-1776947754137', 'user-1776698234572'],
+          assigneeGroupIds: [],
+          assigneeHelperIds: [],
+          leadTimeValue: 40,
+          leadTimeUnit: 'days_after',
+          dueDate: wsDue.getTime(),
+          mustBeDoneBeforeEvent: false,
+          isDueNextMeeting: false,
+          baseItemId: 'pMrmHzzkMT5irloqtlgS',
+          isHistorical: false,
+          createdAt: nowMs + 20
+        } as any);
+      }
+
+      await fetchEventAgenda('wkcSmViiUFuKHzoz8zq4');
+      await fetchTasks();
+    };
+
+    healMissingCarryoverItems();
+  }, [eventId, currentEvent, eventAgenda, saveAgendaItem, fetchEventAgenda, fetchTasks]);
 
   const invitedUserIds = useMemo(() => {
     if (!currentEvent) return [];
@@ -646,6 +779,19 @@ export const EventDetailView: React.FC = () => {
                 return (a.createdAt || 0) - (b.createdAt || 0);
               };
 
+              // Prüft rekursiv, ob ein Punkt im Unterbaum mindestens eine unfertige Aufgabe (< 100%) besitzt
+              const hasUnfinishedTaskInSubtree = (parentId: string, visited = new Set<string>()): boolean => {
+                if (visited.has(parentId)) return false;
+                visited.add(parentId);
+                const children = activeRolloverSource.filter(i => i.isSubItem && i.parentItemId === parentId);
+                for (const c of children) {
+                  const cFinished = c.progress === 100 || c.status === 'ERLEDIGT';
+                  if (c.type === 'AUFGABE' && !cFinished) return true;
+                  if (hasUnfinishedTaskInSubtree(c.id, visited)) return true;
+                }
+                return false;
+              };
+
               const parentItemsToCopy = activeRolloverSource
                 .filter(item => {
                   if (item.isSubItem) return false; 
@@ -653,8 +799,11 @@ export const EventDetailView: React.FC = () => {
                   if (isRoutine) return true;
                   if (item.type === 'AUFGABE') {
                     const isFinished = item.progress === 100 || item.status === 'ERLEDIGT';
-                    return !isFinished;
+                    if (!isFinished) return true;
                   }
+                  // NEU: Auch Nicht-Routine-Oberpunkte (z.B. AGENDA "To Do's noch nicht abgeschlossen") übernehmen,
+                  // wenn darunter noch mindestens eine offene Aufgabe (< 100%) hängt!
+                  if (hasUnfinishedTaskInSubtree(item.id)) return true;
                   return false; 
                 })
                 .sort(byOrder);
@@ -664,16 +813,30 @@ export const EventDetailView: React.FC = () => {
               let nextProtocolIndex = 0;
 
               // Rekursiver Kopierer für alle Unterpunkte eines übernommenen Oberpunkts:
-              // Sichert, dass alle Kinder (auch mehrstufige) fest unter ihrem (neu nummerierten) Oberpunkt bleiben.
-              const copySubtreeRecursive = async (oldParentId: string, newParentId: string, keepProgress: boolean) => {
+              // - Wenn fullSubtreeCopy === true (Routine-Oberpunkt oder offene Ober-Aufgabe): Kopiert den gesamten Unterbaum.
+              //   Dabei behalten unfertige Aufgaben-Unterpunkte IMMER ihren Fortschritt (z.B. 50% / 60%)!
+              // - Wenn fullSubtreeCopy === false (Nicht-Routine-Oberpunkt, der nur wegen offener Unteraufgaben mitgenommen wird):
+              //   Kopiert nur die noch offenen Unteraufgaben (und deren Zweige), nicht die bereits zu 100% erledigten Geschwister!
+              const copySubtreeRecursive = async (oldParentId: string, newParentId: string, fullSubtreeCopy: boolean) => {
                 const directChildren = activeRolloverSource
                   .filter(item => item.isSubItem && item.parentItemId === oldParentId)
                   .sort(byOrder);
 
                 for (const child of directChildren) {
+                  const childIsFinished = child.progress === 100 || child.status === 'ERLEDIGT';
+                  const childIsUnfinishedTask = child.type === 'AUFGABE' && !childIsFinished;
+                  const childHasOpenDescendants = hasUnfinishedTaskInSubtree(child.id);
+
+                  if (!fullSubtreeCopy && !childIsUnfinishedTask && !childHasOpenDescendants) {
+                    continue;
+                  }
+
                   const { id: childId, ...childRest } = child;
                   const newChildId = doc(collection(db, 'agenda_items')).id;
                   idMap.set(childId, newChildId);
+
+                  // Eine noch offene Unteraufgabe behält ihren Fortschritt (z.B. 50% oder 60%)!
+                  const keepChildProgress = childIsUnfinishedTask;
 
                   let newChildDueDate = child.dueDate;
                   if (data.plannedStartTime && child.leadTimeValue !== undefined && child.leadTimeUnit) {
@@ -699,10 +862,10 @@ export const EventDetailView: React.FC = () => {
                     parentItemId: newParentId,
                     protocolIndex: nextProtocolIndex++,
                     baseItemId: child.baseItemId || child.id,
-                    status: keepProgress ? child.status : 'OFFEN',
-                    progress: keepProgress ? child.progress : 0,
-                    approvedBy: keepProgress ? child.approvedBy : [],
-                    completedAt: keepProgress ? child.completedAt : (null as any),
+                    status: keepChildProgress ? child.status : 'OFFEN',
+                    progress: keepChildProgress ? child.progress : 0,
+                    approvedBy: keepChildProgress ? child.approvedBy : [],
+                    completedAt: keepChildProgress ? child.completedAt : (null as any),
                     createdAt: Date.now() + delay,
                     isDueNextMeeting: false,
                     dueDate: newChildDueDate,
@@ -716,7 +879,7 @@ export const EventDetailView: React.FC = () => {
                   await saveAgendaItem(safeChildPayload);
                   delay += 50;
 
-                  await copySubtreeRecursive(childId, newChildId, keepProgress);
+                  await copySubtreeRecursive(childId, newChildId, fullSubtreeCopy);
                 }
               };
 
@@ -729,11 +892,14 @@ export const EventDetailView: React.FC = () => {
                 const isRoutine = parent.isRoutine === true || String(parent.isRoutine) === 'true';
                 const isFinished = parent.progress === 100 || parent.status === 'ERLEDIGT';
                 const keepProgress = parent.type === 'AUFGABE' && !isFinished;
+                const fullSubtreeCopy = isRoutine || keepProgress;
 
                 if (parent.type === 'AUFGABE') {
                   if (parent.isDueNextMeeting || (!parent.dueDate && !isRoutine)) {
                     newDueDate = data.plannedStartTime;
                   }
+                } else if (data.plannedStartTime) {
+                  newDueDate = data.plannedStartTime;
                 }
 
                 const safePayload = {
@@ -761,7 +927,7 @@ export const EventDetailView: React.FC = () => {
                 await saveAgendaItem(safePayload);
                 delay += 50;
 
-                await copySubtreeRecursive(id, newId, keepProgress);
+                await copySubtreeRecursive(id, newId, fullSubtreeCopy);
               }
             } 
             
