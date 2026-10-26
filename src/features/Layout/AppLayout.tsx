@@ -1,4 +1,4 @@
-// [2026-10-26] - UX-NAVIGATION: Menübezeichnungen in der Navigation vereinheitlicht und auf prägnante Einzelbegriffe gekürzt (Kalender, User, nuScore, Erinnerungen, Sitzungen | Vorlagen, Statistik, Handbuch).
+// [2026-10-26] - UX-NAVIGATION: Mobile-Leiste auf 5 primäre Icons erweitert (Start, Kalender, User, nuScore, Erinnerungen + Menü-Button) und Menübezeichnungen auf prägnante Einzelbegriffe gekürzt.
 // [2026-10-22] - FEATURE: Easter-Egg Arcade-Hub integriert (Doppelklick auf Desktop-Logo oder Mobile-Home-Button öffnet das Vereins-Sudoku).
 // [2026-10-18] - FIX: TypeScript Type-Narrowing für sub.reminderSenderUserId in verschachtelter forEach-Schleife (TS2345 bei Vercel Build) behoben.
 // [2026-10-18] - SYNC: Badge-Zähler (reminderCounts) in der Seitenleiste 1:1 mit useRemindersData synchronisiert (Erledigt-Filter, Überfällig-Regel für offene Aufgaben, Strikte Mitternachtsregel für Termine & auto-Absender-Auflösung).
@@ -517,7 +517,7 @@ export const AppLayout: React.FC = () => {
         w-full flex-row border-t border-gray-200 justify-around items-center px-1 py-2 pb-safe flex
         landscape:w-[76px] landscape:flex-col landscape:border-t-0 landscape:border-r landscape:border-gray-200 landscape:justify-start landscape:py-4 landscape:space-y-2 landscape:pb-4"
       >
-        {mainNavItems.slice(0, 4).map((item) => (
+        {mainNavItems.slice(0, 5).map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -528,7 +528,7 @@ export const AppLayout: React.FC = () => {
               }
             }}
             className={({ isActive }) =>
-              `flex items-center justify-center p-3 rounded-xl transition-colors shrink-0 ${
+              `flex items-center justify-center p-2.5 rounded-xl transition-colors shrink-0 ${
                 isActive ? 'text-blue-600 bg-blue-50' : 'text-gray-500 hover:bg-gray-50'
               } ${item.to === '/' ? 'select-none' : ''}`
             }
@@ -553,10 +553,10 @@ export const AppLayout: React.FC = () => {
           </NavLink>
         ))}
         
-        {(mainNavItems.length > 4 || setupNavItems.length > 0) && (
+        {(mainNavItems.length > 5 || setupNavItems.length > 0) && (
           <button
             onClick={() => setIsMobileMenuOpen(true)}
-            className={`flex items-center justify-center p-3 rounded-xl transition-colors shrink-0 landscape:mt-auto ${
+            className={`flex items-center justify-center p-2.5 rounded-xl transition-colors shrink-0 landscape:mt-auto ${
               isMobileMenuOpen ? 'text-blue-600 bg-blue-50' : 'text-gray-500 hover:bg-gray-50'
             }`}
             title="Mehr Funktionen"
@@ -633,7 +633,7 @@ export const AppLayout: React.FC = () => {
             </div>
             
             <div className="space-y-1 mb-6 flex-1 overflow-y-auto">
-              {[...(mainNavItems.length > 4 ? mainNavItems.slice(4) : []), ...setupNavItems].map(item => (
+              {[...(mainNavItems.length > 5 ? mainNavItems.slice(5) : []), ...setupNavItems].map(item => (
                 <NavLink
                   key={item.to}
                   to={item.to}
