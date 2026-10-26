@@ -1,3 +1,4 @@
+// [2026-10-26] - UX-UNIFICATION: Vorlagen-Toolbar und Zeilen-Aktionen an die Protokoll-Ansicht angeglichen: Stift-Icon rechts in jeder Zeile (showMinimalDesktopActions), blaues Fokus-Feld inkl. Punktnummer, kompakter "++ Vorlage"-Button sowie S/M/X-Ansichtstiefe.
 // 2026-04-24 22:00 - FEATURE: Speichert nun 'isTemplate: true', um beliebige Typen (Aufgabe, Info) in Vorlagen zu halten
 // 2026-04-25 08:00 - BUGFIX: 'Block-Move' implementiert - Verschieben eines Hauptpunktes nimmt nun alle Unterpunkte mit
 // 2026-05-09 11:55 - FEATURE: Intelligenter 4-Phasen +/- Button für Vorlagen übernommen
@@ -10,7 +11,7 @@
 // src/features/Templates/TemplatesView.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import { Plus, ArrowLeftToLine, ArrowRightToLine, CornerDownRight, PlusCircle, Edit2, Trash2 } from 'lucide-react';
+import { ArrowLeftToLine, ArrowRightToLine, CornerDownRight, PlusCircle, Edit2, Trash2 } from 'lucide-react';
 import { ItemFormModal } from '../Shared/ItemFormModal';
 import { AgendaItemRow } from '../Shared/AgendaItemRow';
 import type { AgendaItem } from '../../core/types/models';
@@ -25,8 +26,6 @@ export const TemplatesView: React.FC = () => {
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [collapsedParents, setCollapsedParents] = useState<Set<string>>(new Set());
-  
-  const [cyclePhase, setCyclePhase] = useState(1);
   
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
@@ -48,49 +47,6 @@ export const TemplatesView: React.FC = () => {
         await saveAgendaItem({ ...itemToDelete, status: 'TRASH', deletedAt: Date.now() });
       }
       if (selectedItemId === id) setSelectedItemId(null);
-    }
-  };
-
-  const handleToggleAllLevels = () => {
-    // CHIRURGISCHER EINGRIFF: Ignoriert TRASH-Elemente für die Toggle-Logik
-    const activeTemplates = templates.filter(t => t.status !== 'TRASH');
-    const hasSubItems = activeTemplates.some(i => i.isSubItem);
-    const itemsWithDesc = activeTemplates.filter(i => !!i.description);
-    const hasDescriptions = itemsWithDesc.length > 0;
-
-    if (!hasSubItems && !hasDescriptions) return; 
-
-    if (hasSubItems && hasDescriptions) {
-      const nextPhase = (cyclePhase + 1) % 4;
-      setCyclePhase(nextPhase);
-
-      const allParents = new Set(
-        activeTemplates.filter(i => i.isSubItem && i.parentItemId).map(i => i.parentItemId as string)
-      );
-
-      if (nextPhase === 0) {
-        setCollapsedParents(allParents);
-        setExpandedIds(new Set());
-      } else if (nextPhase === 1 || nextPhase === 3) {
-        setCollapsedParents(new Set());
-        setExpandedIds(new Set());
-      } else if (nextPhase === 2) {
-        setCollapsedParents(new Set());
-        setExpandedIds(new Set(itemsWithDesc.map(i => i.id)));
-      }
-    } else if (hasSubItems && !hasDescriptions) {
-      const nextPhase = (cyclePhase + 1) % 2;
-      setCyclePhase(nextPhase);
-      const allParents = new Set(
-        activeTemplates.filter(i => i.isSubItem && i.parentItemId).map(i => i.parentItemId as string)
-      );
-      if (nextPhase === 0) setCollapsedParents(allParents);
-      else setCollapsedParents(new Set());
-    } else if (!hasSubItems && hasDescriptions) {
-      const nextPhase = (cyclePhase + 1) % 2;
-      setCyclePhase(nextPhase);
-      if (nextPhase === 0) setExpandedIds(new Set());
-      else setExpandedIds(new Set(itemsWithDesc.map(i => i.id)));
     }
   };
 
@@ -130,6 +86,41 @@ export const TemplatesView: React.FC = () => {
     });
     return result;
   }, [templates]);
+
+  // Detailstufen-Logik (S = Nur Hauptpunkte, M = Haupt- & Unterpunkte, X = Alles inkl. Notizen)
+  const activeDetailLevel = useMemo((): 'S' | 'M' | 'X' => {
+    const allParentIds = finalSortedTemplates
+      .filter(i => i.isSubItem && i.parentItemId)
+      .map(i => i.parentItemId as string);
+    const uniqueParentIds = Array.from(new Set(allParentIds));
+    const itemsWithDesc = finalSortedTemplates.filter(i => !!i.description);
+
+    if (itemsWithDesc.length > 0 && itemsWithDesc.every(i => expandedIds.has(i.id)) && collapsedParents.size === 0) {
+      return 'X';
+    }
+    if (uniqueParentIds.length > 0 && uniqueParentIds.every(pid => collapsedParents.has(pid)) && expandedIds.size === 0) {
+      return 'S';
+    }
+    return 'M';
+  }, [finalSortedTemplates, collapsedParents, expandedIds]);
+
+  const handleSetDetailLevel = (level: 'S' | 'M' | 'X') => {
+    const allParents = new Set(
+      finalSortedTemplates.filter(i => i.isSubItem && i.parentItemId).map(i => i.parentItemId as string)
+    );
+    const itemsWithDesc = finalSortedTemplates.filter(i => !!i.description);
+
+    if (level === 'S') {
+      setCollapsedParents(allParents);
+      setExpandedIds(new Set());
+    } else if (level === 'M') {
+      setCollapsedParents(new Set());
+      setExpandedIds(new Set());
+    } else if (level === 'X') {
+      setCollapsedParents(new Set());
+      setExpandedIds(new Set(itemsWithDesc.map(i => i.id)));
+    }
+  };
 
   const positionOptions = useMemo(() => {
     const options: { index: number, label: string }[] = [];
@@ -269,55 +260,88 @@ export const TemplatesView: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-4">
         
-        <div className="flex flex-col md:flex-row md:items-center mb-4 md:mb-0">
-          <h1 className="text-2xl font-bold text-gray-900">Alle Vorlagen & Bausteine</h1>
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
+          <h1 className="text-2xl font-bold text-gray-900 mr-1">Alle Vorlagen & Bausteine</h1>
           
-          {selectedItem && (
-            <div className="hidden md:flex items-center gap-1.5 border-l border-gray-300 pl-4 ml-4 animate-in fade-in slide-in-from-left-2 mt-2 md:mt-0">
-              <span className="text-xs font-bold text-blue-800 mr-2 bg-blue-50 px-2 py-1 rounded truncate max-w-[150px] shadow-sm">
-                {selectedItem.title || 'Neuer Punkt'}
+          <div className="flex items-center gap-1.5 border-l border-gray-300 pl-3 min-w-0">
+            {/* 1. BLAUES FOKUS-FELD inkl. Vorlagen-Punktnummer */}
+            {selectedItem && (
+              <span
+                className="hidden md:inline-block text-xs font-bold text-blue-800 bg-blue-50 border border-blue-200 px-2 py-1 rounded-md truncate max-w-[190px] shadow-2xs"
+                title={`${selectedItem.displayIndexStr} ${selectedItem.title || 'Neuer Punkt'}`}
+              >
+                {selectedItem.displayIndexStr} {selectedItem.title || 'Neuer Punkt'}
               </span>
-              
-              <button onClick={() => toggleItemExpanded(selectedItem.id)} className="w-8 h-8 flex items-center justify-center bg-white border border-gray-200 shadow-sm rounded hover:bg-gray-50 text-gray-700 transition-colors" title="Notizen ein/ausblenden">
-                <span className="font-mono font-bold leading-none">{expandedIds.has(selectedItem.id) ? '-' : '+'}</span>
-              </button>
-              
-              <div className="h-5 w-px bg-gray-300 mx-1"></div>
-              
-              <button onClick={() => handleToggleSubItem(selectedItem)} className="w-8 h-8 flex items-center justify-center bg-white border border-gray-200 shadow-sm rounded hover:bg-gray-50 text-blue-600 transition-colors" title={selectedItem.isSubItem ? "Zum Hauptpunkt machen" : "Zum Unterpunkt machen"}>
-                {selectedItem.isSubItem ? <ArrowLeftToLine className="w-4 h-4" /> : <ArrowRightToLine className="w-4 h-4" />}
-              </button>
-              {!selectedItem.isSubItem && (
-                <button onClick={() => handleInsertBelow(selectedItem, 'subitem')} className="w-8 h-8 flex items-center justify-center bg-white border border-gray-200 shadow-sm rounded hover:bg-gray-50 text-blue-600 transition-colors" title="Neuen Unterpunkt hinzufügen">
-                  <CornerDownRight className="w-4 h-4" />
+            )}
+
+            {/* 2. ++ VORLAGE: Neue Vorlage anlegen */}
+            <button
+              onClick={handleCreateTemplate}
+              className="h-7 px-2.5 flex items-center justify-center bg-blue-600 text-white hover:bg-blue-700 font-bold text-xs rounded-md shadow-2xs transition-colors shrink-0 whitespace-nowrap"
+              title="Neue Vorlage anlegen"
+            >
+              <span className="font-mono tracking-tighter mr-1 text-blue-100">++</span>
+              Vorlage
+            </button>
+
+            {/* 3. ZEILEN-WERKZEUGE für den aktuell ausgewählten Punkt */}
+            {selectedItem && (
+              <div className="hidden md:flex items-center gap-1 min-w-0 animate-in fade-in slide-in-from-left-1">
+                <button onClick={() => handleToggleSubItem(selectedItem)} className="w-7 h-7 flex items-center justify-center bg-white border border-gray-200 shadow-2xs rounded-md hover:bg-gray-50 text-blue-600 transition-colors shrink-0" title={selectedItem.isSubItem ? "Zum Hauptpunkt machen" : "Zum Unterpunkt machen"}>
+                  {selectedItem.isSubItem ? <ArrowLeftToLine className="w-3.5 h-3.5" /> : <ArrowRightToLine className="w-3.5 h-3.5" />}
                 </button>
-              )}
-              <button onClick={() => handleInsertBelow(selectedItem, 'sibling')} className="w-8 h-8 flex items-center justify-center bg-white border border-gray-200 shadow-sm rounded hover:bg-gray-50 text-emerald-600 transition-colors" title="Neuen Punkt darunter einfügen">
-                <PlusCircle className="w-4 h-4" />
-              </button>
-              
-              <div className="h-5 w-px bg-gray-300 mx-1"></div>
-              
-              <button onClick={() => { setEditingItem(selectedItem); setIsItemModalOpen(true); }} className="w-8 h-8 flex items-center justify-center bg-white border border-gray-200 shadow-sm rounded hover:bg-gray-50 text-blue-600 transition-colors" title="Details bearbeiten">
-                <Edit2 className="w-4 h-4" />
-              </button>
-              <button onClick={() => handleDelete(selectedItem.id, selectedItem.title)} className="w-8 h-8 flex items-center justify-center bg-white border border-gray-200 shadow-sm rounded hover:bg-red-50 text-red-500 transition-colors" title="In den Papierkorb verschieben">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          )}
+                {!selectedItem.isSubItem && (
+                  <button onClick={() => handleInsertBelow(selectedItem, 'subitem')} className="w-7 h-7 flex items-center justify-center bg-white border border-gray-200 shadow-2xs rounded-md hover:bg-gray-50 text-blue-600 transition-colors shrink-0" title="Neuen Unterpunkt hinzufügen">
+                    <CornerDownRight className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button onClick={() => handleInsertBelow(selectedItem, 'sibling')} className="w-7 h-7 flex items-center justify-center bg-white border border-gray-200 shadow-2xs rounded-md hover:bg-gray-50 text-emerald-600 transition-colors shrink-0" title="Neuen Punkt darunter einfügen">
+                  <PlusCircle className="w-3.5 h-3.5" />
+                </button>
+                
+                <div className="h-4 w-px bg-gray-300 mx-0.5 shrink-0"></div>
+                
+                <button onClick={() => { setEditingItem(selectedItem); setIsItemModalOpen(true); }} className="w-7 h-7 flex items-center justify-center bg-white border border-gray-200 shadow-2xs rounded-md hover:bg-gray-50 text-blue-600 transition-colors shrink-0" title="Details bearbeiten">
+                  <Edit2 className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => handleDelete(selectedItem.id, selectedItem.title)} className="w-7 h-7 flex items-center justify-center bg-white border border-gray-200 shadow-2xs rounded-md hover:bg-red-50 text-red-500 transition-colors shrink-0" title="In den Papierkorb verschieben">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button onClick={handleToggleAllLevels} className="flex items-center justify-center w-10 h-10 bg-white text-gray-700 border border-gray-300 font-mono font-bold text-lg rounded-lg hover:bg-gray-50 shadow-sm transition-colors" title="Ebenen schrittweise ein-/ausblenden">
-            +/-
-          </button>
-          <button onClick={handleCreateTemplate} className="flex items-center px-4 py-2 bg-blue-600 text-white font-medium rounded-lg shadow hover:bg-blue-700 transition">
-            <Plus className="w-5 h-5 mr-2" />
-            Neue Vorlage anlegen
-          </button>
+        {/* RECHTS: S | M | X Detailstufen-Schalter */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center bg-gray-200/80 p-0.5 rounded-md border border-gray-300/80" title="Ansichts-Tiefe: S = Nur Hauptpunkte | M = Inkl. Unterpunkte | X = Alles inkl. Notizen">
+            <button
+              type="button"
+              onClick={() => handleSetDetailLevel('S')}
+              className={`w-6 h-6 flex items-center justify-center rounded text-[11px] font-bold transition-all ${activeDetailLevel === 'S' ? 'bg-white text-blue-700 shadow-2xs' : 'text-gray-600 hover:text-gray-900'}`}
+              title="Stufe S: Kompakt (Nur Hauptpunkte)"
+            >
+              S
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetDetailLevel('M')}
+              className={`w-6 h-6 flex items-center justify-center rounded text-[11px] font-bold transition-all ${activeDetailLevel === 'M' ? 'bg-white text-blue-700 shadow-2xs' : 'text-gray-600 hover:text-gray-900'}`}
+              title="Stufe M: Standard (Haupt- & Unterpunkte)"
+            >
+              M
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetDetailLevel('X')}
+              className={`w-6 h-6 flex items-center justify-center rounded text-[11px] font-bold transition-all ${activeDetailLevel === 'X' ? 'bg-white text-blue-700 shadow-2xs' : 'text-gray-600 hover:text-gray-900'}`}
+              title="Stufe X: Vollansicht (Alle Punkte & alle Notizen aufgeklappt)"
+            >
+              X
+            </button>
+          </div>
         </div>
       </div>
 
@@ -358,6 +382,7 @@ export const TemplatesView: React.FC = () => {
                         fetchTemplatesAndRoutines();
                       }}
                       isTemplateMode={true}
+                      showMinimalDesktopActions={true}
                       isSelected={selectedItemId === t.id}
                       onSelect={() => setSelectedItemId(t.id)}
                     />
