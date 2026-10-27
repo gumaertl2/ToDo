@@ -1,4 +1,5 @@
 // src/features/Sudoku/hooks/useSudokuGame.ts
+// [2026-10-27] - FEATURE: Zwillingspaar-Notizen (pairNotes) im Notiz-Modus ergänzt: 1x Tippen = normale graue Notiz, 2x Tippen = blaue Zwillings-Notiz, 3x Tippen = Notiz löschen.
 // [2026-10-26] - UX-FIX: Automatische Notizen-Bereinigung in Nachbarzellen (Zeile/Spalte/Block) bei Zahleneingabe und Tipps deaktiviert, damit manuelle Paar-Notizen (Naked Pairs / Snyder-Notation) niemals ungewollt vom System verändert werden.
 // [2026-10-25] - FEATURE: Auto-Save auf 4 unabhängige Speicherplätze (1 Slot je Schwierigkeitsstufe: easy, medium, hard, expert) erweitert, damit z.B. ein Experten-Sudoku pausiert bleiben kann, während man zwischendurch ein leichtes Sudoku spielt.
 // [2026-10-25] - FEATURE: Auto-Save & Resume im localStorage integriert, damit laufende oder pausierte Sudokus (inkl. Notizen, Zeilen-/Spalten-Memos, Zeit und Modus) auch über Nacht oder nach App-Neustart erhalten bleiben. Pause-Funktion vergibt kein 'Außer Wertung' mehr.
@@ -22,6 +23,7 @@ export interface CellData {
   solution: number;
   isFixed: boolean;
   notes: number[];
+  pairNotes?: number[];
   isConflict: boolean;
 }
 
@@ -271,6 +273,7 @@ export const useSudokuGame = () => {
         solution: parseInt(solChar, 10),
         isFixed,
         notes: [],
+        pairNotes: [],
         isConflict: false
       });
     }
@@ -349,14 +352,39 @@ export const useSudokuGame = () => {
     let isErrorTriggered = false;
 
     if (isNotesMode) {
-      const hasNote = cell.notes.includes(num);
-      const newNotes = hasNote ? cell.notes.filter(n => n !== num) : [...cell.notes, num].sort();
-      newBoard[selectedCell] = { ...cell, notes: newNotes, value: null };
+      const currentNotes = cell.notes || [];
+      const currentPairNotes = cell.pairNotes || [];
+      const hasNote = currentNotes.includes(num);
+      const isPair = currentPairNotes.includes(num);
+
+      let newNotes: number[];
+      let newPairNotes: number[];
+
+      if (!hasNote) {
+        // 1. Tipp: Normale graue Notiz setzen
+        newNotes = [...currentNotes, num].sort();
+        newPairNotes = currentPairNotes;
+      } else if (!isPair) {
+        // 2. Tipp: Als Zwillingspaar-Notiz (blau) markieren
+        newNotes = currentNotes;
+        newPairNotes = [...currentPairNotes, num].sort();
+      } else {
+        // 3. Tipp: Notiz + Paar-Markierung wieder löschen
+        newNotes = currentNotes.filter(n => n !== num);
+        newPairNotes = currentPairNotes.filter(n => n !== num);
+      }
+
+      newBoard[selectedCell] = {
+        ...cell,
+        notes: newNotes,
+        pairNotes: newPairNotes,
+        value: null
+      };
       const evaluated = calculateConflicts(newBoard);
       newBoard = evaluated.newBoard;
     } else {
       if (cell.value !== num) {
-        newBoard[selectedCell] = { ...cell, value: num, notes: [] };
+        newBoard[selectedCell] = { ...cell, value: num, notes: [], pairNotes: [] };
 
         const evaluated = calculateConflicts(newBoard);
         newBoard = evaluated.newBoard;
@@ -388,7 +416,7 @@ export const useSudokuGame = () => {
     if (cell.isFixed) return;
     
     let newBoard = [...board];
-    newBoard[selectedCell] = { ...cell, value: null, notes: [] };
+    newBoard[selectedCell] = { ...cell, value: null, notes: [], pairNotes: [] };
     const evaluated = calculateConflicts(newBoard);
     
     setBoard(evaluated.newBoard);
@@ -401,7 +429,7 @@ export const useSudokuGame = () => {
     
     const correctValue = cell.solution;
     let newBoard = [...board];
-    newBoard[selectedCell] = { ...cell, value: correctValue, notes: [] };
+    newBoard[selectedCell] = { ...cell, value: correctValue, notes: [], pairNotes: [] };
     
     const evaluated = calculateConflicts(newBoard);
     setBoard(evaluated.newBoard);

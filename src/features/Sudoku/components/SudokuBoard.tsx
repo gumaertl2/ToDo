@@ -1,4 +1,5 @@
 // src/features/Sudoku/components/SudokuBoard.tsx
+// [2026-10-27] - FEATURE: Zwillingspaar-Notizen (pairNotes) im 3x3-Notizgitter in kräftigem Blau & fett dargestellt.
 // [2026-10-23] - UX-FIX: Deselect-Klick auf den Hintergrund (onClick(null)) und stopPropagation für Child-Elemente.
 import React from 'react';
 import type { CellData } from '../hooks/useSudokuGame';
@@ -161,11 +162,24 @@ export const SudokuBoard: React.FC<SudokuBoardProps> = ({
                 ) : (
                   cell.notes.length > 0 && (
                     <div className="absolute inset-0.5 grid grid-cols-3 grid-rows-3 text-[9px] sm:text-[10px] leading-none font-normal text-slate-500">
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
-                        <div key={n} className="flex items-center justify-center">
-                          {cell.notes.includes(n) ? n : ''}
-                        </div>
-                      ))}
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => {
+                        const hasNote = cell.notes.includes(n);
+                        const isPairNote = hasNote && (cell.pairNotes?.includes(n) ?? false);
+                        return (
+                          <div
+                            key={n}
+                            className={`flex items-center justify-center ${
+                              isPairNote
+                                ? isSelected
+                                  ? 'text-blue-900 font-black scale-110'
+                                  : 'text-blue-600 font-black scale-110'
+                                : 'text-slate-500 font-normal'
+                            }`}
+                          >
+                            {hasNote ? n : ''}
+                          </div>
+                        );
+                      })}
                     </div>
                   )
                 )}
