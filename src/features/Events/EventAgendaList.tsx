@@ -1,4 +1,4 @@
-// [2026-10-27] - MOBILE-UX: Obere Werkzeugleiste auf dem Smartphone (< md) auf eine einzige, aufgeräumte Zeile reduziert (Suche, S|M|X, Filter, Protokolle). Erstell-, Struktur-, Druck-, Reparatur-, Veröffentlichungs-, Vorlagen- und Sitzungsabschluss-Werkzeuge sind auf dem Smartphone ausgeblendet und ab iPad/Desktop (md+) voll verfügbar.
+// [2026-10-27] - MOBILE-UX: 1) Suchfeld auf dem Smartphone flexibel begrenzt (flex-1 min-w-0 max-w-[140px]), damit es niemals den S|M|X-Schalter überlagert. 2) Button '📜 Protokolle' auf dem Smartphone kompakt als '📜 Prot.' dargestellt. 3) Obere Werkzeugleiste auf dem Smartphone (< md) auf eine einzige, aufgeräumte Zeile reduziert.
 // [2026-10-26] - UX-FEATURE: Callback onExtractSubItem durchgereicht an AgendaItemRow, damit markierter Notiztext als Unterpunkt ausgelagert werden kann (und der übergeordnete Punkt automatisch aufgeklappt wird).
 // [2026-10-25] - UX-IMPROVEMENT: Reihenfolge in der Werkzeugleiste optimiert: Lupe -> Blaues Fokus-Feld inkl. vorangestellter Agendapunktnummer (z. B. '1. Begrüßung...') -> '++ Punkt' -> Zeilen-Werkzeuge (Einrücken, Unterpunkt, Punkt darunter, Bearbeiten, Löschen).
 // [2026-10-23] - UX-UPGRADE: Komplette Werkzeugleiste in EventAgendaList konsolidiert: 1) Redundantes Einzel-'+' entfernt, 2) '++ Punkt' (Neuer Punkt am Ende) nach vorne zu den Erstell-Werkzeugen gezogen, 3) '+/-' durch klaren 'S | M | X' Detailstufen-Schalter ersetzt, 4) Sortier-Filter als reines Icon-Popover umgesetzt, 5) Reparatur, Drucken, Protokolle, Veröffentlichen & Vorlagen rechts in die Leiste integriert.
@@ -526,18 +526,18 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
   // CHIRURGISCHER EINGRIFF: overflow-visible md:overflow-hidden erlaubt das Wachsen auf dem iPhone und behält den Split-Screen auf Desktop
   return (
     <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-visible md:overflow-hidden landscape:h-auto landscape:overflow-visible landscape:border-none landscape:shadow-none lg:!h-full lg:!overflow-hidden lg:!border lg:!border-gray-200 lg:!shadow-sm lg:!rounded-xl print:!shadow-none print:!border-none print:!rounded-none print:!overflow-visible print:!block">
-      <div className="px-2.5 py-1.5 border-b border-gray-200 bg-gray-50 flex justify-between items-center flex-nowrap md:flex-wrap lg:flex-nowrap gap-1.5 sticky top-0 z-30 landscape:bg-white landscape:py-1.5 lg:!bg-gray-50 lg:!py-1.5 print:!bg-transparent print:!border-b-2 print:!border-black print:!px-0 print:!pt-0">
+      <div className="px-2 py-1.5 border-b border-gray-200 bg-gray-50 flex justify-between items-center flex-nowrap md:flex-wrap lg:flex-nowrap gap-1.5 sticky top-0 z-30 landscape:bg-white landscape:py-1.5 lg:!bg-gray-50 lg:!py-1.5 print:!bg-transparent print:!border-b-2 print:!border-black print:!px-0 print:!pt-0">
         
         {/* LINKS: 1. Lupe -> 2. Blaues Fokus-Feld (ab iPad) -> 3. ++ Punkt (ab iPad) -> 4. Zeilen-Werkzeuge (ab iPad) */}
-        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
           {/* Nur beim Drucken sichtbare klassische Überschrift */}
           <h2 className="hidden print:!block text-lg font-bold text-black">Agenda & Protokoll</h2>
 
-          {/* 1. LUPE / Smartes Volltext-Suchfeld */}
+          {/* 1. LUPE / Smartes Volltext-Suchfeld (auf Mobile flexibel mit min-w-0, damit es niemals S|M|X überlagert) */}
           {onSearchChange && (
-            <div className="print:!hidden shrink-0">
+            <div className={`print:!hidden ${showFullSearchInput ? 'flex-1 min-w-0 max-w-[140px] sm:max-w-[200px] md:flex-none md:max-w-none' : 'shrink-0'}`}>
               {showFullSearchInput ? (
-                <div className={`relative transition-all duration-150 ${hasActiveSelection ? 'w-32 sm:w-40' : 'w-36 sm:w-52'}`}>
+                <div className={`relative transition-all duration-150 w-full ${hasActiveSelection ? 'md:w-36 lg:w-40' : 'md:w-44 lg:w-52'}`}>
                   <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
                   <input
                     ref={searchInputRef}
@@ -633,7 +633,7 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
         </div>
 
         {/* RECHTS: Detailstufe (S/M/X) + Filter-Popover + Protokolle (immer) | Reparatur, Drucken, Veröffentlichen, Vorlagen (ab iPad) */}
-        <div className="flex items-center gap-1.5 shrink-0 print:!hidden print:!absolute print:!w-0 print:!h-0">
+        <div className="flex items-center gap-1 md:gap-1.5 shrink-0 print:!hidden print:!absolute print:!w-0 print:!h-0">
           
           {/* 1. S | M | X Detailstufen-Schalter */}
           <div className="flex items-center bg-gray-200/80 p-0.5 rounded-md border border-gray-300/80" title="Ansichts-Tiefe: S = Nur Hauptpunkte | M = Inkl. Unterpunkte | X = Alles inkl. Notizen">
@@ -724,7 +724,7 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
             </button>
           )}
 
-          {/* 4. Protokolle (immer sichtbar zum Nachlesen) */}
+          {/* 4. Protokolle (auf dem Smartphone kurz '📜 Prot.', ab iPad '📜 Protokolle') */}
           <div className="relative">
             <button
               type="button"
@@ -732,7 +732,8 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
               className={`h-7 px-2 md:px-2.5 flex items-center justify-center text-xs rounded-md font-bold transition-colors shadow-2xs whitespace-nowrap ${isHistoryOpen ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}
               title="Historie dieses Projekts / dieser Reihe"
             >
-              📜 Protokolle
+              <span className="md:hidden">📜 Prot.</span>
+              <span className="hidden md:inline">📜 Protokolle</span>
             </button>
 
             {isHistoryOpen && (
@@ -808,7 +809,7 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
           <div className="text-center text-gray-400 py-10"><p>Die Agenda ist noch leer.</p></div>
         ) : (
           <>
-            <div className="border border-gray-200 rounded-lg overflow-x-auto bg-white shadow-sm print:!border-none print:!shadow-none print:!overflow-visible print:!block">
+            <div className="border border-gray-200 rounded-lg overflow-hidden md:overflow-x-auto bg-white shadow-sm print:!border-none print:!shadow-none print:!overflow-visible print:!block">
               {finalSortedAgenda.map((item, idx) => {
                 
                 // Prüft auch mehrstufige Eltern-Ketten (falls ein Unterpunkt selbst Unterpunkte hat)
