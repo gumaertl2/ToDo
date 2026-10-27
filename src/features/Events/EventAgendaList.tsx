@@ -1,3 +1,4 @@
+// [2026-10-27] - UX-UPGRADE: Sortier-Dropdown ersetzt durch Personen-Filter analog zur ToDo-Ansicht: Auf dem Smartphone (< md) direkter 1-Klick-Toggle 'Meine', ab iPad/PC (md+) Kombi-Schalter 'Meine | Alle + Personen/Gruppen-Auswahlliste' (inkl. Erhalt der echten Agendapunkt-Nummern und automatischem Aufklappen relevanter Oberpunkte).
 // [2026-10-27] - MOBILE-UX: 1) Suchfeld auf dem Smartphone flexibel begrenzt (flex-1 min-w-0 max-w-[140px]), damit es niemals den S|M|X-Schalter überlagert. 2) Button '📜 Protokolle' auf dem Smartphone kompakt als '📜 Prot.' dargestellt. 3) Obere Werkzeugleiste auf dem Smartphone (< md) auf eine einzige, aufgeräumte Zeile reduziert.
 // [2026-10-26] - UX-FEATURE: Callback onExtractSubItem durchgereicht an AgendaItemRow, damit markierter Notiztext als Unterpunkt ausgelagert werden kann (und der übergeordnete Punkt automatisch aufgeklappt wird).
 // [2026-10-25] - UX-IMPROVEMENT: Reihenfolge in der Werkzeugleiste optimiert: Lupe -> Blaues Fokus-Feld inkl. vorangestellter Agendapunktnummer (z. B. '1. Begrüßung...') -> '++ Punkt' -> Zeilen-Werkzeuge (Einrücken, Unterpunkt, Punkt darunter, Bearbeiten, Löschen).
@@ -19,7 +20,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom'; 
 import { useClubStore } from '../../store/useClubStore';
-import { Calendar, Filter, Edit2, Trash2, ArrowLeftToLine, ArrowRightToLine, CornerDownRight, PlusCircle, Search, X, Printer, Wrench, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { Calendar, Filter, Edit2, Trash2, ArrowLeftToLine, ArrowRightToLine, CornerDownRight, PlusCircle, Search, X, Printer, Wrench, ChevronLeft, ChevronRight, Check, User as UserIcon, Users } from 'lucide-react';
 import { AgendaItemRow } from '../Shared/AgendaItemRow';
 import type { Event, AgendaItem, Task } from '../../core/types/models';
 
@@ -60,8 +61,9 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
   const location = useLocation(); 
   const navigate = useNavigate();
 
-  const [sortBy, setSortBy] = useState<'default' | 'assignee' | 'dueDate'>('default');
-  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const [assigneeFilterMode, setAssigneeFilterMode] = useState<'all' | 'my' | 'custom'>('all');
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+  const [isAssigneeMenuOpen, setIsAssigneeMenuOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isRepairing, setIsRepairing] = useState(false);
   
@@ -78,7 +80,9 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
     setCollapsedParents(new Set());
     setSelectedItemId(null);
     setIsSearchExpanded(false);
-    setIsSortMenuOpen(false);
+    setAssigneeFilterMode('all');
+    setSelectedAssignees([]);
+    setIsAssigneeMenuOpen(false);
     setIsHistoryOpen(false);
     initialCollapseDone.current = false;
   }, [eventId]);
@@ -123,6 +127,18 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
     }
   }, [location.state, eventAgenda, eventId]);
 
+  const toggleAssigneeSelection = (id: string) => {
+    setSelectedAssignees(prev => {
+      const next = prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id];
+      if (next.length > 0) {
+        setAssigneeFilterMode('custom');
+      } else {
+        setAssigneeFilterMode('all');
+      }
+      return next;
+    });
+  };
+
   const finalSortedAgenda = useMemo(() => {
     const visibleAgenda = eventAgenda.filter(item => {
       if (item.status === 'TRASH') return false;
@@ -159,50 +175,27 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
       return (a.createdAt || 0) - (b.createdAt || 0);
     };
 
-    let orderedList: AgendaItem[] = [];
-
-    if (sortBy === 'assignee') {
-      const getAssigneeStr = (item: AgendaItem) => {
-        const uNames = (item.assigneeUserIds || []).map(id => users.find(u => u.id === id)?.name).filter(Boolean);
-        const gNames = (item.assigneeGroupIds || []).map(id => groups.find(g => g.id === id)?.name).filter(Boolean);
-        return [...uNames, ...gNames].join(', ');
-      };
-
-      orderedList = [...visibleAgenda].sort((a, b) => {
-        const strA = getAssigneeStr(a);
-        const strB = getAssigneeStr(b);
-        if (!strA && strB) return 1;
-        if (strA && !strB) return -1;
-        return strA.localeCompare(strB);
-      });
-    } else if (sortBy === 'dueDate') {
-      orderedList = [...visibleAgenda].sort((a, b) => {
-        const dateA = a.dueDate || Number.MAX_SAFE_INTEGER;
-        const dateB = b.dueDate || Number.MAX_SAFE_INTEGER;
-        return dateA - dateB;
-      });
-    } else {
-      // SELBSTHEILENDE HIERARCHIE-SORTIERUNG (inkl. rekursiver Unterpunkt-Auflösung):
-      const placedIds = new Set<string>();
-      const appendWithChildren = (parent: AgendaItem) => {
-        if (placedIds.has(parent.id)) return;
-        placedIds.add(parent.id);
-        orderedList.push(parent);
-        const children = visibleAgenda
-          .filter(i => i.isSubItem && i.parentItemId === parent.id)
-          .sort(compareByOrder);
-        children.forEach(child => appendWithChildren(child));
-      };
-
-      const parents = visibleAgenda.filter(i => !i.isSubItem).sort(compareByOrder);
-      parents.forEach(parent => appendWithChildren(parent));
-
-      // Falls es Unterpunkte ohne sichtbaren Oberpunkt gibt (z. B. bei aktiver Volltextsuche), nichts verschlucken
-      const orphans = visibleAgenda
-        .filter(i => !placedIds.has(i.id))
+    // SELBSTHEILENDE HIERARCHIE-SORTIERUNG (inkl. rekursiver Unterpunkt-Auflösung):
+    const orderedList: AgendaItem[] = [];
+    const placedIds = new Set<string>();
+    const appendWithChildren = (parent: AgendaItem) => {
+      if (placedIds.has(parent.id)) return;
+      placedIds.add(parent.id);
+      orderedList.push(parent);
+      const children = visibleAgenda
+        .filter(i => i.isSubItem && i.parentItemId === parent.id)
         .sort(compareByOrder);
-      orphans.forEach(orphan => appendWithChildren(orphan));
-    }
+      children.forEach(child => appendWithChildren(child));
+    };
+
+    const parents = visibleAgenda.filter(i => !i.isSubItem).sort(compareByOrder);
+    parents.forEach(parent => appendWithChildren(parent));
+
+    // Falls es Unterpunkte ohne sichtbaren Oberpunkt gibt (z. B. bei aktiver Volltextsuche), nichts verschlucken
+    const orphans = visibleAgenda
+      .filter(i => !placedIds.has(i.id))
+      .sort(compareByOrder);
+    orphans.forEach(orphan => appendWithChildren(orphan));
 
     // Startzeit-Kalkulation (Wenn keine Uhrzeit angegeben wurde -> 00:00 Uhr, starten wir ab 19:00 Uhr im 24h-Format)
     let runningTime = currentEvent.plannedStartTime || new Date().setHours(19, 0, 0, 0);
@@ -218,7 +211,7 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
     let mainCounter = 0;
     let subCounter = 0;
 
-    return orderedList.map((item, index) => {
+    const numberedList = orderedList.map((item, index) => {
       const baseEstimate = item.durationEstimate || 0;
       const effectiveDuration = tempDurations[item.id] !== undefined ? tempDurations[item.id] : baseEstimate;
 
@@ -228,15 +221,13 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
       runningTime += effectiveDuration * 60000;
 
       let displayIndexStr = '-';
-      if (sortBy === 'default') {
-        if (!item.isSubItem) {
-          mainCounter++;
-          subCounter = 0;
-          displayIndexStr = `${mainCounter}.`;
-        } else {
-          subCounter++;
-          displayIndexStr = mainCounter === 0 ? `0.${subCounter}` : `${mainCounter}.${subCounter}`;
-        }
+      if (!item.isSubItem) {
+        mainCounter++;
+        subCounter = 0;
+        displayIndexStr = `${mainCounter}.`;
+      } else {
+        subCounter++;
+        displayIndexStr = mainCounter === 0 ? `0.${subCounter}` : `${mainCounter}.${subCounter}`;
       }
 
       return {
@@ -248,7 +239,43 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
         displayIndexStr
       };
     });
-  }, [eventAgenda, tempDurations, currentEvent.plannedStartTime, currentEvent.plannedEndTime, isReadOnly, sortBy, users, groups]);
+
+    // PERSONEN-FILTER ('my' = Meine Punkte | 'custom' = Ausgewählte Personen/Gruppen)
+    if (assigneeFilterMode === 'all') {
+      return numberedList;
+    }
+
+    const matchesAssigneeFilter = (item: AgendaItem): boolean => {
+      if (assigneeFilterMode === 'my' && user) {
+        const isDirect = item.assigneeUserIds?.includes(user.id);
+        const isGroup = item.assigneeGroupIds?.some(gId => user.groupIds?.includes(gId));
+        return !!(isDirect || isGroup);
+      }
+      if (assigneeFilterMode === 'custom' && selectedAssignees.length > 0) {
+        const hasUser = item.assigneeUserIds?.some(id => selectedAssignees.includes(id));
+        const hasGroup = item.assigneeGroupIds?.some(id => selectedAssignees.includes(id));
+        return !!(hasUser || hasGroup);
+      }
+      return true;
+    };
+
+    const allowedIds = new Set<string>();
+    numberedList.forEach(item => {
+      if (matchesAssigneeFilter(item)) {
+        allowedIds.add(item.id);
+        // Übergeordnete Hauptpunkte mit einschließen, damit Unterpunkte (z. B. 8.1) ihren Kontext behalten
+        let curr: AgendaItem | undefined = item;
+        const visitedUp = new Set<string>();
+        while (curr?.isSubItem && curr.parentItemId && !visitedUp.has(curr.parentItemId)) {
+          allowedIds.add(curr.parentItemId);
+          visitedUp.add(curr.parentItemId);
+          curr = numberedList.find(p => p.id === curr?.parentItemId);
+        }
+      }
+    });
+
+    return numberedList.filter(item => allowedIds.has(item.id));
+  }, [eventAgenda, tempDurations, currentEvent.plannedStartTime, currentEvent.plannedEndTime, isReadOnly, assigneeFilterMode, selectedAssignees, user]);
 
   // Wenn ein Oberpunkt eingeklappt wird, während der Fokus auf einem seiner Unterpunkte (z. B. 2.2) lag,
   // wandert der Fokus automatisch auf den sichtbaren Oberpunkt (2.).
@@ -513,15 +540,11 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
   const hasActiveSelection = !isReadOnly && !!selectedItem;
   const showFullSearchInput = !hasActiveSelection || isSearchExpanded || !!searchQuery;
 
-  const sortLabels: Record<'default' | 'assignee' | 'dueDate', string> = {
-    default: 'Chronologisch (Standard)',
-    assignee: 'Nach Verantwortlichen',
-    dueDate: 'Nach Erledigungsdatum'
-  };
-
   const selectedFocusLabel = selectedItem
     ? `${selectedItem.displayIndexStr && selectedItem.displayIndexStr !== '-' ? `${selectedItem.displayIndexStr} ` : ''}${selectedItem.title || 'Neuer Punkt'}`
     : '';
+
+  const isAssigneeFilterActive = assigneeFilterMode !== 'all';
 
   // CHIRURGISCHER EINGRIFF: overflow-visible md:overflow-hidden erlaubt das Wachsen auf dem iPhone und behält den Split-Screen auf Desktop
   return (
@@ -535,7 +558,7 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
 
           {/* 1. LUPE / Smartes Volltext-Suchfeld (auf Mobile flexibel mit min-w-0, damit es niemals S|M|X überlagert) */}
           {onSearchChange && (
-            <div className={`print:!hidden ${showFullSearchInput ? 'flex-1 min-w-0 max-w-[140px] sm:max-w-[200px] md:flex-none md:max-w-none' : 'shrink-0'}`}>
+            <div className={`print:!hidden ${showFullSearchInput ? 'flex-1 min-w-0 max-w-[135px] sm:max-w-[200px] md:flex-none md:max-w-none' : 'shrink-0'}`}>
               {showFullSearchInput ? (
                 <div className={`relative transition-all duration-150 w-full ${hasActiveSelection ? 'md:w-36 lg:w-40' : 'md:w-44 lg:w-52'}`}>
                   <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
@@ -632,7 +655,7 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
           )}
         </div>
 
-        {/* RECHTS: Detailstufe (S/M/X) + Filter-Popover + Protokolle (immer) | Reparatur, Drucken, Veröffentlichen, Vorlagen (ab iPad) */}
+        {/* RECHTS: Detailstufe (S/M/X) + Personen-Filter ('Meine' / 'Alle' + Liste) + Protokolle | Reparatur, Drucken, Veröffentlichen, Vorlagen (ab iPad) */}
         <div className="flex items-center gap-1 md:gap-1.5 shrink-0 print:!hidden print:!absolute print:!w-0 print:!h-0">
           
           {/* 1. S | M | X Detailstufen-Schalter */}
@@ -663,38 +686,143 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
             </button>
           </div>
 
-          {/* 2. Sortier-Filter (Nur Icon, Auswahl öffnet bei Klick) */}
-          <div className="relative">
+          {/* 2A. Smartphone (< md): Direkter 1-Klick-Toggle "Meine" */}
+          <button
+            type="button"
+            onClick={() => {
+              if (assigneeFilterMode === 'my') {
+                setAssigneeFilterMode('all');
+                setSelectedAssignees([]);
+              } else {
+                setAssigneeFilterMode('my');
+                setSelectedAssignees([]);
+              }
+            }}
+            className={`md:hidden h-7 px-2 flex items-center justify-center text-xs font-bold rounded-md border shadow-2xs transition-colors whitespace-nowrap ${
+              assigneeFilterMode === 'my'
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+            }`}
+            title="Nur meine Punkte anzeigen (An/Aus)"
+          >
+            Meine
+          </button>
+
+          {/* 2B. iPad & PC (md+): Kombi-Schalter "Meine | Alle + Personen-Auswahlliste" wie bei den ToDos */}
+          <div className="hidden md:flex items-center bg-gray-200/80 p-0.5 rounded-md border border-gray-300/80 relative">
             <button
               type="button"
-              onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
-              className={`w-7 h-7 flex items-center justify-center rounded-md border shadow-2xs transition-colors ${sortBy !== 'default' ? 'bg-blue-50 text-blue-600 border-blue-300' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}
-              title={`Sortierung: ${sortLabels[sortBy]} (Klicken zum Ändern)`}
+              onClick={() => {
+                if (assigneeFilterMode === 'my') {
+                  setAssigneeFilterMode('all');
+                } else {
+                  setAssigneeFilterMode('my');
+                }
+                setSelectedAssignees([]);
+                setIsAssigneeMenuOpen(false);
+              }}
+              className={`h-6 px-2 flex items-center justify-center rounded text-[11px] font-bold transition-all ${
+                assigneeFilterMode === 'my' && selectedAssignees.length === 0
+                  ? 'bg-white text-blue-700 shadow-2xs'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+              title="Nur meine Punkte anzeigen"
             >
-              <Filter className="w-3.5 h-3.5" />
+              Meine
             </button>
 
-            {isSortMenuOpen && (
+            <div
+              className={`flex items-center rounded ml-0.5 transition-all ${
+                assigneeFilterMode === 'all' && selectedAssignees.length === 0
+                  ? 'bg-white text-blue-700 shadow-2xs'
+                  : selectedAssignees.length > 0
+                    ? 'bg-blue-100 text-blue-800 shadow-2xs'
+                    : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setAssigneeFilterMode('all');
+                  setSelectedAssignees([]);
+                  setIsAssigneeMenuOpen(false);
+                }}
+                className="h-6 px-2 text-[11px] font-bold rounded-l transition-colors whitespace-nowrap"
+                title="Alle Punkte anzeigen"
+              >
+                {selectedAssignees.length > 0 ? `Einige (${selectedAssignees.length})` : 'Alle'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsAssigneeMenuOpen(!isAssigneeMenuOpen)}
+                className={`h-6 px-1.5 border-l rounded-r flex items-center justify-center transition-colors ${
+                  selectedAssignees.length > 0
+                    ? 'border-blue-200 hover:bg-blue-200'
+                    : 'border-gray-200 hover:bg-gray-100'
+                }`}
+                title="Bestimmte Verantwortliche / Gruppen auswählen"
+              >
+                <Filter className="w-3 h-3" />
+              </button>
+            </div>
+
+            {isAssigneeMenuOpen && (
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setIsSortMenuOpen(false)}></div>
-                <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-gray-200 shadow-xl rounded-lg z-50 overflow-hidden py-1">
-                  <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                    Sortierung wählen
+                <div className="fixed inset-0 z-40" onClick={() => setIsAssigneeMenuOpen(false)} />
+                <div className="absolute right-0 top-full mt-1.5 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
+                  <div className="px-3 py-2 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Wer?</span>
+                    {selectedAssignees.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedAssignees([]);
+                          setAssigneeFilterMode('all');
+                        }}
+                        className="text-xs text-blue-600 font-bold hover:underline"
+                      >
+                        Auswahl aufheben
+                      </button>
+                    )}
                   </div>
-                  {(['default', 'assignee', 'dueDate'] as const).map(option => (
-                    <button
-                      key={option}
-                      type="button"
-                      onClick={() => {
-                        setSortBy(option);
-                        setIsSortMenuOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-blue-50 transition-colors ${sortBy === option ? 'bg-blue-50/70 text-blue-700 font-bold' : 'text-gray-700'}`}
-                    >
-                      <span>{sortLabels[option]}</span>
-                      {sortBy === option && <Check className="w-3.5 h-3.5 text-blue-600" />}
-                    </button>
-                  ))}
+                  <div className="max-h-64 overflow-y-auto p-2">
+                    <div className="text-[10px] font-bold text-gray-400 mb-1.5 mt-0.5 px-2 uppercase">Personen</div>
+                    {users.map(u => (
+                      <label key={u.id} className="flex items-center px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer transition-colors">
+                        <div className={`w-4 h-4 rounded border mr-2 flex items-center justify-center shrink-0 ${selectedAssignees.includes(u.id) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
+                          {selectedAssignees.includes(u.id) && <Check className="w-3 h-3 text-white" />}
+                        </div>
+                        <UserIcon className="w-3.5 h-3.5 mr-2 text-gray-400 shrink-0" />
+                        <span className="text-xs font-medium text-gray-700 truncate">{u.name}</span>
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={selectedAssignees.includes(u.id)}
+                          onChange={() => toggleAssigneeSelection(u.id)}
+                        />
+                      </label>
+                    ))}
+                    {groups.length > 0 && (
+                      <>
+                        <div className="text-[10px] font-bold text-gray-400 mb-1.5 mt-3 px-2 uppercase">Rollen / Gruppen</div>
+                        {groups.map(g => (
+                          <label key={g.id} className="flex items-center px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer transition-colors">
+                            <div className={`w-4 h-4 rounded border mr-2 flex items-center justify-center shrink-0 ${selectedAssignees.includes(g.id) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
+                              {selectedAssignees.includes(g.id) && <Check className="w-3 h-3 text-white" />}
+                            </div>
+                            <Users className="w-3.5 h-3.5 mr-2 text-gray-400 shrink-0" />
+                            <span className="text-xs font-medium text-gray-700 truncate">{g.name}</span>
+                            <input
+                              type="checkbox"
+                              className="hidden"
+                              checked={selectedAssignees.includes(g.id)}
+                              onChange={() => toggleAssigneeSelection(g.id)}
+                            />
+                          </label>
+                        ))}
+                      </>
+                    )}
+                  </div>
                 </div>
               </>
             )}
@@ -807,19 +935,26 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
       <div className="flex-1 overflow-visible md:overflow-y-auto landscape:overflow-visible bg-gray-50/10 p-1.5 md:p-2 lg:!overflow-y-auto print:!overflow-visible print:!p-0 print:!pt-4 print:!bg-white">
         {eventAgenda.length === 0 ? (
           <div className="text-center text-gray-400 py-10"><p>Die Agenda ist noch leer.</p></div>
+        ) : finalSortedAgenda.length === 0 ? (
+          <div className="text-center text-gray-400 py-10">
+            <p>Keine Punkte für die gewählte Personen-Auswahl in dieser Sitzung.</p>
+          </div>
         ) : (
           <>
             <div className="border border-gray-200 rounded-lg overflow-hidden md:overflow-x-auto bg-white shadow-sm print:!border-none print:!shadow-none print:!overflow-visible print:!block">
               {finalSortedAgenda.map((item, idx) => {
                 
-                // Prüft auch mehrstufige Eltern-Ketten (falls ein Unterpunkt selbst Unterpunkte hat)
-                let ancestorId = item.isSubItem ? item.parentItemId : undefined;
-                const visitedAncestors = new Set<string>();
-                while (ancestorId && !visitedAncestors.has(ancestorId)) {
-                  if (collapsedParents.has(ancestorId)) return null;
-                  visitedAncestors.add(ancestorId);
-                  const ancestorObj = finalSortedAgenda.find(x => x.id === ancestorId);
-                  ancestorId = ancestorObj?.isSubItem ? ancestorObj.parentItemId : undefined;
+                // Prüft auch mehrstufige Eltern-Ketten (wenn kein Personen-Filter aktiv ist, greift collapsedParents normal;
+                // bei aktivem Personen-Filter 'Meine'/'Einige' klappen relevante Oberpunkte automatisch auf)
+                if (!isAssigneeFilterActive) {
+                  let ancestorId = item.isSubItem ? item.parentItemId : undefined;
+                  const visitedAncestors = new Set<string>();
+                  while (ancestorId && !visitedAncestors.has(ancestorId)) {
+                    if (collapsedParents.has(ancestorId)) return null;
+                    visitedAncestors.add(ancestorId);
+                    const ancestorObj = finalSortedAgenda.find(x => x.id === ancestorId);
+                    ancestorId = ancestorObj?.isSubItem ? ancestorObj.parentItemId : undefined;
+                  }
                 }
 
                 const childCount = finalSortedAgenda.filter(child => child.parentItemId === item.id).length;
@@ -835,12 +970,12 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
                     displayIndexStr={item.displayIndexStr} 
                     totalItems={eventAgenda.length} 
                     subItemCount={childCount}
-                    isSubItemsCollapsed={collapsedParents.has(item.id)}
+                    isSubItemsCollapsed={isAssigneeFilterActive ? false : collapsedParents.has(item.id)}
                     onToggleSubItems={() => { setSelectedItemId(item.id); toggleParent(item.id); }}
                     startTimeStr={item.calculatedStartTimeStr} 
                     isExpanded={expandedIds.has(item.id)} 
                     onToggleExpand={toggleItemExpanded}
-                    onMove={sortBy === 'default' ? moveAgendaItem : undefined}
+                    onMove={!isAssigneeFilterActive ? moveAgendaItem : undefined}
                     onEdit={onEditItem}
                     onOpenHistory={onOpenHistory as any}
                     
@@ -876,8 +1011,8 @@ export const EventAgendaList: React.FC<EventAgendaListProps> = ({
                       }
                     }}
                     
-                    onInsertBelow={!isReadOnly && sortBy === 'default' ? (mode) => handleInsertBelow(item, mode) : undefined}
-                    onToggleSubItem={!isReadOnly && sortBy === 'default' ? () => handleToggleSubItem(item) : undefined}
+                    onInsertBelow={!isReadOnly && !isAssigneeFilterActive ? (mode) => handleInsertBelow(item, mode) : undefined}
+                    onToggleSubItem={!isReadOnly && !isAssigneeFilterActive ? () => handleToggleSubItem(item) : undefined}
                     onExtractSubItem={
                       !isReadOnly && onExtractSubItem
                         ? (sourceItem, extractedText, remainingMarkdown) => {
