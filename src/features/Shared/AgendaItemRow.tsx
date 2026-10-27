@@ -1,3 +1,4 @@
+// [2026-10-27] - MOBILE-UX & INLINE-STATUS: 1) handleInlineSaveProgress (inkl. Container-Wächter) an ItemStatusSection angebunden, damit der Status direkt am Punkt geändert werden kann. 2) Auf dem Smartphone (< md) bleiben Punkte-Verschieben (Index-Select), Dauer-Popup, Titel-Inline-Edit, Doppelklick-Modal und Kontextmenü deaktiviert; auf iPad/Desktop (md+) funktioniert alles uneingeschränkt.
 // [2026-10-26] - UX-FEATURE: Callback onExtractSubItem durchgereicht an RichTextEditor, damit markierte Notizabschnitte oder Aufzählungspunkte direkt als Unterpunkte ausgelagert werden können.
 // [2026-10-25] - UX-FIX: Kein Ansichten-Sprung und kein Verlust der Textmarkierung mehr in den Notizen. Im aufgeklappten Zustand wird direkt der RichTextEditor gerendert (inkl. "Notiztext leeren" & "Undo"); beim Verlassen (onBlur) klappt ein leeres Notizfeld automatisch wieder ein.
 // [2026-10-23] - UX-UPGRADE: Durchgehende "Familien-Klammer" in Warm-Amber (Gold-Orange) für Oberpunkte und ihre Unterpunkte (6. -> 6.1 -> 6.2). Blau bleibt exklusiv für den Zeilen-Fokus reserviert; doppelter Mittelstrich nach der Uhrzeit entfernt und durch eine durchgehende Baum-Leitlinie links ersetzt.
@@ -94,7 +95,7 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
   isReadOnly = false, isOvertime = false, effectiveDuration, onDurationPreview, isSelected, onSelect,
   searchQuery, showMinimalDesktopActions = false, showTimeCategory = false, hasValidationError = false
 }) => {
-  const { users, groups, allAgendaItems } = useClubStore();
+  const { users, groups, allAgendaItems, eventAgenda } = useClubStore();
   
   const hasDescription = !!item.description;
   const [editField, setEditField] = useState<'title' | 'description' | null>(null);
@@ -109,6 +110,8 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
   const [editRoutinePattern, setEditRoutinePattern] = useState(item.routinePattern || 'every_meeting');
   const [editRoutineEndDateStr, setEditRoutineEndDateStr] = useState(item.routineEndDate ? new Date(item.routineEndDate).toISOString().substring(0,10) : '');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
+  const isDesktopOrTablet = () => typeof window !== 'undefined' && window.innerWidth >= 768;
 
   // Synchronisiere lokalen Notiz-Entwurf, wenn sich item.description von außen ändert
   useEffect(() => {
@@ -157,6 +160,7 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
   const handleSafeEdit = (itemToEdit: AgendaItem) => { setEditField(null); onEdit(itemToEdit); };
 
   const handleContextMenu = (e: React.MouseEvent) => {
+    if (!isDesktopOrTablet()) return;
     if (isReadOnly && item.status !== 'TRASH') return; 
     e.preventDefault(); 
     const safeX = Math.min(e.clientX, window.innerWidth - 240);
@@ -195,6 +199,29 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
     if (autoCollapseIfEmpty && finalDesc === '' && isExpanded) {
       onToggleExpand(item.id);
     }
+  };
+
+  const handleInlineSaveProgress = (newProgress: number) => {
+    if (!item.isSubItem && item.type === 'AUFGABE' && newProgress === 100 && item.progress !== 100) {
+      const sourcePool = eventAgenda && eventAgenda.length > 0 ? eventAgenda : allAgendaItems;
+      const children = sourcePool.filter(i => i.isSubItem && i.parentItemId === item.id && !i.isHistorical);
+      const openChildren = children.filter(c => c.progress !== 100 && c.status !== 'ERLEDIGT' && c.status !== 'TRASH');
+      if (openChildren.length > 0) {
+        const childNames = openChildren.slice(0, 3).map(c => c.title).join(', ');
+        const extra = openChildren.length > 3 ? ' ...' : '';
+        const confirmed = window.confirm(
+          `Achtung: Es sind noch ${openChildren.length} Unterpunkte offen (${childNames}${extra}).\n\nMöchtest du den Hauptpunkt wirklich abschließen?`
+        );
+        if (!confirmed) return;
+      }
+    }
+
+    const newStatus = newProgress === 0 ? 'OFFEN' : (newProgress === 100 ? 'ERLEDIGT' : 'IN_ARBEIT');
+    onSaveInline({
+      ...item,
+      progress: newProgress,
+      status: newStatus,
+    });
   };
 
   const handleInlineSaveDate = () => { 
@@ -259,10 +286,10 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
               : 'border-l-4 border-l-transparent';
 
   const indexBadgeClass = isVisualSubItem
-    ? "appearance-none text-center font-bold text-amber-900 bg-amber-100/90 group-hover:bg-amber-200 border border-amber-300 rounded text-xs py-0.5 px-1.5 cursor-pointer outline-none shadow-2xs"
+    ? "appearance-none text-center font-bold text-amber-900 bg-amber-100/90 md:group-hover:bg-amber-200 border border-amber-300 rounded text-xs py-0.5 px-1.5 md:cursor-pointer outline-none shadow-2xs"
     : isExpandedParent
-      ? "appearance-none text-center font-extrabold text-amber-950 bg-amber-100 group-hover:bg-amber-200 border border-amber-400 rounded text-xs py-0.5 px-1.5 cursor-pointer outline-none shadow-2xs"
-      : "appearance-none text-center font-extrabold text-slate-800 bg-slate-200/80 group-hover:bg-slate-300 border border-slate-300 rounded text-xs py-0.5 px-1.5 cursor-pointer outline-none";
+      ? "appearance-none text-center font-extrabold text-amber-950 bg-amber-100 md:group-hover:bg-amber-200 border border-amber-400 rounded text-xs py-0.5 px-1.5 md:cursor-pointer outline-none shadow-2xs"
+      : "appearance-none text-center font-extrabold text-slate-800 bg-slate-200/80 md:group-hover:bg-slate-300 border border-slate-300 rounded text-xs py-0.5 px-1.5 md:cursor-pointer outline-none";
 
   const staticIndexBadgeClass = isVisualSubItem
     ? "font-bold text-amber-900 bg-amber-100/90 border border-amber-300 rounded text-xs py-0.5 px-1.5 ml-1 mt-0.5 z-10 shadow-2xs"
@@ -275,7 +302,7 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
       id={`agenda-item-${item.id}`}
       onClickCapture={() => { if (onSelect) onSelect(); }}
       onClick={() => { if (onSelect) onSelect(); }} 
-      onDoubleClick={(e) => { e.stopPropagation(); if (!isReadOnly) handleSafeEdit(item); }}
+      onDoubleClick={(e) => { e.stopPropagation(); if (!isReadOnly && isDesktopOrTablet()) handleSafeEdit(item); }}
       onContextMenu={handleContextMenu}
       className={`agenda-row-wrapper ${wrapperClass} ${borderLeftClass} flex flex-col border-b ${isVisualSubItem || isExpandedParent ? 'border-amber-200/70' : 'border-gray-200'} last:border-0 min-w-full md:min-w-[700px] print:!min-w-0 print:!w-full print:!border-l-0 print:!border-b print:!border-gray-300 relative`}
     >
@@ -302,7 +329,7 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
 
       <div className={`p-3 grid grid-cols-[auto_1fr] ${isTemplateMode ? 'md:grid-cols-[80px_1fr_auto]' : 'md:grid-cols-[120px_1fr_auto]'} gap-2 md:gap-3 items-start print:!grid-cols-[50px_1fr_auto] print:!gap-2 print:!p-2`}>
         
-        {/* CHIRURGISCHER EINGRIFF: Die linke Gliederungsspalte. Wenn ToDo-Modus (showTimeCategory), dann sitzt hier das linksbündige Badge! */}
+        {/* Die linke Gliederungsspalte. Wenn ToDo-Modus (showTimeCategory), dann sitzt hier das linksbündige Badge! */}
         <div className={`relative flex items-start gap-1.5 pt-1 print:!pt-0 ${isVisualSubItem ? 'pl-4 md:pl-6' : ''}`}>
           
           {showTimeCategory ? (
@@ -319,10 +346,11 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
                     <div className={indexBadgeClass}>
                       {displayIndexStr !== undefined ? displayIndexStr : `${index + 1}.`}
                     </div>
+                    {/* Verschiebe-Select nur ab iPad/Desktop (hidden md:block), auf dem Handy ist die Punktnummer rein statisch */}
                     <select 
                       value={index} 
                       onChange={(e) => onMove(item.id, Number(e.target.value))} 
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      className="hidden md:block absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       title="Position / Reihenfolge ändern"
                       onClick={(e) => e.stopPropagation()}
                     >
@@ -340,7 +368,16 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
 
               {!isTemplateMode && (
                 <div className="flex flex-col items-center ml-0.5 z-10">
-                  <span onClick={(e) => { e.stopPropagation(); if (!isReadOnly) { setLocalDur(item.durationEstimate || 0); setIsEditingDuration(true); } }} className={`font-bold text-sm whitespace-nowrap flex flex-col items-center leading-tight ${isOvertime ? 'text-red-600' : (isVisualSubItem ? 'text-slate-700' : 'text-gray-900')} ${isReadOnly ? '' : 'cursor-pointer hover:bg-blue-50 hover:text-blue-600 rounded px-1 -ml-1 transition-colors'} print:!ml-1 print:!bg-transparent`}>
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!isReadOnly && isDesktopOrTablet()) {
+                        setLocalDur(item.durationEstimate || 0);
+                        setIsEditingDuration(true);
+                      }
+                    }}
+                    className={`font-bold text-sm whitespace-nowrap flex flex-col items-center leading-tight ${isOvertime ? 'text-red-600' : (isVisualSubItem ? 'text-slate-700' : 'text-gray-900')} ${isReadOnly ? '' : 'md:cursor-pointer md:hover:bg-blue-50 md:hover:text-blue-600 rounded px-1 -ml-1 transition-colors'} print:!ml-1 print:!bg-transparent`}
+                  >
                     <span>{startTimeStr}</span>
                     <span className="text-[10px] text-gray-400 font-medium mt-[1px] print:!hidden">({effectiveDuration !== undefined ? effectiveDuration : (item.durationEstimate || 0)}m)</span>
                   </span>
@@ -369,7 +406,16 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
                       {isSubItemsCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />} 
                     </button> 
                   )}
-                  <div className={`${isVisualSubItem ? 'font-semibold text-slate-800' : 'font-bold text-gray-900'} text-sm break-words ${isReadOnly ? '' : 'cursor-text hover:bg-gray-100/80 rounded px-1 -ml-1 transition-colors print:!m-0 print:!p-0'} ${item.title ? '' : 'text-gray-400 italic'}`} onClick={(e) => { e.stopPropagation(); if(!isReadOnly) { setEditVal(item.title); setEditField('title'); } }}> 
+                  <div
+                    className={`${isVisualSubItem ? 'font-semibold text-slate-800' : 'font-bold text-gray-900'} text-sm break-words ${isReadOnly ? '' : 'md:cursor-text md:hover:bg-gray-100/80 rounded px-1 -ml-1 transition-colors print:!m-0 print:!p-0'} ${item.title ? '' : 'text-gray-400 italic'}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!isReadOnly && isDesktopOrTablet()) {
+                        setEditVal(item.title);
+                        setEditField('title');
+                      }
+                    }}
+                  > 
                     
                     {item.type === 'AGENDA' && <span className="text-indigo-600 mr-1.5" title="Arbeitspunkt (Diskussion & Entscheidung)">A:</span>}
                     {item.type === 'INFO' && <span className="text-blue-600 mr-1.5" title="Kenntnisnahme (Reiner Wissenstransfer)">I:</span>}
@@ -378,9 +424,9 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
                     {isSubItemsCollapsed && subItemCount! > 0 && <span className="ml-2 text-[10px] font-bold bg-amber-50 border border-amber-300 text-amber-800 px-1.5 py-0.5 rounded-full align-middle inline-block print:!hidden">{subItemCount} Unterpunkte</span>}
                     {hasValidationError && (
                       <span
-                        onClick={(e) => { e.stopPropagation(); if (!isReadOnly) handleSafeEdit(item); }}
-                        className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-600 text-white shadow-sm cursor-pointer hover:bg-red-700 align-middle print:!hidden"
-                        title="Klicken, um einen Verantwortlichen zuzuweisen"
+                        onClick={(e) => { e.stopPropagation(); if (!isReadOnly && isDesktopOrTablet()) handleSafeEdit(item); }}
+                        className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-600 text-white shadow-sm md:cursor-pointer md:hover:bg-red-700 align-middle print:!hidden"
+                        title="Verantwortlicher fehlt"
                       >
                         ⚠️ Verantwortlicher fehlt!
                       </span>
@@ -407,7 +453,7 @@ export const AgendaItemRow: React.FC<AgendaItemRowProps> = ({
         <ItemStatusSection 
           item={item} isReadOnly={isReadOnly} showMinimalDesktopActions={showMinimalDesktopActions}
           assigneesText={getAssigneesText()} todayStr={todayStr}
-          onEdit={handleSafeEdit} onDelete={onDelete} onToggleExpand={onToggleExpand}
+          onEdit={handleSafeEdit} onSaveProgress={handleInlineSaveProgress} onDelete={onDelete} onToggleExpand={onToggleExpand}
           isExpanded={isExpanded} hasDescription={hasDescription}
           performScrollPreservedToggle={performScrollPreservedToggle}
           onToggleSubItem={onToggleSubItem} onInsertBelow={onInsertBelow}

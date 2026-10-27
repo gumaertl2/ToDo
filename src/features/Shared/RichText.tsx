@@ -1,3 +1,4 @@
+// [2026-10-27] - MOBILE-UX: Button "↳ Als Unterpunkt" in der Notiz-Werkzeugleiste auf dem Smartphone ausgeblendet (hidden md:inline-flex), damit er nur ab iPad/Desktop erscheint.
 // [2026-10-26] - UX-FEATURE: Button "↳ Als Unterpunkt" in der Notiz-Werkzeugleiste ergänzt (ruft extractSelectionOrBlockFromEditor aus noteExtractorUtils.ts auf).
 // [2026-10-25] - UX-UPGRADE: Ruhige, ablenkungsfreie WYSIWYG-Werkzeugleiste (Fett, Kursiv, Unterstrichen | Aufzählungspunkte, Nummerierte Liste | Notiztext leeren & Undo) ohne bunte Farbpunkte; sauberer hängender Einzug für Punkte und Nummerierungen.
 // [2026-10-25] - UX-FEATURE: 1-Klick "Notiztext leeren"-Button mit direkter "Text wiederherstellen (Undo)"-Funktion (bis zum Verlassen des Feldes via onBlur) in der Notiz-Werkzeugleiste ergänzt.
@@ -354,11 +355,11 @@ export const RichTextEditor: React.FC<EditorProps> = ({
 
           {!disabled && onExtractSubItem && !isEmpty && (
             <>
-              <div className="w-px h-4 bg-gray-300 mx-1" />
+              <div className="hidden md:block w-px h-4 bg-gray-300 mx-1" />
               <button
                 type="button"
                 onClick={handleExtractToSubItem}
-                className="flex items-center gap-1 px-2 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded transition-colors shadow-xs"
+                className="hidden md:inline-flex items-center gap-1 px-2 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded transition-colors shadow-xs"
                 title="Markierten Text oder aktuellen Aufzählungspunkt in einen neuen Unterpunkt auslagern"
               >
                 <CornerDownRight className="w-3.5 h-3.5" />
