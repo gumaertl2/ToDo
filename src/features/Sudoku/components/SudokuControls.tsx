@@ -1,4 +1,5 @@
 // src/features/Sudoku/components/SudokuControls.tsx
+// [2026-11-05] - UX-FIX: Doppelte Sicherung in handleNumberClick (hasSelectedCell && activeHighlightNumber === null), damit niemals eine Zahl ins Brett geschrieben wird, solange in der unteren Leiste eine Zahl gelb markiert ist.
 // [2026-10-24] - TWEAK: Beschriftung für den Tipp-Button auf 'Tipp (+600s)' aktualisiert.
 // [2026-10-23] - FEATURE: '🛟 Retten' (Rescue) Button in die Werkzeugleiste integriert.
 // [2026-10-22] - FEATURE: SudokuControls UI. Ziffernblock in kompakter 9er-Reihe.
@@ -35,7 +36,9 @@ export const SudokuControls: React.FC<SudokuControlsProps> = ({
   const handleNumberClick = (num: number) => {
     if (disabled) return;
     
-    if (hasSelectedCell) {
+    // Eiserne Regel: Nur wenn ein leeres Feld ausgewählt ist UND unten KEINE Zahl gelb leuchtet,
+    // wird eine Zahl (oder Notiz) in das Feld eingetragen. Sonst schaltet die Leiste nur die Gelb-Suche!
+    if (hasSelectedCell && activeHighlightNumber === null) {
       if (!completedNumbers.includes(num)) {
         onNumberInput(num);
       }

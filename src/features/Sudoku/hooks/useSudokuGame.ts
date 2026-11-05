@@ -1,4 +1,5 @@
 // src/features/Sudoku/hooks/useSudokuGame.ts
+// [2026-11-05] - UX-FIX: Strikte Trennung zwischen Gelb-Suchmodus (activeHighlightNumber) und Zahleneingabe (selectedCell), um versehentliche Fehleingaben beim Zahlen-Nachschauen zu verhindern.
 // [2026-10-27] - FEATURE: Zwillingspaar-Notizen (pairNotes) im Notiz-Modus ergänzt: 1x Tippen = normale graue Notiz, 2x Tippen = blaue Zwillings-Notiz, 3x Tippen = Notiz löschen.
 // [2026-10-26] - UX-FIX: Automatische Notizen-Bereinigung in Nachbarzellen (Zeile/Spalte/Block) bei Zahleneingabe und Tipps deaktiviert, damit manuelle Paar-Notizen (Naked Pairs / Snyder-Notation) niemals ungewollt vom System verändert werden.
 // [2026-10-25] - FEATURE: Auto-Save auf 4 unabhängige Speicherplätze (1 Slot je Schwierigkeitsstufe: easy, medium, hard, expert) erweitert, damit z.B. ein Experten-Sudoku pausiert bleiben kann, während man zwischendurch ein leichtes Sudoku spielt.
@@ -330,15 +331,30 @@ export const useSudokuGame = () => {
       setBoard(currentBoard);
     }
 
-    if (index === null || selectedCell === index) {
+    if (index === null) {
+      setSelectedCell(null);
+      setActiveHighlightNumber(null);
+      return;
+    }
+
+    const cell = currentBoard[index];
+    if (!cell) return;
+
+    // 1. Fall: Auf dem Feld steht bereits eine gültige Zahl -> NUR Gelb-Suchmodus für diese Zahl schalten,
+    // KEIN Feld zur Eingabe scharfschalten (verhindert versehentliches Überschreiben beim Zahlen-Nachschauen)
+    if (cell.value !== null && !cell.isConflict) {
+      setSelectedCell(null);
+      setActiveHighlightNumber(prev => prev === cell.value ? null : cell.value);
+      return;
+    }
+
+    // 2. Fall: Leeres (oder Konflikt-)Feld angetippt -> Gelb-Suchmodus in der unteren Leiste sofort ausschalten!
+    if (selectedCell === index) {
       setSelectedCell(null);
       setActiveHighlightNumber(null);
     } else {
       setSelectedCell(index);
-      const cell = currentBoard[index];
-      if (cell && cell.value !== null) {
-        setActiveHighlightNumber(cell.value);
-      }
+      setActiveHighlightNumber(null);
     }
   }, [board, selectedCell, clearConflicts]);
 
@@ -382,6 +398,7 @@ export const useSudokuGame = () => {
       };
       const evaluated = calculateConflicts(newBoard);
       newBoard = evaluated.newBoard;
+      setActiveHighlightNumber(null);
     } else {
       if (cell.value !== num) {
         newBoard[selectedCell] = { ...cell, value: num, notes: [], pairNotes: [] };
@@ -402,11 +419,13 @@ export const useSudokuGame = () => {
       setTimer(t => t + 60);
       setPenaltySeconds(p => p + 60);
       setErrorCount(e => e + 1);
-    }
-
-    if (!isNotesMode) {
       setSelectedCell(null);
       setActiveHighlightNumber(null);
+    } else if (!isNotesMode) {
+      // Nach gültiger Zahleneingabe: Feld-Auswahl aufheben und die eingegebene Zahl im Gelb-Suchmodus zeigen.
+      // Da selectedCell === null ist, schaltet jeder weitere Tipp unten auf 1-9 gefahrlos die Gelb-Suche um!
+      setSelectedCell(null);
+      setActiveHighlightNumber(num);
     }
   }, [status, selectedCell, isNotesMode, board, checkWinCondition]);
 
@@ -441,7 +460,7 @@ export const useSudokuGame = () => {
     setHintCount(prev => prev + 1);
     
     setSelectedCell(null);
-    setActiveHighlightNumber(null);
+    setActiveHighlightNumber(correctValue);
   }, [status, selectedCell, board, checkWinCondition]);
 
   // CHIRURGISCHER EINGRIFF: Die Rescue-Funktion (+180s je falscher Zahl & eigener Zähler rescueCount)
@@ -532,6 +551,7 @@ export const useSudokuGame = () => {
   }, [board]);
 
   const toggleHighlightNumber = (num: number) => {
+    setSelectedCell(null);
     setActiveHighlightNumber(prev => prev === num ? null : num);
   };
 
