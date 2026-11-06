@@ -1,4 +1,5 @@
 // src/features/Sudoku/hooks/useSudokuGame.ts
+// [2026-11-06] - UX-FIX: Nach Zahleneingabe und beim Antippen ausgefüllter Zellen bleibt selectedCell erhalten, damit '🗑️ Löschen' jederzeit aktiv ist, während activeHighlightNumber Fehleingaben über die gelbe Zahlenleiste verhindert.
 // [2026-11-05] - UX-FIX: Strikte Trennung zwischen Gelb-Suchmodus (activeHighlightNumber) und Zahleneingabe (selectedCell), um versehentliche Fehleingaben beim Zahlen-Nachschauen zu verhindern.
 // [2026-10-27] - FEATURE: Zwillingspaar-Notizen (pairNotes) im Notiz-Modus ergänzt: 1x Tippen = normale graue Notiz, 2x Tippen = blaue Zwillings-Notiz, 3x Tippen = Notiz löschen.
 // [2026-10-26] - UX-FIX: Automatische Notizen-Bereinigung in Nachbarzellen (Zeile/Spalte/Block) bei Zahleneingabe und Tipps deaktiviert, damit manuelle Paar-Notizen (Naked Pairs / Snyder-Notation) niemals ungewollt vom System verändert werden.
@@ -331,7 +332,7 @@ export const useSudokuGame = () => {
       setBoard(currentBoard);
     }
 
-    if (index === null) {
+    if (index === null || selectedCell === index) {
       setSelectedCell(null);
       setActiveHighlightNumber(null);
       return;
@@ -340,20 +341,14 @@ export const useSudokuGame = () => {
     const cell = currentBoard[index];
     if (!cell) return;
 
-    // 1. Fall: Auf dem Feld steht bereits eine gültige Zahl -> NUR Gelb-Suchmodus für diese Zahl schalten,
-    // KEIN Feld zur Eingabe scharfschalten (verhindert versehentliches Überschreiben beim Zahlen-Nachschauen)
-    if (cell.value !== null && !cell.isConflict) {
-      setSelectedCell(null);
-      setActiveHighlightNumber(prev => prev === cell.value ? null : cell.value);
-      return;
-    }
+    setSelectedCell(index);
 
-    // 2. Fall: Leeres (oder Konflikt-)Feld angetippt -> Gelb-Suchmodus in der unteren Leiste sofort ausschalten!
-    if (selectedCell === index) {
-      setSelectedCell(null);
-      setActiveHighlightNumber(null);
+    // Steht im Feld bereits eine Zahl -> Zahl unten gelb hervorheben (damit Ziffernblock im Nachschau-Modus bleibt,
+    // während '🗑️ Löschen' über selectedCell weiterhin möglich ist).
+    // Ist das Feld leer -> Gelb-Markierung unten sofort ausschalten, damit eine Zahl eingegeben werden kann!
+    if (cell.value !== null) {
+      setActiveHighlightNumber(cell.value);
     } else {
-      setSelectedCell(index);
       setActiveHighlightNumber(null);
     }
   }, [board, selectedCell, clearConflicts]);
@@ -419,12 +414,12 @@ export const useSudokuGame = () => {
       setTimer(t => t + 60);
       setPenaltySeconds(p => p + 60);
       setErrorCount(e => e + 1);
-      setSelectedCell(null);
-      setActiveHighlightNumber(null);
-    } else if (!isNotesMode) {
-      // Nach gültiger Zahleneingabe: Feld-Auswahl aufheben und die eingegebene Zahl im Gelb-Suchmodus zeigen.
-      // Da selectedCell === null ist, schaltet jeder weitere Tipp unten auf 1-9 gefahrlos die Gelb-Suche um!
-      setSelectedCell(null);
+    }
+
+    if (!isNotesMode) {
+      // selectedCell bleibt auf dem Feld (damit '🗑️ Löschen' aktiv bleibt!),
+      // aber activeHighlightNumber wird auf num (gelb) gesetzt, damit ein Klick auf eine andere Zahl
+      // in der unteren Leiste nur die Gelb-Suche umschaltet und keinen Fehler produziert!
       setActiveHighlightNumber(num);
     }
   }, [status, selectedCell, isNotesMode, board, checkWinCondition]);
@@ -439,6 +434,7 @@ export const useSudokuGame = () => {
     const evaluated = calculateConflicts(newBoard);
     
     setBoard(evaluated.newBoard);
+    setActiveHighlightNumber(null);
   }, [status, selectedCell, board]);
 
   const useHint = useCallback(() => {
@@ -551,6 +547,10 @@ export const useSudokuGame = () => {
   }, [board]);
 
   const toggleHighlightNumber = (num: number) => {
+    const hasConflicts = board.some(c => !c.isFixed && c.isConflict);
+    if (hasConflicts) {
+      setBoard(clearConflicts(board));
+    }
     setSelectedCell(null);
     setActiveHighlightNumber(prev => prev === num ? null : num);
   };
