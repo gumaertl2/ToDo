@@ -1,4 +1,5 @@
 // src/store/slices/createArcadeSlice.ts
+// [2026-11-06] - FEATURE: 'deleteSudokuScore' ergänzt, damit jeder Spieler ausschließlich seine eigenen Ranglisten-Einträge (score.userId === user.id) löschen kann.
 // [2026-10-24] - FEATURE: saveSudokuScore um optionale Statistik-Felder (errorCount, hintCount, rescueCount) für die 2-Klassen-Wertung in der Hall of Fame erweitert.
 // [2026-10-24] - DSGVO-FIX: Zentrale Alias-Auflösung in saveSudokuScore, saveMaxBlockScore und im Listener implementiert, damit in der öffentlichen Hall of Fame garantiert nur der Vereins-Alias (oder Vorname) statt des vollen Nachnamens gespeichert und angezeigt wird.
 // [2026-10-23] - FEATURE: ArcadeSlice um MaxBlock erweitert (einheitlicher Listener, getrennte Arrays & Speicher-Routinen).
@@ -6,7 +7,7 @@
 import type { StateCreator } from 'zustand';
 import type { StoreState } from '../useClubStore';
 import type { ArcadeScore } from '../../core/types/models';
-import { collection, onSnapshot, writeBatch, doc } from 'firebase/firestore';
+import { collection, onSnapshot, writeBatch, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { DataProcessor } from '../../services/DataProcessor';
 
@@ -30,6 +31,7 @@ export interface ArcadeSlice {
   }) => Promise<void>;
   saveMaxBlockScore: (scoreData: { userId: string; userName: string; score: number; level: number; lines: number; date: number }) => Promise<void>;
   
+  deleteSudokuScore: (scoreId: string) => Promise<void>;
   resetSudokuSeason: (difficulty: 'easy' | 'medium' | 'hard' | 'expert') => Promise<void>;
   resetMaxBlockSeason: () => Promise<void>;
 }
@@ -143,6 +145,36 @@ export const createArcadeSlice: StateCreator<
       await DataProcessor.saveDocument<ArcadeScore>('arcade_scores', newId, newScore, false);
     } catch (error) {
       console.error("Fehler beim Speichern des MaxBlock-Scores:", error);
+    }
+  },
+
+  deleteSudokuScore: async (scoreId) => {
+    const { user, sudokuScores } = get();
+    if (!user?.id) return;
+
+    const targetScore = sudokuScores.find(s => s.id === scoreId);
+    // Strikte Prüfung: Jeder Nutzer darf ausschließlich seine eigenen Einträge löschen!
+    if (!targetScore || targetScore.userId !== user.id) return;
+
+    // Optimistic UI Update: Sofort aus der lokalen Rangliste entfernen
+    set((state) => ({
+      sudokuScores: state.sudokuScores.filter(s => s.id !== scoreId)
+    }));
+
+    const docRef = doc(db, 'arcade_scores', scoreId);
+    try {
+      await deleteDoc(docRef);
+    } catch (error) {
+      // Fallback (falls Firestore-Regeln nur Soft-Delete erlauben): als archiviert markieren
+      try {
+        await updateDoc(docRef, {
+          isArchived: true,
+          archivedAt: Date.now(),
+          archivedBy: user.id
+        });
+      } catch (fallbackErr) {
+        console.error("Fehler beim Löschen des eigenen Sudoku-Scores:", fallbackErr);
+      }
     }
   },
 

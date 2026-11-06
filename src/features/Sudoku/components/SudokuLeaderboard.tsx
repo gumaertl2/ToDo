@@ -1,4 +1,5 @@
 // src/features/Sudoku/components/SudokuLeaderboard.tsx
+// [2026-11-06] - FEATURE: Eigenen Ranglisten-Eintrag löschen ('🗑️'-Button ausschließlich für isMe mit Sicherheitsabfrage).
 // [2026-10-24] - FEATURE: 2-Klassen-Wertung ('Ohne Hilfe schlägt immer Mit Hilfe') sowie transparente Anzeige von Datum, ✨ Fehlerfrei oder ❌/🛟/💡-Badges in der Hall of Fame implementiert.
 // [2026-10-24] - FEATURE: Schwierigkeitsstufe 'expert' (Experte) in den Hall-of-Fame-Tabs und beim Admin-Saison-Reset ergänzt.
 // [2026-10-22] - FIX: Import von SudokuDifficulty auf 'type' umgestellt, um Vite SyntaxError beim Build zu beheben.
@@ -24,6 +25,7 @@ interface SudokuLeaderboardProps {
   onDifficultyChange: (diff: SudokuDifficulty) => void;
   isAdmin: boolean;
   onResetSeason: (difficulty: SudokuDifficulty) => void;
+  onDeleteScore?: (scoreId: string) => void;
 }
 
 export const formatTime = (totalSeconds: number) => {
@@ -42,7 +44,8 @@ export const SudokuLeaderboard: React.FC<SudokuLeaderboardProps> = ({
   difficulty,
   onDifficultyChange,
   isAdmin,
-  onResetSeason
+  onResetSeason,
+  onDeleteScore
 }) => {
   // 2-Klassen-Sortierung:
   // 1. Läufe OHNE Hilfe (hintCount=0 & rescueCount=0) stehen IMMER vor Läufen MIT Hilfe.
@@ -77,7 +80,7 @@ export const SudokuLeaderboard: React.FC<SudokuLeaderboardProps> = ({
   };
 
   const renderRow = (entry: LeaderboardEntry, index: number, isSticky = false) => {
-    const isMe = entry.userId === currentUserId;
+    const isMe = Boolean(currentUserId && entry.userId === currentUserId);
     const errors = entry.errorCount ?? 0;
     const hints = entry.hintCount ?? 0;
     const rescues = entry.rescueCount ?? 0;
@@ -89,10 +92,10 @@ export const SudokuLeaderboard: React.FC<SudokuLeaderboardProps> = ({
         key={isSticky ? `sticky-${entry.id}` : entry.id}
         className={`flex items-center justify-between p-3 rounded-lg ${isMe ? 'bg-blue-50 border border-blue-200' : 'bg-white border border-slate-100'}`}
       >
-        <div className="flex items-center gap-3">
-          <div className="w-8 text-center text-lg">{renderRank(index)}</div>
-          <div className="flex flex-col">
-            <div className={`font-medium leading-tight ${isMe ? 'text-blue-800' : 'text-slate-700'}`}>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-8 text-center text-lg shrink-0">{renderRank(index)}</div>
+          <div className="flex flex-col min-w-0">
+            <div className={`font-medium leading-tight truncate ${isMe ? 'text-blue-800' : 'text-slate-700'}`}>
               {entry.userName} {isMe && <span className="text-xs text-blue-500 ml-1">(Du)</span>}
             </div>
             {entry.date && (
@@ -102,25 +105,47 @@ export const SudokuLeaderboard: React.FC<SudokuLeaderboardProps> = ({
             )}
           </div>
         </div>
-        <div className="flex flex-col items-end">
-          <div className={`font-mono font-bold leading-tight ${isMe ? 'text-blue-700' : 'text-slate-900'}`}>
-            {formatTime(entry.timeInSeconds)}
+
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-col items-end">
+            <div className={`font-mono font-bold leading-tight ${isMe ? 'text-blue-700' : 'text-slate-900'}`}>
+              {formatTime(entry.timeInSeconds)}
+            </div>
+            {isFlawless ? (
+              <div className="text-[10px] font-semibold text-emerald-600 mt-0.5">
+                ✨ Fehlerfrei
+              </div>
+            ) : (
+              <div
+                className={`text-[10px] font-semibold mt-0.5 flex items-center gap-1.5 ${
+                  usedHelp ? 'text-amber-600' : 'text-rose-500'
+                }`}
+                title="❌ Tippfehler (+60s) | 🛟 Rettungsring (+180s) | 💡 Tipp (+600s)"
+              >
+                {errors > 0 && <span>❌ {errors}</span>}
+                {rescues > 0 && <span>🛟 {rescues}</span>}
+                {hints > 0 && <span>💡 {hints}</span>}
+              </div>
+            )}
           </div>
-          {isFlawless ? (
-            <div className="text-[10px] font-semibold text-emerald-600 mt-0.5">
-              ✨ Fehlerfrei
-            </div>
-          ) : (
-            <div
-              className={`text-[10px] font-semibold mt-0.5 flex items-center gap-1.5 ${
-                usedHelp ? 'text-amber-600' : 'text-rose-500'
-              }`}
-              title="❌ Tippfehler (+60s) | 🛟 Rettungsring (+180s) | 💡 Tipp (+600s)"
+
+          {isMe && onDeleteScore && (
+            <button
+              type="button"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `Möchtest du deinen eigenen Eintrag (${formatTime(entry.timeInSeconds)}) wirklich aus der Rangliste löschen?`
+                  )
+                ) {
+                  onDeleteScore(entry.id);
+                }
+              }}
+              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors active:scale-95"
+              title="Eigenen Eintrag aus der Rangliste löschen"
             >
-              {errors > 0 && <span>❌ {errors}</span>}
-              {rescues > 0 && <span>🛟 {rescues}</span>}
-              {hints > 0 && <span>💡 {hints}</span>}
-            </div>
+              🗑️
+            </button>
           )}
         </div>
       </div>

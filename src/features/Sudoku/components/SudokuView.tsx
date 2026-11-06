@@ -1,4 +1,5 @@
 // src/features/Sudoku/components/SudokuView.tsx
+// [2026-11-06] - FEATURE: 'deleteSudokuScore' an SudokuLeaderboard übergeben, damit jeder Spieler seine eigenen Ranglisten-Einträge löschen kann.
 // [2026-10-25] - UX-FIX (iPadOS 26 vs. iPhone): 36px Top-Spacer ('hidden sm:block sm:h-9') ausschließlich ab Tablet-Größe (sm:) über die Kopfzeile gesetzt. Auf dem iPad rutscht die Kopfzeile damit komplett unter den 36px-Milchglas-Streifen der 🔴🟡🟢-Fensterampel (100% scharf), während auf dem iPhone (<640px) kein einziger Pixel Platz verloren geht.
 // [2026-10-25] - FEATURE: 4 unabhängige Speicherplätze je Schwierigkeitsstufe in der Lobby-UI angebunden (💾-Indikator direkt auf den Stufen-Buttons, gezieltes Fortsetzen/Verwerfen pro Stufe).
 // [2026-10-25] - FEATURE: 'Weiterspielen'-Karte in der Lobby für gespeicherte Sudokus sowie erweitertes, blickdichtes Pause-Menü ('▶ Weiter spielen', '💾 Speichern & später weiterspielen', '🗑️ Spiel verwerfen') integriert.
@@ -49,6 +50,7 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
   const roleProfiles = clubStore.roleProfiles || [];
   const sudokuScores = clubStore.sudokuScores || [];
   const saveSudokuScore = clubStore.saveSudokuScore || (async () => {});
+  const deleteSudokuScore = clubStore.deleteSudokuScore || (async () => {});
   const resetSudokuSeason = clubStore.resetSudokuSeason || (async () => {});
   const fetchSudokuScores = clubStore.fetchSudokuScores || (async () => {});
 
@@ -406,6 +408,7 @@ export const SudokuView: React.FC<SudokuViewProps> = ({ onClose }) => {
                 onDifficultyChange={setLobbyDifficulty}
                 isAdmin={isAdmin}
                 onResetSeason={resetSudokuSeason}
+                onDeleteScore={deleteSudokuScore}
               />
             </div>
           </div>
