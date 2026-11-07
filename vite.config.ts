@@ -1,3 +1,4 @@
+// [2026-11-07] - BUGFIX: 'navigateFallbackDenylist: [/^\/api\//]' in Workbox ergänzt, damit direkte Browser-Downloads auf '/api/calendar' nicht vom PWA-Offline-Fallback abgefangen werden.
 // [2026-10-14] - BUGFIX: Vite/Babel config reverted to fix TS2353 build error.
 // [2026-10-04] - FEATURE: Automatische Build-Versionsnummer (__APP_BUILD_DATE__) via define-Block für UI-Anzeige injiziert.
 // [2026-06-04] - BUGFIX: 'skipWaiting' und 'clientsClaim' in Workbox ergänzt, um das Service Worker Update-Problem (Zombie-Phänomen) auf iOS/Desktop endgültig zu lösen.
@@ -28,6 +29,7 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,json,woff,woff2}'],
         navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api\//],
         cleanupOutdatedCaches: true,
         maximumFileSizeToCacheInBytes: 4194304,
         skipWaiting: true,

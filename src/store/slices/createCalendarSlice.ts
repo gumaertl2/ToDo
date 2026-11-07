@@ -1,3 +1,4 @@
+// [2026-11-07] - BUGFIX: Ganztagestermine (s.isDate / VALUE=DATE) im ICS-Parser mit lokaler Mitternacht (00:00 Uhr Ortszeit) statt UTC-Mitternacht (toUnixTime -> 01:00/02:00 Uhr) gespeichert, damit 1-Tages-Feiertage und Ferien nicht in den Folgetag überbluten.
 // [2026-11-07] - RELIABILITY & UX-FIX: Internen Vercel-Endpunkt (/api/ics-proxy) auf Platz 1 der Sync-Kaskade gesetzt, schädlichen '_t'-Zufallsparameter (Cloudflare HTTP 429 Auslöser) sowie abgeschalteten CorsProxyIO entfernt und Auto-Sync strikt auf maximal 1 Feed alle 5 Minuten gestaffelt.
 // [2026-10-17] - OPTIMIZATION: Firebase onSnapshot Listener-Zerstörung in fetchCalendarData verhindert (Early Return), um Free-Tier Lese-Quoten zu sparen und Offline-Starts zu ermöglichen.
 // [2026-10-13] - ARCHITECTURE-FIX: Clean Rollback auf stabile Proxy-Basis (AllOrigins, CorsProxyIO, Direkt). Experimentelle Proxies und Header entfernt, da diese zu oft Browser-Sicherheitswarnungen (Load failed) auslösten.
@@ -289,12 +290,18 @@ export const createCalendarSlice: StateCreator<CalendarSlice, [], [], CalendarSl
         if (!event.startDate) return; 
         
         const s = event.startDate;
-        const startDate = s.toUnixTime() * 1000;
+        // Bei reinen Ganztages-Daten (s.isDate / VALUE=DATE) lokale Mitternacht (00:00 Uhr Ortszeit) nutzen,
+        // damit 00:00 UTC nicht zu 01:00/02:00 Uhr Ortszeit am Folgetag verschoben wird.
+        const startDate = s.isDate
+          ? new Date(s.year, s.month - 1, s.day, 0, 0, 0, 0).getTime()
+          : s.toUnixTime() * 1000;
         
         let endDate = startDate;
         if (event.endDate) { 
           const e = event.endDate; 
-          endDate = e.toUnixTime() * 1000; 
+          endDate = e.isDate
+            ? new Date(e.year, e.month - 1, e.day, 0, 0, 0, 0).getTime()
+            : e.toUnixTime() * 1000; 
         }
 
         cachedEvents.push({ 

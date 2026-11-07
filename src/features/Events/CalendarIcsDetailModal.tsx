@@ -1,3 +1,4 @@
+// [2026-11-07] - BUGFIX: Exklusives iCal-Enddatum bei Ganztagesterminen (00:00 sowie 01:00/02:00 UTC-Versatz) in renderTimeDetails sauber auf den inklusiven Endtag zurückgerechnet (behebt "Silvester bis 1. Januar" / "Ferien bis 9. Januar").
 // [2026-10-26] - BUGFIX: nuScore Scanner nutzt nun den reinen Original-Titel (ohne vorangestelltes Abo-Kürzel wie H1/H3) und prüft Orts-/Vereinsnamen mit Wortgrenzen, damit "Puchheim" nicht mit "Puchheim-Ort" verwechselt wird.
 // [2026-10-13] - FEATURE: nuScore Scanner sucht nun nach den Vereinsnamen (Heim vs Gast) statt nach dem Datum, wodurch die Codes auch bei Spielverlegungen robust gefunden werden.
 // [2026-10-13] - BUGFIX: sanitizeId durch generateStableEventId ersetzt, um Kader- und Logistik-Daten aus der Schattenakte wieder korrekt zu verknüpfen.
@@ -334,8 +335,9 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
     
     if (event.end && event.end.getTime() > event.start.getTime()) {
       let visualEnd = event.end;
-      if (event.allDay && event.end.getHours() === 0 && event.end.getMinutes() === 0) {
-        visualEnd = new Date(event.end.getTime() - 1000); 
+      // Exklusives iCal-Enddatum (00:00 Ortszeit bzw. 01:00/02:00 aus altem UTC-Import) auf den echten letzten Kalendertag zurücksetzen
+      if (event.allDay && event.end.getMinutes() === 0 && event.end.getHours() <= 3) {
+        visualEnd = new Date(event.end.getTime() - 4 * 60 * 60 * 1000); 
       }
       
       const startDayStr = event.start.toLocaleDateString('de-DE');
@@ -389,7 +391,7 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
             <div className="flex items-center gap-2">
               {canEdit && (
                 <button onClick={onEdit} className="p-1.5 text-white/80 hover:text-white hover:bg-white/20 rounded-lg transition-colors" title="Termin bearbeiten">
-                  <Edit3 className="w-5 h-5" />
+                  <Edit3 className="w-4 h-4" />
                 </button>
               )}
               <button onClick={onClose} className="p-1.5 text-white/80 hover:text-white hover:bg-white/20 rounded-lg transition-colors">

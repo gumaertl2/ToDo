@@ -1,3 +1,4 @@
+// [2026-11-07] - BUGFIX & UX: Mehrtägige Termine (z. B. Schulferien) werden pro Woche als durchgehender Balken über die Tage gespannt statt als abgehackte Einzel-Pillen; exklusive iCal-Enddaten (inkl. 01:00/02:00 UTC-Versatz) bluten bei 1-Tages-Feiertagen nicht mehr in den Folgetag über.
 // [2026-10-19] - REFACTOR: Lokalen Favoriten-Stern aus der "Mo."-Spaltenüberschrift entfernt, da der globale Master-Stern in CalendarView.tsx nun alle 6 Kalenderansichten zentral filtert.
 // [2026-10-19] - UX-FEATURE: Favoriten-Stern in der "Mo."-Spaltenüberschrift ergänzt (mit localStorage-Persistenz). Filtert das Monatsgitter per 1-Klick auf alle Termine/Spiele/Dienste/Sitzungen, an denen der eingeloggte Nutzer beteiligt ist.
 // [2026-10-19] - UX-FEATURE: Auswärts-Symbol im Monatskalender auf 🚗 (statt 🚌) umgestellt und führende Heim-/Auswärts-Symbole (🏠 / 🚗) auf ein weißes Mini-Badge gesetzt, damit sie sich auf allen Teamfarben (insb. Rot/Pink) scharf abheben.
@@ -17,6 +18,21 @@ interface CalendarMonthGridViewProps {
   currentDate: Date;
   events: AdaptedEvent[];
   onSelectEvent: (event: AdaptedEvent) => void;
+}
+
+interface EventSpanInfo {
+  event: AdaptedEvent;
+  startMs: number;
+  endMs: number;
+  isMultiDay: boolean;
+}
+
+interface MultiDayWeekSegment {
+  event: AdaptedEvent;
+  startCol: number;
+  endCol: number;
+  startsBeforeWeek: boolean;
+  endsAfterWeek: boolean;
 }
 
 const WEEKDAYS = ['Mo.', 'Di.', 'Mi.', 'Do.', 'Fr.', 'Sa.', 'So.'];
@@ -39,6 +55,39 @@ const getContrastYIQ = (hexcolor?: string) => {
   return (yiq >= 128) ? '#1f2937' : 'white';
 };
 
+const computeEventSpan = (e: AdaptedEvent): EventSpanInfo | null => {
+  if (!e.start) return null;
+  const startMs = startOfDay(e.start).getTime();
+  let rawEnd = e.end || e.start;
+
+  if (rawEnd.getTime() > e.start.getTime()) {
+    // Exklusives iCal-Enddatum (00:00 Ortszeit bzw. 01:00/02:00 aus altem UTC-Import) auf den echten letzten Kalendertag zurücksetzen
+    if (e.allDay && rawEnd.getMinutes() === 0 && rawEnd.getHours() <= 3) {
+      rawEnd = new Date(rawEnd.getTime() - 4 * 60 * 60 * 1000);
+    } else if (e.allDay && rawEnd.getHours() === 0 && rawEnd.getMinutes() === 0) {
+      rawEnd = new Date(rawEnd.getTime() - 1000);
+    }
+  }
+
+  const endMs = Math.max(startMs, startOfDay(rawEnd).getTime());
+  return {
+    event: e,
+    startMs,
+    endMs,
+    isMultiDay: endMs > startMs
+  };
+};
+
+const splitLeadIcon = (rawDisplay: string): { leadIcon: string | null; restText: string } => {
+  if (rawDisplay.startsWith('🏠')) {
+    return { leadIcon: '🏠', restText: rawDisplay.replace(/^🏠\s*/, '') };
+  }
+  if (rawDisplay.startsWith('🚌')) {
+    return { leadIcon: '🚗', restText: rawDisplay.replace(/^🚌\s*/, '') };
+  }
+  return { leadIcon: null, restText: rawDisplay };
+};
+
 export const CalendarMonthGridView: React.FC<CalendarMonthGridViewProps> = ({
   currentDate,
   events,
@@ -57,6 +106,16 @@ export const CalendarMonthGridView: React.FC<CalendarMonthGridViewProps> = ({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Alle Events einmalig mit sauberem Start-/End-Tag vorberechnen
+  const eventSpans = useMemo<EventSpanInfo[]>(() => {
+    const list: EventSpanInfo[] = [];
+    for (const ev of events) {
+      const span = computeEventSpan(ev);
+      if (span) list.push(span);
+    }
+    return list;
+  }, [events]);
 
   // Wir spannen ein großzügiges, scrollbares Wochenfenster um das gewählte Datum auf
   // (26 Wochen zurück in die Vergangenheit bis 52 Wochen in die Zukunft)
@@ -118,60 +177,106 @@ export const CalendarMonthGridView: React.FC<CalendarMonthGridViewProps> = ({
         {/* ROLLIERENDE WOCHEN-ZEILEN */}
         <div className="divide-y divide-gray-200">
           {weeks.map((weekDays) => {
-            const weekStartMs = weekDays[0].getTime();
+            const dayMsList = weekDays.map(d => startOfDay(d).getTime());
+            const weekStartMs = dayMsList[0];
+            const weekEndMs = dayMsList[6];
+
+            // 1. Mehrtägige Termine (z. B. Ferien) als durchgehende Wochen-Segmente berechnen & in Spuren (Lanes) packen
+            const multiDayInWeek = eventSpans
+              .filter(s => s.isMultiDay && s.endMs >= weekStartMs && s.startMs <= weekEndMs)
+              .sort((a, b) => {
+                if (a.startMs !== b.startMs) return a.startMs - b.startMs;
+                return (b.endMs - b.startMs) - (a.endMs - a.startMs);
+              });
+
+            const lanes: MultiDayWeekSegment[][] = [];
+            multiDayInWeek.forEach(span => {
+              let startCol = dayMsList.findIndex(ms => ms >= span.startMs);
+              if (startCol === -1) startCol = 0;
+              let endCol = 6;
+              for (let c = 6; c >= 0; c--) {
+                if (dayMsList[c] <= span.endMs) {
+                  endCol = c;
+                  break;
+                }
+              }
+
+              const seg: MultiDayWeekSegment = {
+                event: span.event,
+                startCol,
+                endCol,
+                startsBeforeWeek: span.startMs < weekStartMs,
+                endsAfterWeek: span.endMs > weekEndMs
+              };
+
+              let placed = false;
+              for (const lane of lanes) {
+                const overlaps = lane.some(existing => !(seg.endCol < existing.startCol || seg.startCol > existing.endCol));
+                if (!overlaps) {
+                  lane.push(seg);
+                  placed = true;
+                  break;
+                }
+              }
+              if (!placed) {
+                lanes.push([seg]);
+              }
+            });
 
             return (
               <div
                 key={weekStartMs}
                 data-week-ms={weekStartMs}
-                className="grid grid-cols-7 min-h-[125px] sm:min-h-[150px] lg:min-h-[165px]"
+                className="relative min-h-[125px] sm:min-h-[150px] lg:min-h-[165px] flex flex-col"
               >
-                {weekDays.map((day, dayIdx) => {
-                  const dayMs = startOfDay(day).getTime();
-                  const isToday = dayMs === todayMs;
-                  const isPast = dayMs < todayMs;
-                  const isFirstOfMonth = day.getDate() === 1;
+                {/* HINTERGRUND-GITTER (7 Tages-Spalten mit Rahmen & Heute-/Einsatz-Färbung durchgehend von oben bis unten) */}
+                <div className="absolute inset-0 grid grid-cols-7 pointer-events-none">
+                  {weekDays.map((_, dayIdx) => {
+                    const dayMs = dayMsList[dayIdx];
+                    const isToday = dayMs === todayMs;
+                    const isPast = dayMs < todayMs;
+                    const hasMyAssignment = eventSpans.some(
+                      s => s.event.isMyAssignment && dayMs >= s.startMs && dayMs <= s.endMs
+                    );
 
-                  const dayEvents = events.filter(e => {
-                    if (!e.start) return false;
-                    const eStart = startOfDay(e.start).getTime();
-                    let exclusiveEnd = e.end || e.start;
-                    if (e.allDay && exclusiveEnd.getTime() > e.start.getTime()) {
-                      exclusiveEnd = new Date(exclusiveEnd.getTime() - 1000);
+                    let cellBgClass = 'bg-white';
+                    if (isToday && hasMyAssignment) {
+                      cellBgClass = 'bg-emerald-50/90 ring-2 ring-inset ring-blue-600';
+                    } else if (isToday) {
+                      cellBgClass = 'bg-blue-50/50 ring-2 ring-inset ring-blue-600';
+                    } else if (hasMyAssignment) {
+                      cellBgClass = 'bg-emerald-50/80';
+                    } else if (isPast) {
+                      cellBgClass = 'bg-gray-50/70';
                     }
-                    const eEnd = startOfDay(exclusiveEnd).getTime();
-                    return dayMs >= eStart && dayMs <= eEnd;
-                  });
 
-                  dayEvents.sort((a, b) => {
-                    if (a.allDay && !b.allDay) return -1;
-                    if (!a.allDay && b.allDay) return 1;
-                    return a.start!.getTime() - b.start!.getTime();
-                  });
+                    return (
+                      <div
+                        key={`bg-${dayMs}`}
+                        className={`${cellBgClass} ${dayIdx < 6 ? 'border-r border-gray-200' : ''}`}
+                      />
+                    );
+                  })}
+                </div>
 
-                  const hasMyAssignment = dayEvents.some(e => e.isMyAssignment);
+                {/* ZEILE A: TAGES-ZAHLEN KOPFZEILE (Mo. - So.) */}
+                <div className="relative z-10 grid grid-cols-7">
+                  {weekDays.map((day, dayIdx) => {
+                    const dayMs = dayMsList[dayIdx];
+                    const isToday = dayMs === todayMs;
+                    const isPast = dayMs < todayMs;
+                    const isFirstOfMonth = day.getDate() === 1;
+                    const hasMyAssignment = eventSpans.some(
+                      s => s.event.isMyAssignment && dayMs >= s.startMs && dayMs <= s.endMs
+                    );
 
-                  // Hintergrund- & Rahmenlogik für die Tageskachel
-                  let cellBgClass = 'bg-white';
-                  if (isToday && hasMyAssignment) {
-                    cellBgClass = 'bg-emerald-50/90 ring-2 ring-inset ring-blue-600';
-                  } else if (isToday) {
-                    cellBgClass = 'bg-blue-50/50 ring-2 ring-inset ring-blue-600';
-                  } else if (hasMyAssignment) {
-                    cellBgClass = 'bg-emerald-50/80';
-                  } else if (isPast) {
-                    cellBgClass = 'bg-gray-50/70';
-                  }
-
-                  return (
-                    <div
-                      key={dayMs}
-                      className={`flex flex-col p-1 sm:p-1.5 transition-colors min-w-0 overflow-hidden ${cellBgClass} ${
-                        dayIdx < 6 ? 'border-r border-gray-200' : ''
-                      } ${isPast && !isToday ? 'opacity-65 hover:opacity-100' : ''}`}
-                    >
-                      {/* DATUMS-KOPFZEILE DER KACHEL */}
-                      <div className="flex items-center justify-between mb-1 px-0.5 min-h-[20px]">
+                    return (
+                      <div
+                        key={`hdr-${dayMs}`}
+                        className={`flex items-center justify-between pt-1 sm:pt-1.5 pb-1 px-1.5 sm:px-2 min-h-[24px] ${
+                          isPast && !isToday ? 'opacity-65' : ''
+                        }`}
+                      >
                         {isToday ? (
                           <span className="hidden sm:inline-block text-[9px] uppercase tracking-wider font-extrabold bg-blue-600 text-white px-1.5 py-0.5 rounded shadow-xs">
                             Heute
@@ -200,26 +305,84 @@ export const CalendarMonthGridView: React.FC<CalendarMonthGridViewProps> = ({
                           {format(day, 'dd.')}
                         </span>
                       </div>
+                    );
+                  })}
+                </div>
 
-                      {/* TERMINE / SPIELE IN DER KACHEL */}
-                      <div className="flex flex-col gap-1 flex-1 overflow-y-auto custom-scrollbar">
-                        {dayEvents.map((ev) => {
+                {/* ZEILE B: DURCHGEHENDE MEHRTÄGIGE BALKEN (z. B. Ferien über mehrere Tage hinweg) */}
+                {lanes.length > 0 && (
+                  <div className="relative z-10 flex flex-col gap-1 mb-1">
+                    {lanes.map((lane, laneIdx) => (
+                      <div key={`lane-${laneIdx}`} className="grid grid-cols-7">
+                        {lane.map((seg) => {
+                          const ev = seg.event;
+                          const bgColor = ev.color || '#3b82f6';
+                          const textColor = getContrastYIQ(bgColor);
+                          const rawDisplay = ev.calendarTitle || String(ev.title || '');
+                          const { leadIcon, restText } = splitLeadIcon(rawDisplay);
+
+                          const roundedLeft = seg.startsBeforeWeek ? 'rounded-l-none ml-0 pl-1.5' : 'rounded-l-[5px] ml-1 sm:ml-1.5 pl-1.5';
+                          const roundedRight = seg.endsAfterWeek ? 'rounded-r-none mr-0 pr-1.5' : 'rounded-r-[5px] mr-1 sm:mr-1.5 pr-1.5';
+
+                          return (
+                            <div
+                              key={`span-${ev.id}-${weekStartMs}-${seg.startCol}`}
+                              onClick={() => onSelectEvent(ev)}
+                              title={typeof ev.title === 'string' ? ev.title : undefined}
+                              className={`flex items-center py-0.5 text-[10px] sm:text-xs leading-tight overflow-hidden cursor-pointer transition-transform hover:brightness-95 ${roundedLeft} ${roundedRight}`}
+                              style={{
+                                gridColumn: `${seg.startCol + 1} / ${seg.endCol + 2}`,
+                                backgroundColor: bgColor,
+                                color: textColor,
+                                fontWeight: ev.isMyAssignment ? 700 : 600,
+                                border: ev.isMyAssignment ? '2px solid #065f46' : 'none',
+                                boxShadow: ev.isMyAssignment ? '0 1px 2px rgba(0,0,0,0.18)' : 'none'
+                              }}
+                            >
+                              {leadIcon && (
+                                <span className="inline-flex items-center justify-center bg-white/95 rounded-[3px] px-0.5 py-px mr-1 text-[10px] sm:text-[11px] leading-none shadow-2xs shrink-0">
+                                  {leadIcon}
+                                </span>
+                              )}
+                              <span className="truncate">{restText}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* ZEILE C: EINZEL-TAGES-TERMINE & SPIELE JE TAG */}
+                <div className="relative z-10 grid grid-cols-7 flex-1">
+                  {weekDays.map((_, dayIdx) => {
+                    const dayMs = dayMsList[dayIdx];
+                    const isToday = dayMs === todayMs;
+                    const isPast = dayMs < todayMs;
+
+                    const singleDayEvents = eventSpans
+                      .filter(s => !s.isMultiDay && s.startMs === dayMs)
+                      .map(s => s.event)
+                      .sort((a, b) => {
+                        if (a.allDay && !b.allDay) return -1;
+                        if (!a.allDay && b.allDay) return 1;
+                        return a.start!.getTime() - b.start!.getTime();
+                      });
+
+                    return (
+                      <div
+                        key={`single-${dayMs}`}
+                        className={`flex flex-col gap-1 px-1 sm:px-1.5 pb-1 sm:pb-1.5 min-w-0 overflow-hidden ${
+                          isPast && !isToday ? 'opacity-65 hover:opacity-100' : ''
+                        }`}
+                      >
+                        {singleDayEvents.map((ev) => {
                           const bgColor = ev.color || '#3b82f6';
                           const textColor = getContrastYIQ(bgColor);
                           const rawDisplay = isMobilePortrait
                             ? (ev.mobileShortTitle || ev.calendarTitle || String(ev.title || ''))
                             : (ev.calendarTitle || String(ev.title || ''));
-
-                          // Führendes Heim-/Auswärts-Symbol extrahieren (🚌 -> 🚗) und auf weißem Badge rendern
-                          let leadIcon: string | null = null;
-                          let restText = rawDisplay;
-                          if (rawDisplay.startsWith('🏠')) {
-                            leadIcon = '🏠';
-                            restText = rawDisplay.replace(/^🏠\s*/, '');
-                          } else if (rawDisplay.startsWith('🚌')) {
-                            leadIcon = '🚗';
-                            restText = rawDisplay.replace(/^🚌\s*/, '');
-                          }
+                          const { leadIcon, restText } = splitLeadIcon(rawDisplay);
 
                           return (
                             <div
@@ -245,9 +408,9 @@ export const CalendarMonthGridView: React.FC<CalendarMonthGridViewProps> = ({
                           );
                         })}
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             );
           })}
