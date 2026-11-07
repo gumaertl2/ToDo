@@ -1,3 +1,4 @@
+// [2026-11-07] - FEATURE: "Meine Einsätze"-Filter (onlyMyEvents) wird nun im Kalender-Abo-Modal sowohl visuell als goldene Auswahl angezeigt als auch im generierten Abo-Link (?onlyMy=1&...) an den Server übergeben.
 // [2026-11-07] - FEATURE: Dynamischer Kalender-Abo-Link (?filters=...) im Abo-Modal basierend auf den aktuell vom Benutzer angehakten Kalender-Filtern (Termine, Dienste, Kalender-Abos) inkl. Vorschau-Badges.
 // [2026-10-19] - UX-FEATURE: Globaler Master-Stern ("Meine Einsätze"-Filter) in der oberen Kalender-Navigationsleiste eingebaut (wirkt auf alle 6 Reiter, speichert Status im localStorage, leuchtet im aktiven Zustand als gold-gelber Pill-Button mit goldenem Kalender-Rahmen).
 // [2026-10-19] - UX-FEATURE: Rollierendes 5-Wochen-Monatsgitter (CalendarMonthGridView) für den Reiter "Monat" eingebunden (Heute startet immer in Zeile 1, nahtloser Übergang in den Folgemonat).
@@ -70,7 +71,7 @@ export const CalendarView: React.FC = () => {
   const { 
     user, roleProfiles, calendarSubscriptions, 
     fetchCalendarData, isCalendarLoading, fetchEvents,
-    helpers, updateCalendarEvent
+    helpers, teams, updateCalendarEvent
   } = useClubStore();
   const navigate = useNavigate();
   const location = useLocation();
@@ -202,29 +203,120 @@ export const CalendarView: React.FC = () => {
     }
   }, [location.state, rbcEvents, location.pathname, navigate]);
 
-  // --- DYNAMISCHER ABO-LINK FÜR DIE ANGEHAKTEN FILTER ---
+  // --- DYNAMISCHER ABO-LINK FÜR DIE ANGEHAKTEN FILTER (+ OPTIONAL "MEINE EINSÄTZE") ---
+  const myAssignedEventsInActiveFilters = useMemo(() => {
+    return rbcEvents.filter(ev => {
+      if (!ev.isMyAssignment) return false;
+      if (ev.isLogisticsDuty) {
+        // Logistik-Duplikat nur zählen, falls das zugehörige Team-Abo selbst abgewählt ist, aber "Dienste" aktiv ist
+        return activeFilters.includes('dienste') && !activeFilters.includes(ev.sourceId);
+      }
+      if (ev.sourceId === 'manual') {
+        return ev.seriesId ? activeFilters.includes('dienste') : activeFilters.includes('manual');
+      }
+      return activeFilters.includes(ev.sourceId);
+    });
+  }, [rbcEvents, activeFilters]);
+
   const subscriptionQuery = useMemo(() => {
-    return `?filters=${encodeURIComponent(activeFilters.join(','))}`;
-  }, [activeFilters]);
+    const effectiveFilters = onlyMyEvents
+      ? Array.from(
+          new Set(
+            activeFilters.filter(fId => {
+              if (fId === 'manual') {
+                return myAssignedEventsInActiveFilters.some(e => e.sourceId === 'manual' && !e.seriesId && !e.isLogisticsDuty);
+              }
+              if (fId === 'dienste') {
+                return myAssignedEventsInActiveFilters.some(e => (e.sourceId === 'manual' && !!e.seriesId) || e.isLogisticsDuty);
+              }
+              return myAssignedEventsInActiveFilters.some(e => e.sourceId === fId);
+            }).concat(
+              myAssignedEventsInActiveFilters
+                .filter(e => e.isLogisticsDuty && e.sourceId !== 'manual')
+                .map(e => e.sourceId)
+            )
+          )
+        )
+      : activeFilters;
+
+    const params = new URLSearchParams();
+    params.set('filters', effectiveFilters.join(','));
+
+    if (onlyMyEvents) {
+      params.set('onlyMy', '1');
+      if (user?.id) params.set('uid', user.id);
+      if (myHelper?.id) params.set('hid', myHelper.id);
+      if (user?.groupIds?.length) params.set('gids', user.groupIds.join(','));
+
+      const teamAndVGroupIds = new Set<string>(myHelper?.teamIds || []);
+      if (myHelper) {
+        teamAndVGroupIds.add('vgroup-all');
+        if (myHelper.memberStatus) {
+          teamAndVGroupIds.add(`vgroup-${myHelper.memberStatus.toLowerCase()}`);
+        }
+      }
+      if (teamAndVGroupIds.size > 0) {
+        params.set('tids', Array.from(teamAndVGroupIds).join(','));
+      }
+
+      if (myHelper?.id && teams?.length) {
+        const stammTeams = teams
+          .filter(t => (t.defaultLineupHelperIds || []).includes(myHelper.id))
+          .map(t => t.id);
+        if (stammTeams.length > 0) {
+          params.set('stids', stammTeams.join(','));
+        }
+      }
+
+      const aliasSet = new Set<string>();
+      if (myHelper?.alias?.trim()) aliasSet.add(myHelper.alias.trim());
+      if (myHelper?.name?.trim()) aliasSet.add(myHelper.name.trim());
+      if (aliasSet.size > 0) {
+        params.set('alias', Array.from(aliasSet).join(','));
+      }
+
+      const icsKeySet = new Set<string>();
+      myAssignedEventsInActiveFilters.forEach(ev => {
+        if (ev.sourceId !== 'manual') {
+          const uidOrTime = ev.sourceEvent?.uid || (ev.start ? String(ev.start.getTime()) : '');
+          if (uidOrTime) {
+            icsKeySet.add(`${ev.sourceId}:${uidOrTime}`);
+          }
+        }
+      });
+      if (icsKeySet.size > 0) {
+        params.set('myIcs', Array.from(icsKeySet).join(','));
+      }
+    }
+
+    return `?${params.toString()}`;
+  }, [activeFilters, onlyMyEvents, myAssignedEventsInActiveFilters, user, myHelper, teams]);
 
   const subscriptionHttpUrl = `${window.location.origin}/api/calendar${subscriptionQuery}`;
   const subscriptionWebcalUrl = `webcal://${window.location.host}/api/calendar${subscriptionQuery}`;
 
   const selectedFilterBadges = useMemo(() => {
     const badges: { id: string; label: string; color: string }[] = [];
-    if (activeFilters.includes('manual')) {
+    const hasMyManual = myAssignedEventsInActiveFilters.some(e => e.sourceId === 'manual' && !e.seriesId && !e.isLogisticsDuty);
+    const hasMyDienste = myAssignedEventsInActiveFilters.some(e => (e.sourceId === 'manual' && !!e.seriesId) || e.isLogisticsDuty);
+
+    if (activeFilters.includes('manual') && (!onlyMyEvents || hasMyManual)) {
       badges.push({ id: 'manual', label: 'Termine', color: '#1e40af' });
     }
-    if (activeFilters.includes('dienste')) {
+    if (activeFilters.includes('dienste') && (!onlyMyEvents || hasMyDienste)) {
       badges.push({ id: 'dienste', label: 'Dienste', color: '#c2410c' });
     }
     calendarSubscriptions
-      .filter(s => s.isActive && activeFilters.includes(s.id))
+      .filter(s => {
+        if (!s.isActive || !activeFilters.includes(s.id)) return false;
+        if (!onlyMyEvents) return true;
+        return myAssignedEventsInActiveFilters.some(e => e.sourceId === s.id && !e.isLogisticsDuty);
+      })
       .forEach(s => {
         badges.push({ id: s.id, label: s.name, color: s.color || '#10b981' });
       });
     return badges;
-  }, [activeFilters, calendarSubscriptions]);
+  }, [activeFilters, calendarSubscriptions, onlyMyEvents, myAssignedEventsInActiveFilters]);
 
   // --- NAVIGATION ---
   const handleCopyLink = () => {
@@ -570,16 +662,40 @@ export const CalendarView: React.FC = () => {
             
             <div className="p-5 space-y-4 bg-white">
               <p className="text-sm text-gray-600">
-                Dein Abo-Link enthält genau die Kalender, die du unter <strong>Optionen</strong> angehakt hast, und aktualisiert sich auf deinem Gerät automatisch:
+                {onlyMyEvents ? (
+                  <>
+                    Du hast <strong>⭐ Meine Einsätze</strong> ausgewählt. Dein Abo-Link enthält <strong>ausschließlich deine persönlichen Spiele, Dienste und Termine</strong>:
+                  </>
+                ) : (
+                  <>
+                    Dein Abo-Link enthält genau die Kalender, die du unter <strong>Optionen</strong> angehakt hast, und aktualisiert sich auf deinem Gerät automatisch:
+                  </>
+                )}
               </p>
 
-              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+              <div className={`rounded-xl p-3 border ${onlyMyEvents ? 'bg-amber-50/70 border-amber-300' : 'bg-gray-50 border-gray-200'}`}>
+                {onlyMyEvents && (
+                  <div className="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-amber-200/80">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-400 text-amber-950 text-xs font-extrabold border border-amber-500 shadow-2xs">
+                      <Star className="w-3.5 h-3.5 fill-amber-950 text-amber-950 shrink-0" />
+                      Nur meine Einsätze & Termine
+                    </span>
+                    <span className="text-xs font-bold text-amber-900">
+                      {myAssignedEventsInActiveFilters.length} {myAssignedEventsInActiveFilters.length === 1 ? 'Termin' : 'Termine'}
+                    </span>
+                  </div>
+                )}
+
                 <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  Enthaltene Kalender ({selectedFilterBadges.length}):
+                  {onlyMyEvents
+                    ? `Betroffene Kalender mit eigenen Einsätzen (${selectedFilterBadges.length}):`
+                    : `Enthaltene Kalender (${selectedFilterBadges.length}):`}
                 </div>
                 {selectedFilterBadges.length === 0 ? (
                   <p className="text-xs text-red-600 font-semibold">
-                    ⚠️ Aktuell ist kein Filter angehakt. Bitte wähle unter „Optionen“ mindestens einen Kalender aus.
+                    {onlyMyEvents
+                      ? '⚠️ Für deine aktuelle Filter-Auswahl liegen derzeit keine persönlichen Einsätze vor.'
+                      : '⚠️ Aktuell ist kein Filter angehakt. Bitte wähle unter „Optionen“ mindestens einen Kalender aus.'}
                   </p>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
