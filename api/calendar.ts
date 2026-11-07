@@ -1,4 +1,5 @@
 // api/calendar.ts
+// [2026-11-07] - FEATURE: Dynamische Filter-Unterstützung (?filters=manual,dienste,<subId>...) inkl. Auslieferung der angehakten Kalender-Abos (calendar_subscriptions.cachedEvents). Ohne Parameter bleibt das Verhalten für den Public Kalender unverändert.
 // Serverseitiger Vercel-Endpunkt zur Generierung eines dynamischen iCal (.ics) Feeds.
 // Nutzt die native Firebase REST-API für maximale Performance ohne SDK-Abhängigkeiten.
 
@@ -8,37 +9,62 @@ export default async function handler(req: any, res: any) {
     const projectId = process.env.VITE_FIREBASE_PROJECT_ID || 'papatododev';
     const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
 
-    // Hole alle Kalender-Termine und Sitzungen (pageSize=1000 verhindert Paginierungs-Probleme)
-    const [calRes, eventsRes] = await Promise.all([
+    // Prüfen, ob vom Benutzer ausgewählte Filter übergeben wurden (?filters=manual,dienste,subId1,...)
+    const rawFilters = req?.query?.filters;
+    const hasFilterParam = typeof rawFilters === 'string';
+    const filterSet = hasFilterParam
+      ? new Set(
+          rawFilters
+            .split(',')
+            .map((s: string) => s.trim())
+            .filter(Boolean)
+        )
+      : null;
+
+    // Hole alle Kalender-Termine, Sitzungen und (bei aktivem Filter-Link) auch die Kalender-Abos
+    const [calRes, eventsRes, subsRes] = await Promise.all([
       fetch(`${baseUrl}/calendar_events?pageSize=1000`),
-      fetch(`${baseUrl}/events?pageSize=1000`)
+      fetch(`${baseUrl}/events?pageSize=1000`),
+      hasFilterParam ? fetch(`${baseUrl}/calendar_subscriptions?pageSize=1000`) : Promise.resolve(null)
     ]);
 
     const calData = await calRes.json();
     const eventsData = await eventsRes.json();
+    const subsData = subsRes ? await subsRes.json() : null;
 
     const rbcEvents: any[] = [];
 
     // Hilfsfunktion zum Extrahieren der REST-API Felder
     const getField = (doc: any, fieldName: string) => {
-      const f = doc.fields?.[fieldName];
+      const f = doc?.fields?.[fieldName];
       if (!f) return null;
       return f.stringValue ?? f.integerValue ?? f.booleanValue ?? null;
     };
 
-    // 1. Manuelle Kalender-Termine parsen
+    // 1. Manuelle Kalender-Termine & Dienste parsen
     if (calData.documents) {
       for (const doc of calData.documents) {
         const isPublic = getField(doc, 'isPublic');
         if (!isPublic) continue;
+
+        const seriesId = getField(doc, 'seriesId');
+        const eventType = getField(doc, 'eventType');
+        const isDienst = Boolean(seriesId) || eventType === 'DIENST';
+
+        // Wenn Filter übergeben wurden: exakt nach 'dienste' vs. 'manual' (Termine) filtern
+        if (filterSet !== null) {
+          if (isDienst && !filterSet.has('dienste')) continue;
+          if (!isDienst && !filterSet.has('manual')) continue;
+        }
 
         const id = doc.name.split('/').pop();
         const title = getField(doc, 'title') || 'Termin';
         const location = getField(doc, 'location') || '';
         const description = getField(doc, 'description') || '';
         const startTime = parseInt(getField(doc, 'startTime') || '0', 10);
+        if (!startTime) continue;
         const endTime = parseInt(getField(doc, 'endTime') || '0', 10) || startTime + 3600000; // Fallback: +1 Stunde
-        const isAllDay = getField(doc, 'isAllDay') || false;
+        const isAllDay = Boolean(getField(doc, 'isAllDay'));
 
         // Heim/Auswärts Kennzeichnung
         const isHeim = location.toLowerCase().includes('maisach');
@@ -49,8 +75,8 @@ export default async function handler(req: any, res: any) {
       }
     }
 
-    // 2. Sitzungen parsen
-    if (eventsData.documents) {
+    // 2. Sitzungen parsen (gehören zum Filter 'manual' / Termine)
+    if (eventsData.documents && (filterSet === null || filterSet.has('manual'))) {
       for (const doc of eventsData.documents) {
         const isPublished = getField(doc, 'isPublished');
         const status = getField(doc, 'status');
@@ -65,6 +91,47 @@ export default async function handler(req: any, res: any) {
         const endTime = parseInt(getField(doc, 'plannedEndTime') || '0', 10) || startTime + 7200000; // Fallback: +2 Stunden
 
         rbcEvents.push({ id, title, location, description, startTime, endTime, isAllDay: false });
+      }
+    }
+
+    // 3. Angehakte externe Kalender-Abos (calendar_subscriptions.cachedEvents) parsen
+    if (filterSet !== null && subsData?.documents) {
+      for (const subDoc of subsData.documents) {
+        const subId = subDoc.name.split('/').pop();
+        const isActive = getField(subDoc, 'isActive');
+        if (!isActive || !subId || !filterSet.has(subId)) continue;
+
+        const subName = getField(subDoc, 'name') || '';
+        const showInMatchPlan = Boolean(getField(subDoc, 'showInMatchPlan'));
+        const subPrefix = subName ? `${String(subName).trim()} ` : '';
+
+        const cachedValues = subDoc.fields?.cachedEvents?.arrayValue?.values || [];
+        cachedValues.forEach((item: any, idx: number) => {
+          const evDoc = item?.mapValue;
+          if (!evDoc?.fields) return;
+
+          const uid = getField(evDoc, 'uid') || `${idx}`;
+          const rawTitle = getField(evDoc, 'title') || 'Termin';
+          const location = getField(evDoc, 'location') || '';
+          const description = getField(evDoc, 'description') || '';
+          const startTime = parseInt(getField(evDoc, 'startTime') || '0', 10);
+          if (!startTime) return;
+          const endTime = parseInt(getField(evDoc, 'endTime') || '0', 10) || startTime + 3600000;
+          const isAllDay = Boolean(getField(evDoc, 'isAllDay'));
+
+          const isHeim = location.toLowerCase().includes('maisach');
+          const matchPrefix = showInMatchPlan ? (isHeim ? '🏠 ' : (location ? '🚌 ' : '')) : '';
+
+          rbcEvents.push({
+            id: `ics-${subId}-${uid}-${idx}`,
+            title: `${matchPrefix}${subPrefix}${rawTitle}`,
+            location,
+            description,
+            startTime,
+            endTime,
+            isAllDay
+          });
+        });
       }
     }
 
@@ -92,9 +159,9 @@ export default async function handler(req: any, res: any) {
         ics += `DTSTART:${formatDate(ev.startTime)}\r\nDTEND:${formatDate(ev.endTime)}\r\n`;
       }
 
-      ics += `SUMMARY:${ev.title}\r\n`;
-      if (ev.location) ics += `LOCATION:${ev.location}\r\n`;
-      if (ev.description) ics += `DESCRIPTION:${ev.description.replace(/\n/g, '\\n')}\r\n`;
+      ics += `SUMMARY:${String(ev.title).replace(/\r?\n/g, ' ')}\r\n`;
+      if (ev.location) ics += `LOCATION:${String(ev.location).replace(/\r?\n/g, ' ')}\r\n`;
+      if (ev.description) ics += `DESCRIPTION:${String(ev.description).replace(/\r?\n/g, '\\n')}\r\n`;
 
       ics += `END:VEVENT\r\n`;
     }

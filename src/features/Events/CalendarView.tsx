@@ -1,3 +1,4 @@
+// [2026-11-07] - FEATURE: Dynamischer Kalender-Abo-Link (?filters=...) im Abo-Modal basierend auf den aktuell vom Benutzer angehakten Kalender-Filtern (Termine, Dienste, Kalender-Abos) inkl. Vorschau-Badges.
 // [2026-10-19] - UX-FEATURE: Globaler Master-Stern ("Meine Einsätze"-Filter) in der oberen Kalender-Navigationsleiste eingebaut (wirkt auf alle 6 Reiter, speichert Status im localStorage, leuchtet im aktiven Zustand als gold-gelber Pill-Button mit goldenem Kalender-Rahmen).
 // [2026-10-19] - UX-FEATURE: Rollierendes 5-Wochen-Monatsgitter (CalendarMonthGridView) für den Reiter "Monat" eingebunden (Heute startet immer in Zeile 1, nahtloser Übergang in den Folgemonat).
 // [2026-10-19] - UX-OPTIMIZATION: In der Monatsansicht wird der gesamte Platz im Balken für "[Heim/Auswärts] [Team] [Gegner]" reserviert (Markierung eigener Spiele erfolgt über grüne Tageskachel + kräftigen Rahmen).
@@ -201,9 +202,33 @@ export const CalendarView: React.FC = () => {
     }
   }, [location.state, rbcEvents, location.pathname, navigate]);
 
+  // --- DYNAMISCHER ABO-LINK FÜR DIE ANGEHAKTEN FILTER ---
+  const subscriptionQuery = useMemo(() => {
+    return `?filters=${encodeURIComponent(activeFilters.join(','))}`;
+  }, [activeFilters]);
+
+  const subscriptionHttpUrl = `${window.location.origin}/api/calendar${subscriptionQuery}`;
+  const subscriptionWebcalUrl = `webcal://${window.location.host}/api/calendar${subscriptionQuery}`;
+
+  const selectedFilterBadges = useMemo(() => {
+    const badges: { id: string; label: string; color: string }[] = [];
+    if (activeFilters.includes('manual')) {
+      badges.push({ id: 'manual', label: 'Termine', color: '#1e40af' });
+    }
+    if (activeFilters.includes('dienste')) {
+      badges.push({ id: 'dienste', label: 'Dienste', color: '#c2410c' });
+    }
+    calendarSubscriptions
+      .filter(s => s.isActive && activeFilters.includes(s.id))
+      .forEach(s => {
+        badges.push({ id: s.id, label: s.name, color: s.color || '#10b981' });
+      });
+    return badges;
+  }, [activeFilters, calendarSubscriptions]);
+
   // --- NAVIGATION ---
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(`${window.location.origin}/api/calendar`);
+    navigator.clipboard.writeText(subscriptionHttpUrl);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
   };
@@ -544,17 +569,42 @@ export const CalendarView: React.FC = () => {
             </div>
             
             <div className="p-5 space-y-4 bg-white">
-              <p className="text-sm text-gray-600">Abonniere den Vereinskalender in deinem persönlichen Kalender, um immer auf dem neuesten Stand zu sein. Die Termine aktualisieren sich in deinem Handy automatisch!</p>
+              <p className="text-sm text-gray-600">
+                Dein Abo-Link enthält genau die Kalender, die du unter <strong>Optionen</strong> angehakt hast, und aktualisiert sich auf deinem Gerät automatisch:
+              </p>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">
+                  Enthaltene Kalender ({selectedFilterBadges.length}):
+                </div>
+                {selectedFilterBadges.length === 0 ? (
+                  <p className="text-xs text-red-600 font-semibold">
+                    ⚠️ Aktuell ist kein Filter angehakt. Bitte wähle unter „Optionen“ mindestens einen Kalender aus.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedFilterBadges.map(badge => (
+                      <span
+                        key={badge.id}
+                        className="px-2 py-0.5 text-xs font-bold rounded-md bg-white border border-gray-200 shadow-2xs"
+                        style={{ color: badge.color }}
+                      >
+                        ✓ {badge.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
               
               <div className="space-y-3 mt-4">
                 <a 
-                  href={`webcal://${window.location.host}/api/calendar`}
+                  href={subscriptionWebcalUrl}
                   className="flex items-center justify-center w-full px-4 py-3 bg-gray-900 text-white font-bold rounded-xl hover:bg-gray-800 transition shadow-sm text-center"
                 >
                    Apple Kalender (iPhone / Mac)
                 </a>
                 <a 
-                  href={`https://calendar.google.com/calendar/render?cid=${encodeURIComponent(`webcal://${window.location.host}/api/calendar`)}`}
+                  href={`https://calendar.google.com/calendar/render?cid=${encodeURIComponent(subscriptionWebcalUrl)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center justify-center w-full px-4 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition shadow-sm text-center"
@@ -567,7 +617,7 @@ export const CalendarView: React.FC = () => {
                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Manueller Link (.ics)</label>
                 <div className="flex items-center bg-gray-50 border border-gray-200 rounded-lg p-1">
                   <div className="flex-1 overflow-hidden px-2 text-xs text-gray-600 font-mono whitespace-nowrap">
-                    {`${window.location.origin}/api/calendar`}
+                    {subscriptionHttpUrl}
                   </div>
                   <button onClick={handleCopyLink} className="flex items-center px-3 py-1.5 bg-white border border-gray-200 rounded text-xs font-bold text-gray-700 hover:bg-gray-50 shadow-sm">
                     {isCopied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
