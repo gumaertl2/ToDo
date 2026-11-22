@@ -1,3 +1,4 @@
+// [2026-11-22] - SECURITY-UPDATE: Lesezugriff (allow read: if true) für 'teams' und 'match_lineups' freigegeben (enthalten ausschließlich anonyme IDs, keine Klarnamen/Kontaktdaten), damit der serverseitige iCal-Feed (api/calendar.ts) bei "Meine Einsätze"-Abos geänderte/verschobene Spiele live abgleichen kann.
 // [2026-10-24] - SECURITY-UPDATE: Lesezugriff (allow read: if true) und Schreibzugriff für eingeloggte Nutzer (isSignedIn) für 'arcade_scores' und 'settings' (Vereins-Arcade: Sudoku & MaxBlock) freigegeben.
 // [2026-10-08] - SECURITY-FIX: Lese- und Schreibzugriff für 'event_poll_responses' (Schatten-Akten für Umfragen) für eingeloggte Nutzer freigegeben.
 // [2026-09-28] - SECURITY-FIX: Lese- und Schreibzugriff für 'match_lineups' (Schatten-Akten der Aufstellungen) für eingeloggte Nutzer freigegeben.
@@ -39,7 +40,9 @@ service cloud.firestore {
     }
 
     match /teams/{teamId} {
-      allow read, write: if isSignedIn();
+      // SECURITY-UPDATE: Für serverseitigen iCal-Abgleich (defaultLineupHelperIds, nur anonyme IDs) lesbar gemacht.
+      allow read: if true;
+      allow write: if isSignedIn();
     }
 
     match /role_profiles/{roleId} {
@@ -69,8 +72,9 @@ service cloud.firestore {
     }
 
     match /match_lineups/{lineupId} {
-      // SECURITY-FIX: Erlaubt das Speichern und Lesen der Base & Override Aufstellungen
-      allow read, write: if isSignedIn();
+      // SECURITY-UPDATE: Für serverseitigen iCal-Abgleich (nur anonyme IDs) lesbar gemacht; Schreiben nur für eingeloggte Nutzer.
+      allow read: if true;
+      allow write: if isSignedIn();
     }
     
     match /event_poll_responses/{responseId} {

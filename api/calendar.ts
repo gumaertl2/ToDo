@@ -1,4 +1,5 @@
 // api/calendar.ts
+// [2026-11-22] - BUGFIX: Stabile VEVENT-UIDs (ohne laufenden Array-Index), SEQUENCE-Feld aus updatedAt für saubere Apple-Kalender-Updates bei Terminänderungen sowie Live-Auswertung von teams/match_lineups für "Meine Einsätze" (statt veralteter statischer myIcs-Bindung).
 // [2026-11-07] - FEATURE: Unterstützung für "Meine Einsätze" (?onlyMy=1&uid=...&hid=...&gids=...&tids=...&myIcs=...) im iCal-Abo-Feed ergänzt, damit beim Abonnieren mit aktivem Stern-Filter exakt die persönlichen Termine, Dienste, Sitzungen und Punktspiele ausgeliefert werden.
 // [2026-11-07] - FEATURE: Dynamische Filter-Unterstützung (?filters=manual,dienste,<subId>...) inkl. Auslieferung der angehakten Kalender-Abos (calendar_subscriptions.cachedEvents). Ohne Parameter bleibt das Verhalten für den Public Kalender unverändert.
 // Serverseitiger Vercel-Endpunkt zur Generierung eines dynamischen iCal (.ics) Feeds.
@@ -108,7 +109,7 @@ export default async function handler(req: any, res: any) {
     const getField = (doc: any, fieldName: string) => {
       const f = doc?.fields?.[fieldName];
       if (!f) return null;
-      return f.stringValue ?? f.integerValue ?? f.booleanValue ?? null;
+      return f.stringValue ?? f.integerValue ?? f.doubleValue ?? f.booleanValue ?? null;
     };
 
     const getStringArrayField = (doc: any, fieldName: string): string[] => {
@@ -166,6 +167,7 @@ export default async function handler(req: any, res: any) {
       if (!startTime) continue;
       const endTime = parseInt(getField(doc, 'endTime') || '0', 10) || startTime + 3600000; // Fallback: +1 Stunde
       const isAllDay = Boolean(getField(doc, 'isAllDay'));
+      const updatedAt = parseInt(getField(doc, 'updatedAt') || getField(doc, 'createdAt') || '0', 10);
 
       if (onlyMy) {
         const recUserIds = [
@@ -211,7 +213,7 @@ export default async function handler(req: any, res: any) {
       const showInMatchPlan = getField(doc, 'showInMatchPlan');
       const matchPrefix = showInMatchPlan ? (isHeim ? '🏠 ' : (location ? '🚌 ' : '')) : '';
 
-      rbcEvents.push({ id, title: matchPrefix + title, location, description, startTime, endTime, isAllDay });
+      rbcEvents.push({ id, title: matchPrefix + title, location, description, startTime, endTime, isAllDay, updatedAt });
     }
 
     // 2. Sitzungen parsen (gehören zum Filter 'manual' / Termine)
@@ -243,8 +245,9 @@ export default async function handler(req: any, res: any) {
         const startTime = parseInt(getField(doc, 'plannedStartTime') || '0', 10);
         if (!startTime) continue;
         const endTime = parseInt(getField(doc, 'plannedEndTime') || '0', 10) || startTime + 7200000; // Fallback: +2 Stunden
+        const updatedAt = parseInt(getField(doc, 'updatedAt') || getField(doc, 'createdAt') || '0', 10);
 
-        rbcEvents.push({ id, title, location, description, startTime, endTime, isAllDay: false });
+        rbcEvents.push({ id, title, location, description, startTime, endTime, isAllDay: false, updatedAt });
       }
     }
 
@@ -261,13 +264,16 @@ export default async function handler(req: any, res: any) {
         const subPrefix = subName ? `${String(subName).trim()} ` : '';
         const subTeamIds = getStringArrayField(subDoc, 'reminderRecipientTeamIds');
         const primaryTeamId = subTeamIds[0] || '';
+        const subUpdatedAt = parseInt(getField(subDoc, 'lastSyncedAt') || getField(subDoc, 'updatedAt') || '0', 10);
 
         const cachedValues = subDoc.fields?.cachedEvents?.arrayValue?.values || [];
+        const seenEventIds = new Set<string>();
         cachedValues.forEach((item: any, idx: number) => {
           const evDoc = item?.mapValue;
           if (!evDoc?.fields) return;
 
-          const uid = getField(evDoc, 'uid') || `${idx}`;
+          const rawUid = getField(evDoc, 'uid');
+          const uid = rawUid ? String(rawUid).trim() : `${idx}`;
           const rawTitle = getField(evDoc, 'title') || 'Termin';
           const location = getField(evDoc, 'location') || '';
           const description = getField(evDoc, 'description') || '';
@@ -279,13 +285,8 @@ export default async function handler(req: any, res: any) {
           if (onlyMy) {
             let isAssignedMatch = false;
 
-            // A) Direkter Treffer über die vom Client übergebenen persönlichen Spiel-Schlüssel (myIcs)
-            if (myIcsKeys.has(`${subId}:${uid}`) || myIcsKeys.has(`${subId}:${startTime}`)) {
-              isAssignedMatch = true;
-            }
-
-            // B) Live-Abgleich über match_lineups / teams (sofern über REST verfügbar)
-            if (!isAssignedMatch && myHid && primaryTeamId) {
+            // A) Live-Abgleich über match_lineups / teams (funktioniert auch bei Spielverlegungen & nachträglichen Aufstellungsänderungen)
+            if (myHid && primaryTeamId) {
               const safeEventId = generateStableEventId(primaryTeamId, {
                 startTime,
                 title: String(rawTitle),
@@ -305,10 +306,14 @@ export default async function handler(req: any, res: any) {
                 if (defaultPlayers.includes(myHid)) {
                   isAssignedMatch = true;
                 }
-              } else if (myIcsKeys.size === 0 && myStammTeamIds.has(primaryTeamId)) {
-                // Fallback nur falls weder match_lineups noch myIcs vorhanden sind
+              } else if (myStammTeamIds.has(primaryTeamId)) {
                 isAssignedMatch = true;
               }
+            }
+
+            // B) Abwärtskompatibler Treffer über ggf. noch vorhandene myIcs-Parameter aus älteren Abo-Links
+            if (!isAssignedMatch && (myIcsKeys.has(`${subId}:${uid}`) || myIcsKeys.has(`${subId}:${startTime}`))) {
+              isAssignedMatch = true;
             }
 
             if (!isAssignedMatch) return;
@@ -317,14 +322,23 @@ export default async function handler(req: any, res: any) {
           const isHeim = location.toLowerCase().includes('maisach');
           const matchPrefix = showInMatchPlan ? (isHeim ? '🏠 ' : (location ? '🚌 ' : '')) : '';
 
+          // Stabile UID ohne laufenden Array-Index (verhindert unnötige Duplikate/Verluste bei Reihenfolge-Änderung)
+          const cleanUid = uid.replace(/[^a-zA-Z0-9._-]/g, '_');
+          let stableEventId = rawUid ? `ics-${subId}-${cleanUid}` : `ics-${subId}-${idx}`;
+          if (seenEventIds.has(stableEventId)) {
+            stableEventId = `${stableEventId}-${idx}`;
+          }
+          seenEventIds.add(stableEventId);
+
           rbcEvents.push({
-            id: `ics-${subId}-${uid}-${idx}`,
+            id: stableEventId,
             title: `${matchPrefix}${subPrefix}${rawTitle}`,
             location,
             description,
             startTime,
             endTime,
-            isAllDay
+            isAllDay,
+            updatedAt: subUpdatedAt
           });
         });
       }
@@ -345,7 +359,8 @@ export default async function handler(req: any, res: any) {
     let ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//PapaToDo//Vereinskalender//DE\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\nX-WR-CALNAME:Vereinskalender\r\nX-WR-TIMEZONE:Europe/Berlin\r\n`;
 
     for (const ev of rbcEvents) {
-      ics += `BEGIN:VEVENT\r\nUID:${ev.id}@papatodo\r\nDTSTAMP:${formatDate(Date.now())}\r\n`;
+      const sequence = ev.updatedAt && ev.updatedAt > 0 ? Math.floor(ev.updatedAt / 1000) : 0;
+      ics += `BEGIN:VEVENT\r\nUID:${ev.id}@papatodo\r\nDTSTAMP:${formatDate(ev.updatedAt || Date.now())}\r\nSEQUENCE:${sequence}\r\n`;
 
       if (ev.isAllDay) {
         // Bei Ganztagesterminen muss das Enddatum im iCal-Format exakt ein Tag in der Zukunft liegen (exklusiv)
@@ -366,7 +381,7 @@ export default async function handler(req: any, res: any) {
     // Sende die Datei als Kalender-Feed zurück
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="vereinskalender.ics"');
-    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate'); // Caching für Performance
+    res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=60'); // Kurzer Cache für schnelle Übernahme von Änderungen
     res.status(200).send(ics);
 
   } catch (error) {

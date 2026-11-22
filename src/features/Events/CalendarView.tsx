@@ -1,3 +1,4 @@
+// [2026-11-22] - BUGFIX: Bei "Meine Einsätze"-Abos werden alle angehakten activeFilters im Abo-Link behalten (statt nur aktuell belegter Kalender) und auf die starre myIcs-Liste verzichtet, damit geänderte/verschobene/neue Termine dynamisch im Apple Kalender aktualisiert werden.
 // [2026-11-07] - FEATURE: "Meine Einsätze"-Filter (onlyMyEvents) wird nun im Kalender-Abo-Modal sowohl visuell als goldene Auswahl angezeigt als auch im generierten Abo-Link (?onlyMy=1&...) an den Server übergeben.
 // [2026-11-07] - FEATURE: Dynamischer Kalender-Abo-Link (?filters=...) im Abo-Modal basierend auf den aktuell vom Benutzer angehakten Kalender-Filtern (Termine, Dienste, Kalender-Abos) inkl. Vorschau-Badges.
 // [2026-10-19] - UX-FEATURE: Globaler Master-Stern ("Meine Einsätze"-Filter) in der oberen Kalender-Navigationsleiste eingebaut (wirkt auf alle 6 Reiter, speichert Status im localStorage, leuchtet im aktiven Zustand als gold-gelber Pill-Button mit goldenem Kalender-Rahmen).
@@ -219,28 +220,8 @@ export const CalendarView: React.FC = () => {
   }, [rbcEvents, activeFilters]);
 
   const subscriptionQuery = useMemo(() => {
-    const effectiveFilters = onlyMyEvents
-      ? Array.from(
-          new Set(
-            activeFilters.filter(fId => {
-              if (fId === 'manual') {
-                return myAssignedEventsInActiveFilters.some(e => e.sourceId === 'manual' && !e.seriesId && !e.isLogisticsDuty);
-              }
-              if (fId === 'dienste') {
-                return myAssignedEventsInActiveFilters.some(e => (e.sourceId === 'manual' && !!e.seriesId) || e.isLogisticsDuty);
-              }
-              return myAssignedEventsInActiveFilters.some(e => e.sourceId === fId);
-            }).concat(
-              myAssignedEventsInActiveFilters
-                .filter(e => e.isLogisticsDuty && e.sourceId !== 'manual')
-                .map(e => e.sourceId)
-            )
-          )
-        )
-      : activeFilters;
-
     const params = new URLSearchParams();
-    params.set('filters', effectiveFilters.join(','));
+    params.set('filters', activeFilters.join(','));
 
     if (onlyMyEvents) {
       params.set('onlyMy', '1');
@@ -274,23 +255,10 @@ export const CalendarView: React.FC = () => {
       if (aliasSet.size > 0) {
         params.set('alias', Array.from(aliasSet).join(','));
       }
-
-      const icsKeySet = new Set<string>();
-      myAssignedEventsInActiveFilters.forEach(ev => {
-        if (ev.sourceId !== 'manual') {
-          const uidOrTime = ev.sourceEvent?.uid || (ev.start ? String(ev.start.getTime()) : '');
-          if (uidOrTime) {
-            icsKeySet.add(`${ev.sourceId}:${uidOrTime}`);
-          }
-        }
-      });
-      if (icsKeySet.size > 0) {
-        params.set('myIcs', Array.from(icsKeySet).join(','));
-      }
     }
 
     return `?${params.toString()}`;
-  }, [activeFilters, onlyMyEvents, myAssignedEventsInActiveFilters, user, myHelper, teams]);
+  }, [activeFilters, onlyMyEvents, user, myHelper, teams]);
 
   const subscriptionHttpUrl = `${window.location.origin}/api/calendar${subscriptionQuery}`;
   const subscriptionWebcalUrl = `webcal://${window.location.host}/api/calendar${subscriptionQuery}`;
