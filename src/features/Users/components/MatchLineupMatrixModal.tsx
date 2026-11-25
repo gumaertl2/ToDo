@@ -37,6 +37,9 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
   // --- GEHIRN (DATEN & STATE) ---
   const matrixData = useMatchLineupMatrix(team, focusedEventId, isReadOnly);
   const [isRankingOpen, setIsRankingOpen] = useState(false);
+  const teamCategory = inferTeamRankingCategory(team);
+  const getRelevantRank = (h: { rankAdult?: string; rankYouth?: string }) =>
+    teamCategory === 'YOUTH' ? (h.rankYouth || h.rankAdult) : (h.rankAdult || h.rankYouth);
 
   // --- ANSICHTS-MODUS (Langzeitgedächtnis via localStorage) ---
   const [viewMode, setViewMode] = useState<'cards' | 'matrix' | 'dienste'>(() => {
@@ -173,16 +176,28 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                         {matrixData.availableJokers.length === 0 ? (
                           <div className="p-4 text-center text-sm text-gray-500">Keine Spieler gefunden.</div>
                         ) : (
-                          matrixData.availableJokers.map(j => (
-                            <button
-                              key={j.id}
-                              onClick={() => matrixData.handleAddJoker(j.id)}
-                              className="w-full text-left px-3 py-2 text-sm text-gray-800 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors flex items-center justify-between"
-                            >
-                              <span className="font-medium">{j.name}</span>
-                              {j.alias && <span className="text-xs text-gray-400">{j.alias}</span>}
-                            </button>
-                          ))
+                          matrixData.availableJokers.map(j => {
+                            const rank = getRelevantRank(j);
+                            return (
+                              <button
+                                key={j.id}
+                                onClick={() => matrixData.handleAddJoker(j.id)}
+                                className="w-full text-left px-3 py-2 text-sm text-gray-800 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors flex items-center justify-between gap-2"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  {rank && (
+                                    <span className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-bold shrink-0 ${
+                                      teamCategory === 'YOUTH' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-blue-50 text-blue-700 border border-blue-200'
+                                    }`}>
+                                      {rank}
+                                    </span>
+                                  )}
+                                  <span className="font-medium truncate">{j.name}</span>
+                                </div>
+                                {j.alias && <span className="text-xs text-gray-400 shrink-0">{j.alias}</span>}
+                              </button>
+                            );
+                          })
                         )}
                       </div>
                     </div>
@@ -233,11 +248,28 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                       />
                     </div>
                     <div className="max-h-60 overflow-y-auto p-1">
-                      {matrixData.availableJokers.map(j => (
-                        <button key={j.id} onClick={() => matrixData.handleAddJoker(j.id)} className="w-full text-left px-3 py-3 text-sm text-gray-800 hover:bg-blue-50 border-b border-gray-100 last:border-0 font-medium">
-                          {j.name}
-                        </button>
-                      ))}
+                      {matrixData.availableJokers.map(j => {
+                        const rank = getRelevantRank(j);
+                        return (
+                          <button
+                            key={j.id}
+                            onClick={() => matrixData.handleAddJoker(j.id)}
+                            className="w-full text-left px-3 py-3 text-sm text-gray-800 hover:bg-blue-50 border-b border-gray-100 last:border-0 font-medium flex items-center justify-between gap-2"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              {rank && (
+                                <span className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-bold shrink-0 ${
+                                  teamCategory === 'YOUTH' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-blue-50 text-blue-700 border border-blue-200'
+                                }`}>
+                                  {rank}
+                                </span>
+                              )}
+                              <span className="truncate">{j.name}</span>
+                            </div>
+                            {j.alias && <span className="text-xs text-gray-400 shrink-0">{j.alias}</span>}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </>
