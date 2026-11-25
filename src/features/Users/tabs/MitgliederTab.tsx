@@ -1,4 +1,5 @@
-// [2026-11-25] - UX-IMPROVEMENT: Direkter 1-Klick-Sortierbutton "Nach Rangliste" in der Filterleiste (inkl. localStorage-Persistenz für sortConfig).
+// [2026-11-25] - UX-IMPROVEMENT: Klick-Zyklen für NAME (Vorname A-Z -> Nachname A-Z -> Rangliste) und GEBURT (01.01.-31.12. -> Ältester zuerst -> Aktuell/Anstehend) auf jeweils 3 direkte Schritte vereinfacht.
+// [2026-11-25] - UX-IMPROVEMENT: Doppelten "Nach Rangliste"-Button aus der Toolbar entfernt; Ranglisten-Sortierung direkt in den NAME-Spaltenkopf integriert (Vorname -> Nachname -> Rangliste) inkl. localStorage-Persistenz.
 // [2026-11-25] - FEATURE: Spalte "Rang" (sortierbar nach Erwachsene -> Jugend -> ohne Rang) sowie Button "Rangliste" (inkl. Copy-Paste-Import) integriert.
 // [2026-10-08] - BUGFIX: Vite/Oxc Parse-Error behoben. Verschachtelte Template-Strings in der handlePrintKorrektur Funktion in saubere String-Konkatenationen aufgelöst.
 // [2026-10-08] - UX-FEATURE: Google-Maps Icon (📍) direkt in die Namens-Zelle der Mitglieder-Tabelle eingebaut für blitzschnelle Navigation.
@@ -31,7 +32,7 @@ import { QuickAddHelperRow } from '../components/QuickAddHelperRow';
 import { RankingOverviewModal } from '../components/RankingOverviewModal';
 import { compareHelpersByRank, parseRankParts } from '../utils/rankingUtils';
 
-type SortDirection = 'asc' | 'desc' | 'md-asc' | 'md-desc' | 'ln-asc' | 'ln-desc';
+type SortDirection = 'asc' | 'desc' | 'md-asc' | 'md-desc' | 'ln-asc' | 'ln-desc' | 'cal-asc';
 
 interface MitgliederTabProps {
   openHelperEditor: (h?: Helper) => void;
@@ -128,19 +129,27 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
   const handleSort = (key: keyof Helper) => {
     setSortConfig(prev => {
       if (prev.key === key) {
-        if (key === 'geburtsdatum' || key === 'eintrittsdatum') {
+        if (key === 'geburtsdatum') {
+          if (prev.direction === 'cal-asc') return { key, direction: 'asc' };
+          if (prev.direction === 'asc') return { key, direction: 'md-asc' };
+          return { key, direction: 'cal-asc' };
+        } else if (key === 'eintrittsdatum') {
           if (prev.direction === 'asc') return { key, direction: 'desc' };
           if (prev.direction === 'desc') return { key, direction: 'md-asc' };
           if (prev.direction === 'md-asc') return { key, direction: 'md-desc' };
           return { key, direction: 'asc' };
         } else if (key === 'name') {
-          if (prev.direction === 'asc') return { key, direction: 'desc' };
-          if (prev.direction === 'desc') return { key, direction: 'ln-asc' };
-          if (prev.direction === 'ln-asc') return { key, direction: 'ln-desc' };
-          return { key, direction: 'asc' };
+          if (prev.direction === 'asc') return { key, direction: 'ln-asc' };
+          return { key: 'rankAdult', direction: 'asc' };
         } else {
           return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
         }
+      }
+      if (key === 'name' && prev.key === 'rankAdult') {
+        return { key: 'name', direction: 'asc' };
+      }
+      if (key === 'geburtsdatum') {
+        return { key, direction: 'cal-asc' };
       }
       return { key, direction: 'asc' };
     });
@@ -195,6 +204,13 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
         if (!valA && valB) return 1;
         if (valA && !valB) return -1;
         if (!valA && !valB) return 0;
+        if (sortConfig.direction === 'cal-asc') {
+          const mdA = valA.toString().substring(5);
+          const mdB = valB.toString().substring(5);
+          if (mdA < mdB) return -1;
+          if (mdA > mdB) return 1;
+          return 0;
+        }
         if (sortConfig.direction.startsWith('md-')) {
           if (sortConfig.key === 'geburtsdatum') {
             const daysA = getDaysUntilBirthday(valA.toString());
@@ -454,25 +470,6 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
         
         <div className="flex items-center gap-2">
           <button
-            onClick={() =>
-              setSortConfig(prev =>
-                prev.key === 'rankAdult'
-                  ? { key: 'name', direction: 'asc' }
-                  : { key: 'rankAdult', direction: 'asc' }
-              )
-            }
-            className={`flex items-center px-3 py-1.5 text-xs font-bold rounded-lg transition-colors shadow-sm border ${
-              sortConfig.key === 'rankAdult'
-                ? 'bg-blue-600 text-white border-blue-700'
-                : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-            }`}
-            title="Mitgliederliste nach Rangliste sortieren (Erwachsene, dann Jugend)"
-          >
-            <ArrowUpDown className="w-3.5 h-3.5 mr-1.5" />
-            Nach Rangliste
-          </button>
-
-          <button
             onClick={() => setIsRankingModalOpen(true)}
             className="flex items-center px-3 py-1.5 text-xs font-bold rounded-lg transition-colors shadow-sm border bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
             title="Komplette Vereins-Rangliste ansehen oder aus click-TT importieren"
@@ -516,12 +513,16 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
                     <span className="w-5 flex justify-center text-blue-600 mr-1" title="Team-Zuweisung"><Users className="w-4 h-4" /></span>
                   )}
                   Name 
-                  {sortConfig.key === 'name' && (
+                  {(sortConfig.key === 'name' || sortConfig.key === 'rankAdult') && (
                     <span className="text-[9px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded ml-1">
-                      {sortConfig.direction.startsWith('ln-') ? 'Nachname' : 'Vorname'}
+                      {sortConfig.key === 'rankAdult'
+                        ? 'Rangliste'
+                        : sortConfig.direction.startsWith('ln-')
+                          ? 'Nachname'
+                          : 'Vorname'}
                     </span>
                   )}
-                  {renderSortIcon('name')}
+                  {sortConfig.key === 'rankAdult' ? renderSortIcon('rankAdult') : renderSortIcon('name')}
                 </div>
               </th>
               <th onClick={() => handleSort('telefon')} className="px-2 sm:px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors">
@@ -557,7 +558,11 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
                     Geburt 
                     {sortConfig.key === 'geburtsdatum' && (
                       <span className="text-[9px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded ml-1">
-                        {sortConfig.direction.startsWith('md-') ? 'Tag/Monat' : 'Alter'}
+                        {sortConfig.direction === 'cal-asc'
+                          ? '01.01.–31.12.'
+                          : sortConfig.direction.startsWith('md-')
+                            ? 'Aktuell'
+                            : 'Ältester'}
                       </span>
                     )}
                     {renderSortIcon('geburtsdatum')}
