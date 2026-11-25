@@ -1,3 +1,4 @@
+// [2026-11-25] - FEATURE: Kader-Anzeige nach Team-Rangliste sortiert sowie direkter Button zum Öffnen der kompletten In-App-Rangliste (RankingOverviewModal) ergänzt.
 // [2026-11-07] - BUGFIX: Exklusives iCal-Enddatum bei Ganztagesterminen (00:00 sowie 01:00/02:00 UTC-Versatz) in renderTimeDetails sauber auf den inklusiven Endtag zurückgerechnet (behebt "Silvester bis 1. Januar" / "Ferien bis 9. Januar").
 // [2026-10-26] - BUGFIX: nuScore Scanner nutzt nun den reinen Original-Titel (ohne vorangestelltes Abo-Kürzel wie H1/H3) und prüft Orts-/Vereinsnamen mit Wortgrenzen, damit "Puchheim" nicht mit "Puchheim-Ort" verwechselt wird.
 // [2026-10-13] - FEATURE: nuScore Scanner sucht nun nach den Vereinsnamen (Heim vs Gast) statt nach dem Datum, wodurch die Codes auch bei Spielverlegungen robust gefunden werden.
@@ -20,8 +21,10 @@
 // src/features/Events/CalendarIcsDetailModal.tsx
 import React, { useState } from 'react';
 import { useClubStore } from '../../store/useClubStore';
-import { X, MapPin, AlignLeft, Calendar as CalIcon, Clock, Info, Edit3, UserPlus, Users, MessageCircle, Key, Copy, Check, Truck, Trophy } from 'lucide-react';
+import { X, MapPin, AlignLeft, Calendar as CalIcon, Clock, Info, Edit3, UserPlus, Users, MessageCircle, Key, Copy, Check, Truck, Trophy, Award } from 'lucide-react';
 import { MatchLineupMatrixModal } from '../Users/components/MatchLineupMatrixModal';
+import { RankingOverviewModal } from '../Users/components/RankingOverviewModal';
+import { compareHelpersByRank, inferTeamRankingCategory } from '../Users/utils/rankingUtils';
 import { EventPollWidget } from './components/EventPollWidget';
 import type { MatchLineup } from '../../core/types/models';
 import { generateStableEventId } from '../Users/hooks/useMatchLineupMatrix';
@@ -45,6 +48,7 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
 }) => {
   const { user, teams, helpers, calendarSubscriptions, matchLineups, teamPins, saveMatchLineup } = useClubStore();
   const [isMatrixOpen, setIsMatrixOpen] = useState(false);
+  const [isRankingOpen, setIsRankingOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   if (!event) return null;
@@ -75,9 +79,10 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
   const storeLineup = matchLineups.find(m => m.id === safeEventId);
   const activePlayerIds = storeLineup ? storeLineup.lineupHelperIds : (teamContext?.defaultLineupHelperIds || []);
   
+  const teamRankingCategory = inferTeamRankingCategory(teamContext);
   const activePlayers = helpers
     .filter(h => activePlayerIds.includes(h.id))
-    .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    .sort((a, b) => compareHelpersByRank(a, b, teamRankingCategory));
   // ---------------------
 
   // --- HEIMSPIEL & LOGISTIK SICHTBARKEIT ---
@@ -503,6 +508,14 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
                     <div className="flex items-center justify-between mb-2">
                       <p className="font-medium text-sm">Aufstellung / Kader ({activePlayers.length})</p>
                       <div className="flex gap-2">
+                        <button
+                          onClick={() => setIsRankingOpen(true)}
+                          className="text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 p-1.5 rounded-lg transition-colors flex items-center border border-amber-200"
+                          title="Komplette Vereins-Rangliste öffnen"
+                        >
+                          <Award className="w-4 h-4 mr-1" />
+                          <span className="text-xs font-bold">Rangliste</span>
+                        </button>
                         <button onClick={handleWhatsAppShare} className="text-green-600 hover:text-green-700 hover:bg-green-50 p-1.5 rounded-lg transition-colors flex items-center" title="Über WhatsApp in der Mannschaftsgruppe teilen">
                           <MessageCircle className="w-4 h-4" />
                         </button>
@@ -601,6 +614,14 @@ export const CalendarIcsDetailModal: React.FC<Props> = ({
           focusedEventId={safeEventId || undefined} 
           isReadOnly={!canManageLineup}
           onClose={() => setIsMatrixOpen(false)} 
+        />
+      )}
+
+      {/* RANGLISTEN MODAL RENDERER */}
+      {isRankingOpen && (
+        <RankingOverviewModal
+          initialCategory={teamRankingCategory}
+          onClose={() => setIsRankingOpen(false)}
         />
       )}
     </>

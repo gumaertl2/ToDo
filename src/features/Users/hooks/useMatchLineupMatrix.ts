@@ -1,3 +1,4 @@
+// [2026-11-25] - FEATURE: Spielerlisten (Stamm, Kader, Extern, Joker) nach Team-Rangliste statt alphabetisch sortiert.
 // [2026-10-16] - UX-FEATURE: Automatisches Vorziehen des eingeloggten Nutzers an die erste Position (Index 0) in 'displayMembers', damit man auf Mobilgeräten nicht mehr nach rechts scrollen muss.
 // [2026-10-13] - REFACTOR: Umstellung auf Stable Event ID (Natural Key: TeamID + Saison + Titel + Description), um Datenverlust durch wechselnde Verbands-UIDs zu verhindern.
 // [2026-10-12] - REFACTOR: Komplette Daten- und State-Logik aus MatchLineupMatrixModal in diesen Hook ausgelagert.
@@ -5,6 +6,7 @@
 import { useState, useMemo } from 'react';
 import { useClubStore } from '../../../store/useClubStore';
 import type { Team, MatchLineup, Helper } from '../../../core/types/models';
+import { compareHelpersByRank, inferTeamRankingCategory } from '../utils/rankingUtils';
 
 export type PlayerCategory = 'STAMM' | 'KADER' | 'EXTERN';
 
@@ -72,7 +74,8 @@ export const useMatchLineupMatrix = (team: Team, focusedEventId?: string, isRead
       if (!teamMemberIds.has(id)) usedExternalJokerIds.add(id);
     });
 
-    const sortFn = (a: Helper, b: Helper) => (a.name || '').localeCompare(b.name || '');
+    const rankingCategory = inferTeamRankingCategory(team);
+    const sortFn = (a: Helper, b: Helper) => compareHelpersByRank(a, b, rankingCategory);
 
     const stamm = helpers.filter(h => defaultIds.has(h.id)).sort(sortFn);
     const kader = helpers.filter(h => teamMemberIds.has(h.id) && !defaultIds.has(h.id)).sort(sortFn);
@@ -99,15 +102,17 @@ export const useMatchLineupMatrix = (team: Team, focusedEventId?: string, isRead
     const currentDisplayIds = new Set(displayMembers.map(item => item.helper.id));
     const term = jokerSearchTerm.toLowerCase().trim();
     
+    const rankingCategory = inferTeamRankingCategory(team);
     return helpers
       .filter(h => !currentDisplayIds.has(h.id))
       .filter(h => !term || (h.name || '').toLowerCase().includes(term) || (h.alias || '').toLowerCase().includes(term))
-      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  }, [helpers, displayMembers, jokerSearchTerm]);
+      .sort((a, b) => compareHelpersByRank(a, b, rankingCategory));
+  }, [helpers, displayMembers, jokerSearchTerm, team]);
 
   const sortedAllHelpers = useMemo(() => {
-    return [...helpers].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  }, [helpers]);
+    const rankingCategory = inferTeamRankingCategory(team);
+    return [...helpers].sort((a, b) => compareHelpersByRank(a, b, rankingCategory));
+  }, [helpers, team]);
 
   const filteredLogisticsHelpers = useMemo(() => {
     const term = logisticsSearchTerm.toLowerCase().trim();

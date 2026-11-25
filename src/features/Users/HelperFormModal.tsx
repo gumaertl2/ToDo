@@ -1,3 +1,4 @@
+// [2026-11-25] - FEATURE: Optionale Ranglisten-Felder ('rankAdult', 'rankYouth') für die manuelle Pflege integriert.
 // [2026-10-08] - FEATURE: Adressfelder (Strasse, PLZ, Ort) inklusive aufklappbarem Akkordeon und Google-Maps-Navi-Button integriert.
 // [2026-07-28] - TS-FIX: Ungenutzten Import 'FileSignature' entfernt (TS6133).
 // [2026-07-28] - UX-FEATURE: Aktenlage (DSGVO-Papier & Jugendarbeit) vom App-Sichtbarkeitsschalter getrennt eingebaut. Automatisches Opt-In bei Papiereingang.
@@ -33,6 +34,8 @@ export const HelperFormModal: React.FC<HelperFormModalProps> = ({ onClose, exist
 
   const [eintrittsdatum, setEintrittsdatum] = useState(existingHelper?.eintrittsdatum || '');
   const [memberStatus, setMemberStatus] = useState<'AKTIV' | 'PASSIV' | 'JUGEND'>(existingHelper?.memberStatus || 'AKTIV');
+  const [rankAdult, setRankAdult] = useState(existingHelper?.rankAdult || '');
+  const [rankYouth, setRankYouth] = useState(existingHelper?.rankYouth || '');
 
   const [hasWrittenDsgvoConsent, setHasWrittenDsgvoConsent] = useState(existingHelper?.hasWrittenDsgvoConsent || false);
   const [hasYouthWorkClearance, setHasYouthWorkClearance] = useState(existingHelper?.hasYouthWorkClearance || false);
@@ -145,6 +148,9 @@ export const HelperFormModal: React.FC<HelperFormModalProps> = ({ onClose, exist
       strasse: strasse.trim() || undefined,
       plz: plz.trim() || undefined,
       ort: ort.trim() || undefined,
+
+      rankAdult: rankAdult.trim(),
+      rankYouth: rankYouth.trim(),
       
       hasWrittenDsgvoConsent,
       hasYouthWorkClearance,
@@ -231,6 +237,25 @@ export const HelperFormModal: React.FC<HelperFormModalProps> = ({ onClose, exist
               placeholder="z.B. Trainer, Elternteil von..."
               className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500" 
             />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Rang Erwachsene (optional)</label>
+              <input
+                type="text" value={rankAdult} onChange={(e) => setRankAdult(e.target.value)} disabled={isSaving}
+                placeholder="z.B. 1.1"
+                className="w-full p-2 border border-gray-300 rounded font-mono focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Rang Jugend (optional)</label>
+              <input
+                type="text" value={rankYouth} onChange={(e) => setRankYouth(e.target.value)} disabled={isSaving}
+                placeholder="z.B. 1.1"
+                className="w-full p-2 border border-gray-300 rounded font-mono focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

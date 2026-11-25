@@ -1,3 +1,4 @@
+// [2026-11-25] - MASTER SYNC: Vereins-Ranglisten-System (optionale Felder `rankAdult`/`rankYouth` auf `Helper`, `rankingCategory` auf `Team`, `RankingOverviewModal.tsx` inkl. click-TT Copy-Paste-Import, `rankingUtils.ts` sowie Sortierung in Erinnerungen, Termin-Details, Aufstellungs-Matrix & Mitgliederliste) dokumentiert.
 // [2026-11-07] - MASTER SYNC: ICS-Kalender-Sync-Architektur & Vercel-Hosting-Voraussetzung (`api/ics-proxy.ts` in Region `fra1` Frankfurt für ~1s Einzel-Sync ohne CORS/Cloudflare-Blockaden, 5-Minuten-Staffelung beim 7-Tage-Auto-Sync, PWA-`navigateFallbackDenylist` für `/api/`, zeitzonensicheres Ganztages-Parsing & durchgehende Mehrtages-Balken in `CalendarMonthGridView.tsx` sowie gefiltertes `webcal://`-Abo `api/calendar.ts?filters=...`) in TEIL 2, 4 und 8 dokumentiert.
 // [2026-10-23] - MASTER SYNC: Leseschonende Offline-First- & Quota-Shield-Architektur (IndexedDB Multi-Tab Cache, Single-Listener Early-Return, Multi-Slice-Verteilung, Optimistic Updates, DataProcessor Sanitization), Vereins-Arcade (Sudoku & MaxBlock inkl. Rettungsring, Hall of Fame, Saison-Archivierung, öffentlicher /pause-Route und arcade_scores / settings Collections) sowie 1-Zeilen-Agenda-Toolbar & Warm-Amber Familien-Klammer dokumentiert.
 // [2026-10-23] - MASTER SYNC: Papierkorb- & Admin-Governance (Löschschutz für offene/zugewiesene/vererbte Aufgaben, Container-Kaskade im Papierkorb, Unantastbarkeit versiegelter Protokolle, Archiv-Rückführung durch Admin), rekursiver Unterbaum-Rollover beim Sitzungsabschluss, visuelle Abschluss-Validierung sowie Hierarchie-UX in TEIL 3, 4 und 8 synchronisiert.
@@ -410,9 +411,9 @@ Die App ist streng nach dem Grundsatz *Privacy by Design* und den Vorgaben der e
 * **Users & Aufstellungsplanung (`src/features/Users/`):** 
   * `UsersView.tsx`, `MyProfileModal.tsx`, `RoleMatrixModal.tsx`.
   * `tabs/`: `AppUserTab.tsx`, `EhrungenTab.tsx`, `MitgliederTab.tsx`, `RollenTab.tsx`, `TeamsTab.tsx`, `VorstandTab.tsx`.
-  * `components/`: `EditableCell.tsx`, `MatchLineupCardsView.tsx` (Mobile/Karten-Ansicht für Aufstellungen), `MatchLineupLogisticsRow.tsx` (Logistik-Kommandozentrale für Fahrer, Betreuer & Abfahrtszeit), `MatchLineupMatrixTable.tsx`, `QuickAddHelperRow.tsx`.
+  * `components/`: `EditableCell.tsx`, `MatchLineupCardsView.tsx` (Mobile/Karten-Ansicht für Aufstellungen), `MatchLineupLogisticsRow.tsx` (Logistik-Kommandozentrale für Fahrer, Betreuer & Abfahrtszeit), `MatchLineupMatrixTable.tsx`, `QuickAddHelperRow.tsx`, `RankingOverviewModal.tsx` (In-App-Rangliste für Erwachsene & Jugend inkl. click-TT Copy-Paste-Import).
   * Modals in `src/features/Users/`: `CsvImportModal.tsx`, `GroupFormModal.tsx`, `HelperFormModal.tsx`, `MatchLineupMatrixModal.tsx` (Base & Override Planungs-Matrix für Captains), `TeamFormModal.tsx`, `UserFormModal.tsx`, `UserSuccessionModal.tsx`.
-  * `hooks/useMatchLineupMatrix.ts`.
+  * `hooks/useMatchLineupMatrix.ts`, `utils/rankingUtils.ts` (numerische Ranglisten-Sortierung & click-TT-Parser).
 * **Shared UI & Utils (`src/features/Shared/`):** 
   * `ItemFormModal.tsx`, `AgendaItemRow.tsx` (inkl. Warm-Amber Familien-Klammer & Baum-Leitlinie), `ItemCard.tsx`, `RichText.tsx`.
   * `components/SmartEntityPicker.tsx`.

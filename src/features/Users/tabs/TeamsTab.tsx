@@ -1,3 +1,4 @@
+// [2026-11-25] - FEATURE: Sortier-Umschalter (Rangliste vs. Name, localStorage-persistiert) für die Mitgliederlisten in allen Team-Kacheln integriert.
 // [2026-10-12] - BUGFIX: URL-based Deep-Linking (?matrix=teamId) hinzugefügt, um Safari-Reloads (z.B. beim Zurückkehren von Google Maps) sicher zu überleben.
 // [2026-10-09] - UX-FIX: Button-Text in der Team-Kachel von "Umbenennen" in "Einstellungen" geändert.
 // [2026-09-28] - UX-FEATURE: Read-Only Modus für die Saison-Planung. Einfache Team-Mitglieder können die Matrix nun einsehen, aber nicht bearbeiten.
@@ -12,9 +13,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useClubStore } from '../../../store/useClubStore';
-import { Edit2, Trash2, Users, User, Star, Shield, Calendar } from 'lucide-react';
+import { Edit2, Trash2, Users, User, Star, Shield, Calendar, Award, ArrowDownAZ } from 'lucide-react';
 import type { Team } from '../../../core/types/models';
 import { MatchLineupMatrixModal } from '../components/MatchLineupMatrixModal';
+import { compareHelpersByRank, inferTeamRankingCategory } from '../utils/rankingUtils';
 
 interface TeamsTabProps {
   openTeamEditor: (t?: Team) => void;
@@ -27,6 +29,21 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ openTeamEditor, canManageMit
   // --- DEEP LINKING STATE ---
   const [searchParams, setSearchParams] = useSearchParams();
   const [planningTeam, setPlanningTeam] = useState<Team | null>(null);
+  const [memberSortMode, setMemberSortMode] = useState<'rank' | 'name'>(() => {
+    try {
+      return localStorage.getItem('papatodo_teams_member_sort') === 'name' ? 'name' : 'rank';
+    } catch {
+      return 'rank';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('papatodo_teams_member_sort', memberSortMode);
+    } catch {
+      // Ignorieren
+    }
+  }, [memberSortMode]);
 
   // Synchronisiert die URL mit dem Modal-State
   useEffect(() => {
@@ -98,12 +115,42 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ openTeamEditor, canManageMit
   }
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="p-4 sm:p-6 space-y-4">
+      <div className="flex items-center justify-end">
+        <div className="inline-flex items-center bg-gray-100 p-1 rounded-xl border border-gray-200 shadow-2xs">
+          <button
+            type="button"
+            onClick={() => setMemberSortMode('rank')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              memberSortMode === 'rank' ? 'bg-white text-blue-700 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Award className="w-3.5 h-3.5 text-amber-600" />
+            Nach Rangliste
+          </button>
+          <button
+            type="button"
+            onClick={() => setMemberSortMode('name')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              memberSortMode === 'name' ? 'bg-white text-blue-700 shadow-xs' : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <ArrowDownAZ className="w-3.5 h-3.5" />
+            Nach Name
+          </button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {teams.map(team => {
+          const teamCategory = inferTeamRankingCategory(team);
           const teamMembers = helpers
             .filter(h => h.teamIds?.includes(team.id))
-            .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            .sort((a, b) =>
+              memberSortMode === 'rank'
+                ? compareHelpersByRank(a, b, teamCategory)
+                : (a.name || '').localeCompare(b.name || '', 'de')
+            );
           
           const isCaptain = currentUserHelperId && team.captainHelperIds?.includes(currentUserHelperId);
           const isTeamMember = currentUserHelperId && teamMembers.some(m => m.id === currentUserHelperId);

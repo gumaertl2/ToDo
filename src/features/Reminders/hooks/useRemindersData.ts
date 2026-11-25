@@ -1,3 +1,4 @@
+// [2026-11-25] - FEATURE: Kader-Namen im WhatsApp-Erinnerungstext werden nach Team-Rangliste statt alphabetisch sortiert.
 // [2026-10-20] - FEATURE: Logistik-Informationen (Betreuer, Fahrer, Abfahrtszeit) aus dem Lineup werden nun automatisch in den WhatsApp-Erinnerungstext inkludiert.
 // [2026-10-20] - BUGFIX: WhatsApp-Kader Vorschau nutzt nun 'generateStableEventId' statt veralteter 'sanitizeId', um korrekte Spieler-Overrides aus der DB zu laden.
 // [2026-10-18] - FEAT: Konfigurierbarer Rückblick-Zeitraum (historyLookbackDays, Standard 30 Tage mit localStorage-Persistenz) für die Erinnerungs-Historie ergänzt.
@@ -7,6 +8,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useClubStore } from '../../../store/useClubStore';
 import { generateStableEventId } from '../../Users/hooks/useMatchLineupMatrix';
+import { compareHelpersByRank, inferTeamRankingCategory } from '../../Users/utils/rankingUtils';
 
 export type ReminderModelType = 'calendarEvent' | 'task' | 'event' | 'subscription';
 
@@ -464,9 +466,10 @@ export const useRemindersData = () => {
               const safeEventId = generateStableEventId(teamContext.id, cachedEv);
               const storeLineup = (matchLineups || []).find(m => m.id === safeEventId);
               const activePlayerIds = storeLineup ? storeLineup.lineupHelperIds : (teamContext.defaultLineupHelperIds || []);
+              const teamRankingCategory = inferTeamRankingCategory(teamContext);
               const activePlayers = helpers
                 .filter(h => activePlayerIds.includes(h.id))
-                .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                .sort((a, b) => compareHelpersByRank(a, b, teamRankingCategory));
 
               // --- LOGISTIK (Betreuer, Fahrer, Abfahrt) ---
               const betreuerIds = storeLineup?.betreuerHelperIds || [];

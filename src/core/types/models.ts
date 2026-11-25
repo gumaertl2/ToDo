@@ -1,4 +1,5 @@
 // src/core/types/models.ts
+// [2026-11-25] - SCHEMA: Optionale Ranglisten-Felder ('rankAdult', 'rankYouth' auf Helper und 'rankingCategory' auf Team) für die spielstärkebasierte Sortierung ergänzt.
 // [2026-10-24] - SCHEMA: Optionale Felder 'errorCount', 'hintCount' und 'rescueCount' zum 'ArcadeScore' für transparente Sudoku-Hall-of-Fame-Auswertung hinzugefügt.
 // [2026-10-23] - SCHEMA: 'ArcadeScore' für MAXBLOCK angepasst (Umbenennung von TETRIS, neue Felder level/lines, difficulty/timeInSeconds optional gemacht).
 // [2026-10-23] - SCHEMA: 'expert' zur Schwierigkeitsstufe im 'ArcadeScore' hinzugefügt, um Build-Fehler zu beheben.
@@ -127,6 +128,7 @@ export interface Team extends BaseDocument {
   requiresBetreuer?: boolean; 
   requiresFahrer?: boolean;
   homeArenaAddress?: string;
+  rankingCategory?: 'ADULT' | 'YOUTH';
 }
 
 export interface Group extends BaseDocument {
@@ -165,6 +167,8 @@ export interface Helper extends BaseDocument {
 
   hasAppAccess?: boolean;
   lastAppLoginAt?: number;
+  rankAdult?: string;
+  rankYouth?: string;
 }
 
 export interface PollOption {

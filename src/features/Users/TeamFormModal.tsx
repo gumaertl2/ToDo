@@ -1,3 +1,4 @@
+// [2026-11-25] - FEATURE: Optionale Auswahl 'rankingCategory' (Erwachsene vs. Jugend) für die Sortierung von Aufstellungen & Erinnerungen ergänzt.
 // [2026-10-12] - FEATURE: Feld 'homeArenaAddress' (Heimhalle / Startort) in der Logistik-Sektion hinzugefügt.
 // [2026-10-09] - FEATURE: Logistik-Konfiguration (requiresBetreuer, requiresFahrer) für Teams hinzugefügt.
 // [2026-10-08] - SEC-FIX: Rechteprüfung für 'Name ändern' robuster gemacht. Nutzt nun auch roleProfiles aus dem Store und erlaubt Umbenennung bei Neuanlage.
@@ -41,6 +42,7 @@ export const TeamFormModal: React.FC<TeamFormModalProps> = ({ onClose, existingT
   const [requiresBetreuer, setRequiresBetreuer] = useState(false);
   const [requiresFahrer, setRequiresFahrer] = useState(false);
   const [homeArenaAddress, setHomeArenaAddress] = useState('');
+  const [rankingCategory, setRankingCategory] = useState<'' | 'ADULT' | 'YOUTH'>('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +58,7 @@ export const TeamFormModal: React.FC<TeamFormModalProps> = ({ onClose, existingT
       setRequiresBetreuer(existingTeam.requiresBetreuer || false);
       setRequiresFahrer(existingTeam.requiresFahrer || false);
       setHomeArenaAddress(existingTeam.homeArenaAddress || '');
+      setRankingCategory(existingTeam.rankingCategory || '');
     }
   }, [existingTeam]);
 
@@ -70,6 +73,7 @@ export const TeamFormModal: React.FC<TeamFormModalProps> = ({ onClose, existingT
     setError(null);
 
     let result;
+    const categoryPayload = rankingCategory === 'ADULT' || rankingCategory === 'YOUTH' ? rankingCategory : undefined;
     if (existingTeam && existingTeam.id) {
       // Update
       result = await updateTeam({ 
@@ -79,7 +83,8 @@ export const TeamFormModal: React.FC<TeamFormModalProps> = ({ onClose, existingT
         lineupLockMessage: lockMessage.trim(),
         requiresBetreuer,
         requiresFahrer,
-        homeArenaAddress: homeArenaAddress.trim()
+        homeArenaAddress: homeArenaAddress.trim(),
+        rankingCategory: categoryPayload
       });
     } else {
       // Neu anlegen
@@ -89,7 +94,8 @@ export const TeamFormModal: React.FC<TeamFormModalProps> = ({ onClose, existingT
         lineupLockMessage: lockMessage.trim(),
         requiresBetreuer,
         requiresFahrer,
-        homeArenaAddress: homeArenaAddress.trim()
+        homeArenaAddress: homeArenaAddress.trim(),
+        rankingCategory: categoryPayload
       });
     }
 
@@ -147,6 +153,21 @@ export const TeamFormModal: React.FC<TeamFormModalProps> = ({ onClose, existingT
               <p className="mt-1 text-xs text-gray-500">
                 Dieser Name wird später bei den Mitgliedern zur Zuweisung angezeigt.
               </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">
+                Ranglisten-Typ (für Sortierung)
+              </label>
+              <select
+                value={rankingCategory}
+                onChange={(e) => setRankingCategory(e.target.value as '' | 'ADULT' | 'YOUTH')}
+                className="w-full p-2 border border-gray-300 rounded bg-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Automatisch (J1, J2… = Jugend, sonst Erwachsene)</option>
+                <option value="ADULT">Erwachsene</option>
+                <option value="YOUTH">Jugend</option>
+              </select>
             </div>
 
             {/* NEU: Logistik & Betreuung */}

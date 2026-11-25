@@ -1,3 +1,5 @@
+// [2026-11-25] - UX-IMPROVEMENT: Direkter 1-Klick-Sortierbutton "Nach Rangliste" in der Filterleiste (inkl. localStorage-Persistenz für sortConfig).
+// [2026-11-25] - FEATURE: Spalte "Rang" (sortierbar nach Erwachsene -> Jugend -> ohne Rang) sowie Button "Rangliste" (inkl. Copy-Paste-Import) integriert.
 // [2026-10-08] - BUGFIX: Vite/Oxc Parse-Error behoben. Verschachtelte Template-Strings in der handlePrintKorrektur Funktion in saubere String-Konkatenationen aufgelöst.
 // [2026-10-08] - UX-FEATURE: Google-Maps Icon (📍) direkt in die Namens-Zelle der Mitglieder-Tabelle eingebaut für blitzschnelle Navigation.
 // [2026-07-28] - TS-FIX: 'title'-Attribut bei Lucide-Icons (FileSignature, ShieldAlert) auf umhüllenden span-Tag verschoben (TS2322).
@@ -21,11 +23,13 @@
 // 2026-05-14 14:30 - FEATURE: 3-Stufen App-Zugangs-Indikator (Grau/Gelb/Grün) basierend auf nativem Gast-Login integriert
 // src/features/Users/tabs/MitgliederTab.tsx
 import React, { useState, useMemo, useEffect } from 'react';
-import { ArrowUpDown, ArrowUp, ArrowDown, Cake, Edit2, Trash2, Filter, Search, X, Printer, FileDown, Eye, EyeOff, Phone, Users, ShieldAlert, FileSignature, MapPin } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, Cake, Edit2, Trash2, Filter, Search, X, Printer, FileDown, Eye, EyeOff, Phone, Users, ShieldAlert, FileSignature, MapPin, Award } from 'lucide-react';
 import { useClubStore } from '../../../store/useClubStore';
 import type { Helper } from '../../../core/types/models';
 import { EditableCell } from '../components/EditableCell';
 import { QuickAddHelperRow } from '../components/QuickAddHelperRow';
+import { RankingOverviewModal } from '../components/RankingOverviewModal';
+import { compareHelpersByRank, parseRankParts } from '../utils/rankingUtils';
 
 type SortDirection = 'asc' | 'desc' | 'md-asc' | 'md-desc' | 'ln-asc' | 'ln-desc';
 
@@ -37,8 +41,24 @@ interface MitgliederTabProps {
 export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, canManageMitglieder }) => {
   const { helpers, updateHelper, deleteHelper, addHelper, user, teams, focusedHelperId, setFocusedHelperId, roleProfiles } = useClubStore();
   
-  const [sortConfig, setSortConfig] = useState<{ key: keyof Helper; direction: SortDirection }>({ key: 'name', direction: 'asc' });
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Helper; direction: SortDirection }>(() => {
+    try {
+      const saved = localStorage.getItem('papatodo_mitglieder_sortConfig');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // Ignorieren
+    }
+    return { key: 'name', direction: 'asc' };
+  });
   const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('papatodo_mitglieder_sortConfig', JSON.stringify(sortConfig));
+    } catch {
+      // Ignorieren
+    }
+  }, [sortConfig]);
   
   const [statusFilter, setStatusFilter] = useState<Set<'AKTIV' | 'PASSIV' | 'JUGEND'>>(() => {
     const saved = localStorage.getItem('papatodo_mitglieder_statusFilter');
@@ -48,6 +68,7 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
   
   const [selectedTeamFilter, setSelectedTeamFilter] = useState(() => localStorage.getItem('papatodo_mitglieder_selectedTeamFilter') || '');
   const [showParentInfo, setShowParentInfo] = useState(() => localStorage.getItem('papatodo_mitglieder_showParentInfo') === 'true');
+  const [isRankingModalOpen, setIsRankingModalOpen] = useState(false);
 
   useEffect(() => { localStorage.setItem('papatodo_mitglieder_statusFilter', JSON.stringify(Array.from(statusFilter))); }, [statusFilter]);
   useEffect(() => { localStorage.setItem('papatodo_mitglieder_selectedTeamFilter', selectedTeamFilter); }, [selectedTeamFilter]);
@@ -136,7 +157,8 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
       if (!hasJugendAccess && h.memberStatus === 'JUGEND' && !isMyOwnRecord) return false;
 
       const matchStatus = statusFilter.has(h.memberStatus || 'AKTIV');
-      if (!matchStatus && !isMyOwnRecord) return false;
+      const matchesYouthRank = hasJugendAccess && statusFilter.has('JUGEND') && !!parseRankParts(h.rankYouth);
+      if (!matchStatus && !matchesYouthRank && !isMyOwnRecord) return false;
       
       if (!searchTerm.trim()) return true;
       const lowerSearch = searchTerm.toLowerCase();
@@ -162,6 +184,12 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
 
       const valA = a[sortConfig.key] || '';
       const valB = b[sortConfig.key] || '';
+
+      if (sortConfig.key === 'rankAdult') {
+        const onlyYouthFilter = statusFilter.has('JUGEND') && !statusFilter.has('AKTIV');
+        const cmp = compareHelpersByRank(a, b, onlyYouthFilter ? 'YOUTH' : 'COMBINED');
+        return sortConfig.direction === 'asc' ? cmp : -cmp;
+      }
 
       if (sortConfig.key === 'geburtsdatum' || sortConfig.key === 'eintrittsdatum') {
         if (!valA && valB) return 1;
@@ -425,6 +453,34 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
         </div>
         
         <div className="flex items-center gap-2">
+          <button
+            onClick={() =>
+              setSortConfig(prev =>
+                prev.key === 'rankAdult'
+                  ? { key: 'name', direction: 'asc' }
+                  : { key: 'rankAdult', direction: 'asc' }
+              )
+            }
+            className={`flex items-center px-3 py-1.5 text-xs font-bold rounded-lg transition-colors shadow-sm border ${
+              sortConfig.key === 'rankAdult'
+                ? 'bg-blue-600 text-white border-blue-700'
+                : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+            }`}
+            title="Mitgliederliste nach Rangliste sortieren (Erwachsene, dann Jugend)"
+          >
+            <ArrowUpDown className="w-3.5 h-3.5 mr-1.5" />
+            Nach Rangliste
+          </button>
+
+          <button
+            onClick={() => setIsRankingModalOpen(true)}
+            className="flex items-center px-3 py-1.5 text-xs font-bold rounded-lg transition-colors shadow-sm border bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
+            title="Komplette Vereins-Rangliste ansehen oder aus click-TT importieren"
+          >
+            <Award className="w-3.5 h-3.5 mr-1.5 text-amber-600" />
+            Rangliste
+          </button>
+
           <button 
             onClick={() => setShowParentInfo(!showParentInfo)} 
             className={`flex items-center px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors shadow-sm border ${showParentInfo ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'}`}
@@ -476,6 +532,9 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
               </th>
               <th onClick={() => handleSort('memberStatus')} className="px-2 sm:px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors">
                 <div className="flex items-center gap-1">Status {renderSortIcon('memberStatus')}</div>
+              </th>
+              <th onClick={() => handleSort('rankAdult')} className="px-2 sm:px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors" title="Erst Erwachsene, dann Jugend">
+                <div className="flex items-center gap-1">Rang {renderSortIcon('rankAdult')}</div>
               </th>
               <th onClick={() => handleSort('alias')} className="px-2 sm:px-3 py-2 text-left text-xs font-bold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors">
                 <div className="flex items-center gap-1">Alias {renderSortIcon('alias')}</div>
@@ -590,6 +649,28 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
                       {h.memberStatus || 'AKTIV'}
                     </span>
                   </td>
+
+                  <td className="px-2 sm:px-3 py-1.5 whitespace-nowrap text-xs">
+                    <div
+                      onClick={() => { if (canManageMitglieder) openHelperEditor(h); }}
+                      className={`flex items-center gap-1 ${canManageMitglieder ? 'cursor-pointer' : ''}`}
+                      title={canManageMitglieder ? 'Klicken zum Bearbeiten der Rangnummern' : undefined}
+                    >
+                      {h.rankAdult && (
+                        <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-mono font-bold">
+                          {h.rankYouth ? `E ${h.rankAdult}` : h.rankAdult}
+                        </span>
+                      )}
+                      {h.rankYouth && (
+                        <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 font-mono font-bold">
+                          J {h.rankYouth}
+                        </span>
+                      )}
+                      {!h.rankAdult && !h.rankYouth && (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </div>
+                  </td>
                   
                   <td className="px-2 sm:px-3 py-1.5 whitespace-nowrap">
                     <EditableCell value={h.alias} onSave={val => handleInlineUpdateHelper(h, 'alias', val)} disabled={!canManageMitglieder} placeholder="Pflichtfeld" className="font-bold text-blue-700" />
@@ -658,6 +739,12 @@ export const MitgliederTab: React.FC<MitgliederTabProps> = ({ openHelperEditor, 
           </tbody>
         </table>
       </div>
+      {isRankingModalOpen && (
+        <RankingOverviewModal
+          canManage={canManageMitglieder}
+          onClose={() => setIsRankingModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

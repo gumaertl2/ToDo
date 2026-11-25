@@ -1,3 +1,4 @@
+// [2026-11-25] - FEATURE: Direkter Button "Rangliste" im Header zum Öffnen der kompletten In-App-Rangliste.
 // [2026-10-17] - BUGFIX: Ungenutzte Joker-Props aus dem <MatchLineupCardsView> Aufruf entfernt (behebt TS2322 Build-Error).
 // [2026-10-16] - UX-REFACTOR: Sauberer Tab-Wechsel (Karten | Matrix | Dienste) im Header ohne redundante Unterbalken, ehrlicher "Fertig"-Button im Footer.
 // [2026-10-15] - FEATURE: 'Dienste'-Ansicht (CalendarListView) in das Saison-Modal eingebettet (Container-Swap-Prinzip), inkl. Zurück-Button zur Kader-Planung.
@@ -15,13 +16,15 @@
 // [2026-09-30] - FEATURE: Auto-Freeze und manuelles Siegel (🔒) in die Matrix integriert. Notfall-Alert bei verspäteten Absagen eingebaut.
 // src/features/Users/components/MatchLineupMatrixModal.tsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Calendar as CalendarIcon, UserPlus, Search, LayoutList, Table as TableIcon, Car } from 'lucide-react';
+import { X, Calendar as CalendarIcon, UserPlus, Search, LayoutList, Table as TableIcon, Car, Award } from 'lucide-react';
 import type { Team } from '../../../core/types/models';
 import { useMatchLineupMatrix } from '../hooks/useMatchLineupMatrix';
 import { MatchLineupMatrixTable } from './MatchLineupMatrixTable';
 import { MatchLineupCardsView } from './MatchLineupCardsView';
 import { CalendarListView } from '../../Events/components/CalendarListView';
 import type { AdaptedEvent } from '../../Events/hooks/useCalendarEvents';
+import { RankingOverviewModal } from './RankingOverviewModal';
+import { inferTeamRankingCategory } from '../utils/rankingUtils';
 
 interface MatchLineupMatrixModalProps {
   team: Team;
@@ -33,6 +36,7 @@ interface MatchLineupMatrixModalProps {
 export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ team, focusedEventId, isReadOnly, onClose }) => {
   // --- GEHIRN (DATEN & STATE) ---
   const matrixData = useMatchLineupMatrix(team, focusedEventId, isReadOnly);
+  const [isRankingOpen, setIsRankingOpen] = useState(false);
 
   // --- ANSICHTS-MODUS (Langzeitgedächtnis via localStorage) ---
   const [viewMode, setViewMode] = useState<'cards' | 'matrix' | 'dienste'>(() => {
@@ -186,6 +190,16 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
                 )}
               </div>
             )}
+            <button
+              type="button"
+              onClick={() => setIsRankingOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 rounded-lg text-xs font-bold transition-colors shrink-0 shadow-2xs"
+              title="Komplette Vereins-Rangliste in der App ansehen"
+            >
+              <Award className="w-3.5 h-3.5 text-amber-600" />
+              <span className="hidden md:inline">Rangliste</span>
+            </button>
+
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 bg-white p-1.5 rounded-full shadow-sm border border-gray-200 shrink-0">
               <X className="w-5 h-5" />
             </button>
@@ -329,6 +343,12 @@ export const MatchLineupMatrixModal: React.FC<MatchLineupMatrixModalProps> = ({ 
           </button>
         </div>
       </div>
+      {isRankingOpen && (
+        <RankingOverviewModal
+          initialCategory={inferTeamRankingCategory(team)}
+          onClose={() => setIsRankingOpen(false)}
+        />
+      )}
     </div>
   );
 };
