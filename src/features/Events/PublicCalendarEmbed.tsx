@@ -1,3 +1,4 @@
+// [2026-11-26] - UX-FIX: Auswärts-Symbol einheitlich auf "🚗 " (statt "🚌 ") umgestellt.
 // [2026-10-19] - UX-FEATURE: Öffentlichen Kalender (PublicCalendarEmbed) auf rollierendes 5-Wochen-Monatsgitter (CalendarMonthGridView), Team-Kürzel (z.B. H1, J1), kompakte Gegner-Anzeige (calendarTitle / mobileShortTitle) und direkten mobilen Spielplan ohne RBC-Wrapper aktualisiert.
 // [2026-06-10] - BUGFIX: Bulletproof-Loading für den öffentlichen Kalender. Lade-Vorgänge für Termine, Sitzungen und Abos in separate try/catch Blöcke isoliert. Verhindert, dass ein Berechtigungs-Fehler (Firebase Rules) bei den Abos den kompletten Kalender für anonyme Gäste lahmlegt. Filter (Termine/Dienste) sind nun standardmäßig immer aktiv.
 // [2026-05-28] - BUGFIX: Homepage-Leak geschlossen. Sitzungen werden im öffentlichen Kalender nun strikt nach 'isPublic' (Auf Homepage zeigen) statt nach 'isPublished' (Agenda veröffentlicht) gefiltert.
@@ -170,7 +171,7 @@ export const PublicCalendarEmbed: React.FC = () => {
     const internalEvents = calendarEvents.map(ev => {
       const isHeim = !!ev.location?.toLowerCase().includes('maisach');
       const isAuswaerts = !!(ev.location && !isHeim);
-      const matchPrefix = ev.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
+      const matchPrefix = ev.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚗 ' : '')) : '';
       const fullTitle = `${matchPrefix}${ev.title}`;
       const calendarClean = ev.showInMatchPlan
         ? `${matchPrefix}${extractOpponentName(ev.title, isHeim)}`
@@ -219,7 +220,7 @@ export const PublicCalendarEmbed: React.FC = () => {
       return sub.cachedEvents!.map((ev, index) => {
         const isHeim = !!ev.location?.toLowerCase().includes('maisach');
         const isAuswaerts = !!(ev.location && !isHeim);
-        const matchPrefix = sub.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
+        const matchPrefix = sub.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚗 ' : '')) : '';
 
         const opponentOnlyTitle = sub.showInMatchPlan
           ? extractOpponentName(ev.title, isHeim)

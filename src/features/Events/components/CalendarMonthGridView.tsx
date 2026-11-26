@@ -1,3 +1,4 @@
+// [2026-11-26] - UX-FIX: splitLeadIcon erkennt nun sowohl "🚗" als auch älteres "🚌" einheitlich für das weiße Mini-Badge.
 // [2026-11-07] - BUGFIX & UX: Mehrtägige Termine (z. B. Schulferien) werden pro Woche als durchgehender Balken über die Tage gespannt statt als abgehackte Einzel-Pillen; exklusive iCal-Enddaten (inkl. 01:00/02:00 UTC-Versatz) bluten bei 1-Tages-Feiertagen nicht mehr in den Folgetag über.
 // [2026-10-19] - REFACTOR: Lokalen Favoriten-Stern aus der "Mo."-Spaltenüberschrift entfernt, da der globale Master-Stern in CalendarView.tsx nun alle 6 Kalenderansichten zentral filtert.
 // [2026-10-19] - UX-FEATURE: Favoriten-Stern in der "Mo."-Spaltenüberschrift ergänzt (mit localStorage-Persistenz). Filtert das Monatsgitter per 1-Klick auf alle Termine/Spiele/Dienste/Sitzungen, an denen der eingeloggte Nutzer beteiligt ist.
@@ -82,8 +83,8 @@ const splitLeadIcon = (rawDisplay: string): { leadIcon: string | null; restText:
   if (rawDisplay.startsWith('🏠')) {
     return { leadIcon: '🏠', restText: rawDisplay.replace(/^🏠\s*/, '') };
   }
-  if (rawDisplay.startsWith('🚌')) {
-    return { leadIcon: '🚗', restText: rawDisplay.replace(/^🚌\s*/, '') };
+  if (rawDisplay.startsWith('🚗') || rawDisplay.startsWith('🚌')) {
+    return { leadIcon: '🚗', restText: rawDisplay.replace(/^(?:🚗|🚌)\s*/, '') };
   }
   return { leadIcon: null, restText: rawDisplay };
 };

@@ -1,3 +1,4 @@
+// [2026-11-26] - UX-FIX: Auswärts-Symbol einheitlich auf "🚗 " (statt "🚌 ") umgestellt.
 // [2026-10-17] - BUGFIX: Ungenutzte Joker-Props (TS6133 Build Error) aus Interface und Signatur entfernt, da der Button nun zentral im Modal-Header lebt.
 // [2026-10-17] - UX-FIX: Redundanten Joker-Button ("+ Weiterer Spieler") und zugehörigen State (openJokerCardKey) aus der Spielkarte restlos entfernt.
 // [2026-10-16] - UX-REFACTOR: Aufgeräumtes 3-Zonen-Kartenlayout (Datum/Gegner oben, Logistik-Zellen im Header, sauber getrennte Spieler-Pillen im Body).
@@ -149,9 +150,9 @@ export const MatchLineupCardsView: React.FC<MatchLineupCardsViewProps> = ({
 
         const isHeim = event.location?.toLowerCase().includes('maisach');
         const isAuswaerts = event.location && !isHeim;
-        const matchPrefix = isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '');
+        const matchPrefix = isHeim ? '🏠 ' : (isAuswaerts ? '🚗 ' : '');
         const rawTitle = String(event.title || '');
-        const displayTitle = (rawTitle.startsWith('🏠') || rawTitle.startsWith('🚌')) ? rawTitle : `${matchPrefix}${rawTitle}`;
+        const displayTitle = (rawTitle.startsWith('🏠') || rawTitle.startsWith('🚗') || rawTitle.startsWith('🚌')) ? rawTitle : `${matchPrefix}${rawTitle}`;
 
         const timeStr = event.isAllDay ? 'Ganztägig' : `${format(eventDate, 'HH:mm')} Uhr`;
         const shortDateStr = format(eventDate, 'eee, dd. MMM.', { locale: de });

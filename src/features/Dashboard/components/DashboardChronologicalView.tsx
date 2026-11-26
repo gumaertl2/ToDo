@@ -1,3 +1,5 @@
+// [2026-11-26] - UX-FIX: Auswärts-Symbol einheitlich auf "🚗 " umgestellt.
+// [2026-11-26] - UX-FIX: Heim-/Auswärts-Symbol ("🏠 " / "🚗 ") einheitlich wie im Kalender direkt vor den Titel verschoben statt extra Badge.
 // [2026-11-26] - UX-IMPROVEMENT: Heim-/Auswärts-Kennzeichnung ("🏠 Heim" / "🚌 Auswärts") für Spiele in der Timeline ergänzt.
 // [2026-11-26] - UX-IMPROVEMENT: Punktspiele (showInMatchPlan) werden in der Timeline mit eigenem Badge "🏓 Spiel" statt "📅 Termin" gekennzeichnet.
 // [2026-11-26] - FEATURE: Chronologische Tages-Timeline (Termine, Dienste, Sitzungen & optional Aufgaben) für das Dashboard erstellt.
@@ -380,16 +382,6 @@ export const DashboardChronologicalView: React.FC<DashboardChronologicalViewProp
                             {cfg.label}
                           </span>
                           <span className="text-xs font-bold text-gray-500">{item.timeLabel}</span>
-                          {isHome && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              🏠 Heim
-                            </span>
-                          )}
-                          {isAway && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                              🚌 Auswärts
-                            </span>
-                          )}
                           {item.subtitle && item.kind === 'SERVICE' && (
                             <span className="text-[11px] font-semibold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded">
                               {item.subtitle}
@@ -401,7 +393,7 @@ export const DashboardChronologicalView: React.FC<DashboardChronologicalViewProp
                         </div>
 
                         <h3 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors leading-snug truncate">
-                          {item.title}
+                          {isHome ? '🏠 ' : isAway ? '🚗 ' : ''}{item.title}
                         </h3>
 
                         {(item.departureTime || item.driverNames) && (

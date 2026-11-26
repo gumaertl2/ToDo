@@ -1,4 +1,5 @@
 // api/calendar.ts
+// [2026-11-26] - UX-FIX: Auswärts-Symbol im iCal-Feed einheitlich auf "🚗 " (statt "🚌 ") umgestellt.
 // [2026-11-22] - BUGFIX: Stabile VEVENT-UIDs (ohne laufenden Array-Index), SEQUENCE-Feld aus updatedAt für saubere Apple-Kalender-Updates bei Terminänderungen sowie Live-Auswertung von teams/match_lineups für "Meine Einsätze" (statt veralteter statischer myIcs-Bindung).
 // [2026-11-07] - FEATURE: Unterstützung für "Meine Einsätze" (?onlyMy=1&uid=...&hid=...&gids=...&tids=...&myIcs=...) im iCal-Abo-Feed ergänzt, damit beim Abonnieren mit aktivem Stern-Filter exakt die persönlichen Termine, Dienste, Sitzungen und Punktspiele ausgeliefert werden.
 // [2026-11-07] - FEATURE: Dynamische Filter-Unterstützung (?filters=manual,dienste,<subId>...) inkl. Auslieferung der angehakten Kalender-Abos (calendar_subscriptions.cachedEvents). Ohne Parameter bleibt das Verhalten für den Public Kalender unverändert.
@@ -211,7 +212,7 @@ export default async function handler(req: any, res: any) {
       // Heim/Auswärts Kennzeichnung
       const isHeim = location.toLowerCase().includes('maisach');
       const showInMatchPlan = getField(doc, 'showInMatchPlan');
-      const matchPrefix = showInMatchPlan ? (isHeim ? '🏠 ' : (location ? '🚌 ' : '')) : '';
+      const matchPrefix = showInMatchPlan ? (isHeim ? '🏠 ' : (location ? '🚗 ' : '')) : '';
 
       rbcEvents.push({ id, title: matchPrefix + title, location, description, startTime, endTime, isAllDay, updatedAt });
     }
@@ -320,7 +321,7 @@ export default async function handler(req: any, res: any) {
           }
 
           const isHeim = location.toLowerCase().includes('maisach');
-          const matchPrefix = showInMatchPlan ? (isHeim ? '🏠 ' : (location ? '🚌 ' : '')) : '';
+          const matchPrefix = showInMatchPlan ? (isHeim ? '🏠 ' : (location ? '🚗 ' : '')) : '';
 
           // Stabile UID ohne laufenden Array-Index (verhindert unnötige Duplikate/Verluste bei Reihenfolge-Änderung)
           const cleanUid = uid.replace(/[^a-zA-Z0-9._-]/g, '_');

@@ -1,3 +1,5 @@
+// [2026-11-26] - UX-FIX: Auswärts-Symbol einheitlich auf "🚗 " umgestellt.
+// [2026-11-26] - UX-FIX: Heim-/Auswärts-Symbol ("🏠 " / "🚗 ") einheitlich wie im Kalender direkt vor den Titel verschoben statt extra Badge in der Kopfzeile.
 // [2026-11-26] - UX-UPGRADE: Badges ("🏓 Spiel" / "📅 Termin"), Heim-/Auswärts-Kennzeichnung ("🏠 Heim" / "🚌 Auswärts"), Heute-Highlight und dezenter linker Farbakzent.
 // [2026-10-12] - REFACTOR: Vereinstermine (Events) Kachel aus dem WelcomeDashboard in eine eigene Komponente ausgelagert.
 // src/features/Dashboard/components/DashboardEventsWidget.tsx
@@ -88,22 +90,13 @@ export const DashboardEventsWidget: React.FC<DashboardEventsWidgetProps> = ({
                       }`}>
                         {isToday ? 'Heute, ' : ''}{formatDate(ev.time)} Uhr
                       </span>
-
-                      {isHome && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          🏠 Heim
-                        </span>
-                      )}
-                      {isAway && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded bg-amber-50 text-amber-800 border border-amber-200">
-                          🚌 Auswärts
-                        </span>
-                      )}
                     </div>
 
                     <h3 className={`font-bold text-gray-900 transition-colors leading-snug ${
                       isMatch ? 'group-hover:text-emerald-700' : 'group-hover:text-blue-600'
-                    }`}>{ev.title}</h3>
+                    }`}>
+                      {isHome ? '🏠 ' : isAway ? '🚗 ' : ''}{ev.title}
+                    </h3>
                     
                     {/* FAHRER-INFO (Vereinstermine) */}
                     {(ev as any).driverNames && (

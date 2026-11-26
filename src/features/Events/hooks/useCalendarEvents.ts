@@ -1,3 +1,4 @@
+// [2026-11-26] - UX-FIX: Auswärts-Symbol einheitlich auf "🚗 " (statt "🚌 ") umgestellt.
 // [2026-10-19] - BUGFIX: Virtuelle Obergruppen (vgroup-all, vgroup-aktiv, vgroup-passiv, vgroup-jugend) werden nun in useCalendarEvents analog zum Dashboard gegen myHelper.memberStatus aufgelöst.
 // [2026-10-19] - UX-FEATURE: isMyAssignment in useCalendarEvents auf Sitzungen und reguläre Vereinstermine (inkl. Gruppen-/Team-Zuweisungen) erweitert, damit der globale Master-Stern in allen 6 Kalender-Reitern greift.
 // [2026-10-19] - BUGFIX: Gegner-Extraktion für calendarTitle unterstützt nun neben Bindestrichen (" - ") auch " vs. " und " vs ", damit der eigene Vereinsname in der Kalenderansicht zuverlässig ausgeblendet wird.
@@ -91,7 +92,7 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
     const internalEvents = calendarEvents.map(ev => {
       const isHeim = !!ev.location?.toLowerCase().includes('maisach');
       const isAuswaerts = !!(ev.location && !isHeim);
-      const matchPrefix = ev.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
+      const matchPrefix = ev.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚗 ' : '')) : '';
       const baseTitle = `${matchPrefix}${ev.title}`;
 
       let pollSummary = undefined;
@@ -205,7 +206,7 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
       return sub.cachedEvents!.map((ev, index) => {
         const isHeim = !!ev.location?.toLowerCase().includes('maisach');
         const isAuswaerts = !!(ev.location && !isHeim);
-        const matchPrefix = sub.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
+        const matchPrefix = sub.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚗 ' : '')) : '';
 
         // Prüfen, ob der eingeloggte Nutzer für dieses Spiel eingeteilt ist (Spieler, Fahrer, Betreuer)
         const icons: string[] = [];
@@ -270,7 +271,7 @@ export const useCalendarEvents = ({ currentView, activeFilters, showPastEvents }
         sub.cachedEvents.forEach((ev, index) => {
             const isHeim = !!ev.location?.toLowerCase().includes('maisach');
             const isAuswaerts = !!(ev.location && !isHeim);
-            const matchPrefix = sub.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚌 ' : '')) : '';
+            const matchPrefix = sub.showInMatchPlan ? (isHeim ? '🏠 ' : (isAuswaerts ? '🚗 ' : '')) : '';
 
             const icons: string[] = [];
             if (myHelperId) {
