@@ -1,3 +1,4 @@
+// [2026-11-26] - UX-IMPROVEMENT: Location bei upcomingEvents für die Heim-/Auswärts-Kennzeichnung ("🏠 Heim" / "🚌 Auswärts") im Dashboard ergänzt.
 // [2026-11-26] - UX-IMPROVEMENT: Bei Logistik-/Saison-Diensten im Dashboard wird nun direkt die zugehörige Mannschaft (sub.name, z. B. "J1: ...") vorangestellt.
 // [2026-10-13] - BUGFIX: Dashboard an Stable-ID Architektur (generateStableEventId) angebunden, damit Fahrer/Betreuer Dienste wieder korrekt gefunden werden.
 // [2026-10-12] - BUGFIX: Vergangenheits-Filter (todayStart <= eventDateStart) in pendingWhatsAppReminders nachgerüstet, um Diskrepanzen zur RemindersView/Navigation zu verhindern.
@@ -199,7 +200,9 @@ export const useDashboardData = (
                 title: ce.title,
                 time: ceTime,
                 type: 'EXTERN',
-                source: 'Für mich relevant'
+                source: 'Für mich relevant',
+                showInMatchPlan: !!ce.showInMatchPlan,
+                location: ce.location || ''
               });
             }
         }
@@ -261,6 +264,8 @@ export const useDashboardData = (
                   time: evTime,
                   type: 'ABO_CALENDAR',
                   source: 'Über externes Abo',
+                  showInMatchPlan: !!sub.showInMatchPlan,
+                  location: cachedEv.location || '',
                   driverNames,
                   departureTime
                 });

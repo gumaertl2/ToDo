@@ -1,3 +1,5 @@
+// [2026-11-26] - UX-IMPROVEMENT: Heim-/Auswärts-Kennzeichnung ("🏠 Heim" / "🚌 Auswärts") für Spiele in der Timeline ergänzt.
+// [2026-11-26] - UX-IMPROVEMENT: Punktspiele (showInMatchPlan) werden in der Timeline mit eigenem Badge "🏓 Spiel" statt "📅 Termin" gekennzeichnet.
 // [2026-11-26] - FEATURE: Chronologische Tages-Timeline (Termine, Dienste, Sitzungen & optional Aufgaben) für das Dashboard erstellt.
 // src/features/Dashboard/components/DashboardChronologicalView.tsx
 import React, { useMemo } from 'react';
@@ -23,7 +25,7 @@ interface DashboardChronologicalViewProps {
   formatDate: (ms: number) => string;
 }
 
-type TimelineKind = 'EVENT' | 'SERVICE' | 'SESSION' | 'TASK';
+type TimelineKind = 'MATCH' | 'EVENT' | 'SERVICE' | 'SESSION' | 'TASK';
 
 interface TimelineEntry {
   key: string;
@@ -35,6 +37,7 @@ interface TimelineEntry {
   title: string;
   subtitle?: string;
   timeLabel: string;
+  location?: string;
   driverNames?: string;
   departureTime?: string;
   onClick: () => void;
@@ -83,21 +86,23 @@ export const DashboardChronologicalView: React.FC<DashboardChronologicalViewProp
   const groupedTimeline = useMemo(() => {
     const items: TimelineEntry[] = [];
 
-    // 1. Vereinstermine
+    // 1. Vereinstermine & Punktspiele
     upcomingEvents.forEach(ev => {
       const ms = Number(ev.time || 0);
       if (!ms) return;
       const dayMs = getDayStartMs(ms);
+      const isMatch = !!ev.showInMatchPlan;
       items.push({
         key: `ev-${ev.id}`,
-        kind: 'EVENT',
+        kind: isMatch ? 'MATCH' : 'EVENT',
         time: ms,
         dayKey: String(dayMs),
         dayLabel: formatDayGroupLabel(dayMs, todayStart),
         isOverdue: false,
         title: ev.title,
-        subtitle: ev.type === 'INTERN' ? 'Interne Sitzung' : 'Vereinstermin',
+        subtitle: ev.type === 'INTERN' ? 'Interne Sitzung' : isMatch ? 'Punktspiel' : 'Vereinstermin',
         timeLabel: formatTimeOnly(ms),
+        location: ev.location,
         driverNames: ev.driverNames,
         departureTime: ev.departureTime,
         onClick: () => {
@@ -242,6 +247,11 @@ export const DashboardChronologicalView: React.FC<DashboardChronologicalViewProp
   ]);
 
   const badgeConfig: Record<TimelineKind, { label: string; className: string; icon: React.ReactNode }> = {
+    MATCH: {
+      label: 'Spiel',
+      className: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      icon: <span className="text-[11px] leading-none">🏓</span>
+    },
     EVENT: {
       label: 'Termin',
       className: 'bg-blue-100 text-blue-800 border-blue-200',
@@ -349,6 +359,9 @@ export const DashboardChronologicalView: React.FC<DashboardChronologicalViewProp
               <div className="space-y-2">
                 {group.items.map(item => {
                   const cfg = badgeConfig[item.kind];
+                  const locLower = (item.location || '').toLowerCase();
+                  const isHome = item.kind === 'MATCH' && locLower.includes('maisach');
+                  const isAway = item.kind === 'MATCH' && !!item.location && !isHome;
                   return (
                     <button
                       key={item.key}
@@ -367,6 +380,16 @@ export const DashboardChronologicalView: React.FC<DashboardChronologicalViewProp
                             {cfg.label}
                           </span>
                           <span className="text-xs font-bold text-gray-500">{item.timeLabel}</span>
+                          {isHome && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              🏠 Heim
+                            </span>
+                          )}
+                          {isAway && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                              🚌 Auswärts
+                            </span>
+                          )}
                           {item.subtitle && item.kind === 'SERVICE' && (
                             <span className="text-[11px] font-semibold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded">
                               {item.subtitle}

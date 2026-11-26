@@ -1,3 +1,4 @@
+// [2026-11-26] - UX-UPGRADE: Badges ("🏓 Spiel" / "📅 Termin"), Heim-/Auswärts-Kennzeichnung ("🏠 Heim" / "🚌 Auswärts"), Heute-Highlight und dezenter linker Farbakzent.
 // [2026-10-12] - REFACTOR: Vereinstermine (Events) Kachel aus dem WelcomeDashboard in eine eigene Komponente ausgelagert.
 // src/features/Dashboard/components/DashboardEventsWidget.tsx
 import React from 'react';
@@ -42,43 +43,85 @@ export const DashboardEventsWidget: React.FC<DashboardEventsWidgetProps> = ({
         {upcomingEvents.length === 0 ? (
           <div className="bg-white border border-gray-200 p-6 rounded-xl text-center text-gray-500">Keine relevanten Termine im gewählten Zeitraum.</div>
         ) : (
-          upcomingEvents.map(ev => (
-            <button 
-              key={ev.id} 
-              onClick={() => {
-                if (ev.type === 'INTERN') {
-                  navigate(`/events/${ev.id}`);
-                } else if (ev.type === 'ABO_CALENDAR') {
-                  navigate('/calendar', { state: { openEventSubId: ev.subId, openEventUid: ev.uid, targetDate: ev.time } });
-                } else {
-                  navigate('/calendar', { state: { openEventId: ev.id, targetDate: ev.time } });
-                }
-              }} 
-              className="w-full text-left bg-white border border-gray-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-blue-300 transition-all group"
-            >
-              <div className="flex justify-between items-start">
-                <div>
-                  <span className={`inline-block px-2 py-1 text-xs font-bold rounded mb-2 ${ev.type === 'INTERN' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
-                    {formatDate(ev.time)} Uhr
-                  </span>
-                  <h3 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors leading-snug">{ev.title}</h3>
-                  
-                  {/* FAHRER-INFO (Vereinstermine) */}
-                  {(ev as any).driverNames && (
-                    <div className="mt-2 text-xs text-gray-600 flex items-center bg-gray-50 border border-gray-200 px-2 py-1 rounded-md w-max shadow-sm">
-                      <span className="mr-1.5">🚗</span>
-                      {(ev as any).departureTime ? (
-                        <span>Abfahrt: <strong className="text-gray-900">{(ev as any).departureTime} Uhr</strong> ({(ev as any).driverNames})</span>
+          upcomingEvents.map(ev => {
+            const isMatch = !!ev.showInMatchPlan;
+            const locLower = (ev.location || '').toLowerCase();
+            const isHome = isMatch && locLower.includes('maisach');
+            const isAway = isMatch && !!ev.location && !isHome;
+            const isToday = new Date(ev.time).toDateString() === new Date().toDateString();
+
+            return (
+              <button 
+                key={ev.id} 
+                onClick={() => {
+                  if (ev.type === 'INTERN') {
+                    navigate(`/events/${ev.id}`);
+                  } else if (ev.type === 'ABO_CALENDAR') {
+                    navigate('/calendar', { state: { openEventSubId: ev.subId, openEventUid: ev.uid, targetDate: ev.time } });
+                  } else {
+                    navigate('/calendar', { state: { openEventId: ev.id, targetDate: ev.time } });
+                  }
+                }} 
+                className={`w-full text-left bg-white border border-gray-200 border-l-4 ${
+                  isMatch ? 'border-l-emerald-500 hover:border-emerald-300' : 'border-l-blue-500 hover:border-blue-300'
+                } p-4 rounded-xl shadow-sm hover:shadow-md transition-all group`}
+              >
+                <div className="flex justify-between items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                      {isMatch ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          <span>🏓</span> Spiel
+                        </span>
                       ) : (
-                        <span>Fahrer: <strong className="text-gray-900">{(ev as any).driverNames}</strong></span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded bg-blue-100 text-blue-800 border border-blue-200">
+                          <Calendar className="w-3 h-3" /> Termin
+                        </span>
+                      )}
+
+                      <span className={`inline-block px-2 py-0.5 text-xs font-bold rounded ${
+                        isToday
+                          ? 'bg-blue-600 text-white'
+                          : ev.type === 'INTERN'
+                            ? 'bg-blue-50 text-blue-800'
+                            : 'bg-gray-100 text-gray-700'
+                      }`}>
+                        {isToday ? 'Heute, ' : ''}{formatDate(ev.time)} Uhr
+                      </span>
+
+                      {isHome && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          🏠 Heim
+                        </span>
+                      )}
+                      {isAway && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded bg-amber-50 text-amber-800 border border-amber-200">
+                          🚌 Auswärts
+                        </span>
                       )}
                     </div>
-                  )}
+
+                    <h3 className={`font-bold text-gray-900 transition-colors leading-snug ${
+                      isMatch ? 'group-hover:text-emerald-700' : 'group-hover:text-blue-600'
+                    }`}>{ev.title}</h3>
+                    
+                    {/* FAHRER-INFO (Vereinstermine) */}
+                    {(ev as any).driverNames && (
+                      <div className="mt-2 text-xs text-gray-600 flex items-center bg-gray-50 border border-gray-200 px-2 py-1 rounded-md w-max shadow-sm">
+                        <span className="mr-1.5">🚗</span>
+                        {(ev as any).departureTime ? (
+                          <span>Abfahrt: <strong className="text-gray-900">{(ev as any).departureTime} Uhr</strong> ({(ev as any).driverNames})</span>
+                        ) : (
+                          <span>Fahrer: <strong className="text-gray-900">{(ev as any).driverNames}</strong></span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-blue-500 mt-2 shrink-0" />
                 </div>
-                <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-blue-500 mt-2 shrink-0" />
-              </div>
-            </button>
-          ))
+              </button>
+            );
+          })
         )}
       </div>
     </section>
