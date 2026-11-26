@@ -1,8 +1,9 @@
+// [2026-11-26] - FEATURE: Admin-Löschbutton im Ansehen-Tab zum gezielten Zurücksetzen der Erwachsenen- oder Jugend-Rangliste (inkl. Sicherheitsabfrage & isSaving-Guard) ergänzt.
 // [2026-11-25] - UX-IMPROVEMENT: Automatisches Zurücksetzen entfallener Ränge (ohne Checkbox), manuelle Dropdown-Zuordnung für unbekannte Namen direkt in der Vorschau und sauberer Scrollbalken-Abstand.
 // [2026-11-25] - FEATURE: In-App Ranglisten-Modal (Erwachsene & Jugend) inkl. Copy-Paste-Import aus click-TT mit Live-Vorschau und Änderungs-Abgleich.
 // src/features/Users/components/RankingOverviewModal.tsx
 import React, { useMemo, useState } from 'react';
-import { X, Award, ClipboardPaste, CheckCircle2, Search, Users, Save } from 'lucide-react';
+import { X, Award, ClipboardPaste, CheckCircle2, Search, Users, Save, Trash2 } from 'lucide-react';
 import { useClubStore } from '../../../store/useClubStore';
 import type { Helper } from '../../../core/types/models';
 import {
@@ -193,6 +194,37 @@ export const RankingOverviewModal: React.FC<RankingOverviewModalProps> = ({
     } catch (err) {
       console.error('Fehler beim Speichern der Rangliste:', err);
       setSaveFeedback('⚠️ Fehler beim Speichern. Bitte erneut versuchen.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleClearCategoryRanking = async (category: RankingCategory) => {
+    if (!isAllowedToManage || isSaving) return;
+    const targets = category === 'YOUTH' ? youthRankedHelpers : adultRankedHelpers;
+    if (targets.length === 0) return;
+
+    const categoryLabel = category === 'YOUTH' ? 'Jugend-Rangliste' : 'Erwachsenen-Rangliste';
+    if (!window.confirm(`Möchtest du wirklich alle ${targets.length} Einträge der ${categoryLabel} löschen?`)) {
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveFeedback(null);
+
+    try {
+      for (const target of targets) {
+        const payload: Helper = {
+          ...target,
+          lastActivityAt: Date.now(),
+          ...(category === 'YOUTH' ? { rankYouth: '' } : { rankAdult: '' })
+        };
+        await updateHelper(payload);
+      }
+      setSaveFeedback(`✓ ${categoryLabel} (${targets.length} Einträge) wurde geleert.`);
+    } catch (err) {
+      console.error('Fehler beim Löschen der Rangliste:', err);
+      setSaveFeedback('⚠️ Fehler beim Löschen der Rangliste. Bitte erneut versuchen.');
     } finally {
       setIsSaving(false);
     }
@@ -546,13 +578,32 @@ export const RankingOverviewModal: React.FC<RankingOverviewModalProps> = ({
               </div>
             </>
           ) : (
-            <button
-              type="button"
-              onClick={onClose}
-              className="ml-auto px-5 py-2 text-sm font-bold text-gray-800 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"
-            >
-              Schließen
-            </button>
+            <>
+              {isAllowedToManage && (viewCategory === 'YOUTH' ? youthRankedHelpers.length > 0 : adultRankedHelpers.length > 0) && (
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => handleClearCategoryRanking(viewCategory)}
+                  className="px-3 py-2 text-xs sm:text-sm font-bold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>
+                    {isSaving
+                      ? 'Löscht...'
+                      : viewCategory === 'YOUTH'
+                        ? 'Jugend-Rangliste löschen'
+                        : 'Erwachsenen-Rangliste löschen'}
+                  </span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                className="ml-auto px-5 py-2 text-sm font-bold text-gray-800 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"
+              >
+                Schließen
+              </button>
+            </>
           )}
         </div>
       </div>
