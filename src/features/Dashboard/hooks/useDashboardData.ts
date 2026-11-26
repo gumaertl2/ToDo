@@ -1,3 +1,4 @@
+// [2026-11-26] - UX-IMPROVEMENT: Bei Logistik-/Saison-Diensten im Dashboard wird nun direkt die zugehörige Mannschaft (sub.name, z. B. "J1: ...") vorangestellt.
 // [2026-10-13] - BUGFIX: Dashboard an Stable-ID Architektur (generateStableEventId) angebunden, damit Fahrer/Betreuer Dienste wieder korrekt gefunden werden.
 // [2026-10-12] - BUGFIX: Vergangenheits-Filter (todayStart <= eventDateStart) in pendingWhatsAppReminders nachgerüstet, um Diskrepanzen zur RemindersView/Navigation zu verhindern.
 // [2026-10-12] - REFACTOR: Dashboard Daten-Logik (Events, ToDos, Dienste, Sitzungen) aus WelcomeDashboard in Custom Hook ausgelagert.
@@ -321,7 +322,7 @@ export const useDashboardData = (
                            id: `logistics-${ce.uid}`,
                            subId: sub.id,
                            uid: ce.uid,
-                           title: `Saison-Dienst: ${ce.title}`,
+                           title: sub.name ? `${sub.name}: ${ce.title}` : ce.title,
                            role: isFahrer && isBetreuer ? 'Fahrer & Betreuer' : (isFahrer ? 'Fahrer' : 'Betreuer'),
                            time: ceTime,
                            driverNames,
